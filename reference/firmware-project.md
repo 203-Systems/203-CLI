@@ -345,7 +345,7 @@ processing, file formats, the main loop). The rules (also in the HAL's
   | Header | What |
   | --- | --- |
   | `cardenzaHAL.h` | `CardenzaHAL::Init()`, `LastInitReport()` |
-  | `system/system.h` | the shared I2C bus (`GetI2CBus`), the Func button (`GetFuncButton`, HOME) |
+  | `system/system.h` | the shared I2C bus (`GetI2CBus`), the HOME button (`GetHomeButton`) |
   | `keyboard/keyboard.h`, `keyboard/types.h` | the 4 × 14 keys (`updateKeyList`, `keyList`), key LEDs (`setLED`, `setLEDFrame`, `setLEDGlobalBrightness`, `enableLED`) |
   | `keyboard/led_light.h`, `keyboard/key_settle.h` | perceived brightness to LED level; a filter for modifier keys (plain headers) |
   | `display/display.h`, `display/region.h`, `display/changed_regions.h` | the 240 × 135 screen (`Present`, `PresentChanged`, `SetBrightness`, `GetPanel`, `GetPanelIO`) |
@@ -358,7 +358,7 @@ processing, file formats, the main loop). The rules (also in the HAL's
 
 - **Never re-implement what the HAL provides**: no keyboard scan, LED driver, display or codec setup, SD mount or USB stack of your own. Use its native ESP-IDF handles (`i2s_chan_handle_t`, `esp_lcd_panel_handle_t`, the I2C bus) for what it leaves to you.
 - **Start with `CardenzaHAL::Init()`** and check it (`LastInitReport()` says which module failed). Its log lines (tag `CardenzaHAL`) are how the community recognises a firmware built with the HAL; a missing SD card or codec must not stop the firmware or restart it.
-- **Do not reconfigure what the HAL owns**: I2C0 (GPIO1/2), I2S1 and I2S0 (GPIO41/42/43/46; GPIO43 is shared by the speaker and the microphone), LEDC timers 0/1 and channels 6/7, GPIO47/48/21 (key LEDs), GPIO0 (Func; held at reset it is the ROM download mode), the USB PHY.
+- **Do not reconfigure what the HAL owns**: I2C0 (GPIO1/2), I2S1 and I2S0 (GPIO41/42/43/46; GPIO43 is shared by the speaker and the microphone), LEDC timers 0/1 and channels 6/7, GPIO47/48/21 (key LEDs), GPIO0 (HOME; held at reset it is the ROM download mode), the USB PHY.
 - **ESP-IDF only**: ESP-IDF and FreeRTOS APIs, C++17. No Arduino core or other framework on top: it would set up the hardware and TinyUSB itself, and the web target does not provide it.
 - **No copyleft code in the HAL**, and know what you vendor into your firmware: its licence becomes part of yours.
 - **Under the 203 Launcher**: keep data on the SD card in your own folder (`/sdcard/<YourFirmware>/`); do not use NVS if you can avoid it (a flash write stops both cores' caches for ~45 ms), and if you must, use your own namespace: never erase the NVS partition and never write the Launcher's namespaces (`l_*`); return to the Launcher with `esp_restart()`.

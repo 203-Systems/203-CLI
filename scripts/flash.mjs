@@ -114,6 +114,11 @@ function cableError(error, ctx, port) {
   return error;   // the API's refusal (ApiError) and anything else, as they are
 }
 
+// How a person puts the device in its Launcher by hand (the user, 2026-11-18: "你应该让人长按Home键"): HOME held a second
+// opens the HAL's system menu, whose Back to Launcher restarts into the Launcher's home screen; a firmware without that menu
+// (released before it): FN held while the device starts keeps the Launcher in its menus.
+const BY_HAND = "hold HOME (the key left of the screen) for 1 s and choose Back to Launcher (a firmware without that menu: hold FN while turning it on)";
+
 /**
  * A firmware running on the device (no Launcher port): restarted into its Launcher (or, `command` download, the ROM's
  * download mode) and the port it comes back on, or null when no such firmware is on USB. `want`: the port given.
@@ -123,7 +128,7 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
   const into = command === HAL_COMMAND.download ? "the ROM's download mode" : "its Launcher";
   if (!found.candidates.length) {
     throw new CliError("firmware_unreachable", `${found.name} is running a firmware, and 203c finds neither its MIDI nor its HID`, {exit: EXIT.refused,
-      hint: "Put it in its Launcher yourself (hold FN while turning it on), then run it again"});
+      hint: `Put it in its Launcher yourself: ${BY_HAND}; then run it again`});
   }
   const before = listPorts();
   ctx.say(`${found.name} is running a firmware: restarting it into ${into}…`);
@@ -132,16 +137,16 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
     const tried = (error.tried || []).map(w => `${w.via}${w.path ? " " + w.path : ""}: ${w.error}`).join("; ");
     const denied = (error.tried || []).some(w => /EACCES|EPERM/.test(String(w.error)));
     throw new CliError("firmware_unreachable", `${found.name} is running a firmware and cannot be asked to restart (${tried || "no way to reach it"})`, {exit: EXIT.refused,
-      hint: process.platform === "darwin" ? "203c needs python3 for CoreMIDI (xcode-select --install); or put it in its Launcher yourself: hold FN while turning it on"
-        : denied ? "No permission for its MIDI or HID: add yourself to the audio group (sudo usermod -aG audio $USER, then log in again); or put it in its Launcher yourself: hold FN while turning it on"
-          : "Close programs that hold its MIDI (a DAW); or put it in its Launcher yourself: hold FN while turning it on",
+      hint: process.platform === "darwin" ? `203c needs python3 for CoreMIDI (xcode-select --install); or put it in its Launcher yourself: ${BY_HAND}`
+        : denied ? `No permission for its MIDI or HID: add yourself to the audio group (sudo usermod -aG audio $USER, then log in again); or put it in its Launcher yourself: ${BY_HAND}`
+          : `Close programs that hold its MIDI (a DAW); or put it in its Launcher yourself: ${BY_HAND}`,
       data: {tried: error.tried || []}});
   }
   if (sent.via !== "coremidi") ctx.say(`Sent over ${sent.via} (${sent.path})${sent.answered ? ": it is restarting" : ""}`);
   const port = await waitForPort(before, listPorts, {want});
   if (!port) {
     throw new CliError("no_launcher_port", `${found.name} was asked to restart, and no serial port came up`, {exit: EXIT.later, next: [ctx.cmd()],
-      hint: sent.answered ? "Unplug the cable and plug it in again, then run it again" : "This firmware may not take the command: put the device in its Launcher yourself (hold FN while turning it on)"});
+      hint: sent.answered ? "Unplug the cable and plug it in again, then run it again" : `This firmware may not take the command: put the device in its Launcher yourself (${BY_HAND}), then run it again`});
   }
   return {port, name: found.name, via: sent.via};
 }
@@ -254,13 +259,13 @@ export async function flashDevice(ctx) {
           await close();
           const lost = error instanceof LauncherError ? ["timeout", "nolauncher"].includes(error.code) : /EIO|ENXIO|ENODEV|ENOENT/.test(String(error.code || error.message));
           if (!restarted || !lost) throw error;
-          // Lost to the countdown: once more when the firmware is back, then FN.
+          // Lost to the countdown: once more when the firmware is back, then the person (HOME's menu, or FN held).
           let again = null;
           for (const end = Date.now() + 12000; !again && Date.now() < end;) { again = findFirmware(); if (!again) await sleep(200); }
           if (!again) throw error;   // no firmware came back: what the port or the Launcher said
           if (attempt > 0) {
             throw new CliError("launcher_countdown", `${restarted.name} restarted into its Launcher, which started the firmware again before 203c reached it`, {exit: EXIT.later, next: [ctx.cmd()],
-              hint: "Hold FN on the device, run it again, and let go of FN once the Launcher's menu shows (FN keeps the Launcher in its menus)"});
+              hint: "Put it in its Launcher yourself: hold HOME (the key left of the screen) for 1 s and choose Back to Launcher, then run it again. A firmware without that menu: hold FN, run it again, and let go of FN once the Launcher's menu shows (FN held while it restarts keeps the Launcher in its menus)"});
           }
           restarted = await restartToPort(ctx, {want: o.port ? String(o.port) : null, found: again});
           port = restarted.port;

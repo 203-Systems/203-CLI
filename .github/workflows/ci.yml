@@ -29,9 +29,11 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node scripts/203c.mjs --version
       - run: npm test
+  # Informational: the community may take a HAL branch's rules before the HAL merges them.
   rules:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:

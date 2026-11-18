@@ -92,7 +92,7 @@ boots; and a simulator version that boots for Play. A stable version needs a cov
 | Flash | 16 MB, quad I/O at 120 MHz ([`board/sdkconfig.defaults`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/sdkconfig.defaults)); the 203 Launcher keeps everything below 0x170000 ([`board/partitions.csv`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/partitions.csv)) |
 | Display | 240 × 135, RGB565, ST7789 on SPI, backlight on LEDC; a whole frame is 17 ms of SPI |
 | Keys | 4 rows × 14 columns = 56 keys (numbers 1..56 = `y * 14 + x + 1`), at most 4 held at once are read reliably; a single-colour LED under each key, 16 levels plus a global brightness |
-| Buttons | Func / HOME on GPIO0 (also the ROM boot pin) |
+| Buttons | HOME, the side key, on GPIO0 (the HAL's Func button; held at reset it starts the ROM download mode) |
 | Audio out | ES8156 codec, 44.1 kHz 16-bit, mono speaker (stereo I2S slots available) |
 | Microphone | PDM, 44.1 kHz mono; its clock shares GPIO43 with the speaker's word select |
 | Storage | microSD, 4-bit SDMMC, FAT at `/sdcard` |

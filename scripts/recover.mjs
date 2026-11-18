@@ -22,7 +22,7 @@ const hexAddr = n => "0x" + n.toString(16);
 
 /** The Python that has esptool (ESPTOOL_PYTHON, else python3, else python), or null. */
 export function findEsptool(env = process.env) {
-  for (const py of [env.ESPTOOL_PYTHON, "python3", "python"].filter(Boolean)) {
+  for (const py of [env.ESPTOOL_PYTHON, "python3", "python", ...(process.platform === "win32" ? ["py"] : [])].filter(Boolean)) {
     const probe = spawnSync(py, ["-m", "esptool", "version"], {encoding: "utf8"});
     if (probe.status === 0) return {python: py, version: (probe.stdout.match(/\d+\.\d+(\.\d+)?/) || [""])[0]};
   }

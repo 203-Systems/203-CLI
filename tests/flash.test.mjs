@@ -255,7 +255,7 @@ function fakeSystem({product = "203 Systems Cardenza", vendor = "0203", midi = n
   return {sys, dev, unplug: () => fs.rmSync(path.join(sys, "bus/usb/devices/1-2"))};
 }
 
-test("restart.mjs: the firmware found in sysfs (never a Mystrix), and in macOS's ioreg", async () => {
+test("restart.mjs: the firmware found in sysfs (never a Mystrix), and in macOS's ioreg", {skip: process.platform === "win32" && "a stand-in sysfs (its names have colons)"}, async () => {
   const {findFirmware} = await import("../scripts/restart.mjs");
   const s = fakeSystem({midi: "/dev/null", hid: "/dev/null"});
   const found = findFirmware({platform: "linux", sys: s.sys, dev: s.dev});

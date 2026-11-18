@@ -35,7 +35,8 @@ function program() {
   if (installedCommand(script)) return "203c";
   const relative = path.relative(process.cwd(), script);
   const shown = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : script;
-  return "node " + quote(shown);
+  // Forward slashes on Windows too: node takes them, and cmd, PowerShell and Git Bash read them alike, unquoted.
+  return "node " + quote(process.platform === "win32" ? shown.split(path.sep).join("/") : shown);
 }
 // The first 203c on PATH runs this file: npm's link to it (macOS, Linux), npm's shims (Windows: 203c.cmd, and a sh script
 // beside it), or the two-line script install.sh writes. Then the commands 203c prints (next, hints) are "203c …", as

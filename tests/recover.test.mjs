@@ -87,7 +87,7 @@ test("devices recover --out: the images, plan.json and the esptool command", asy
   assert.match(script, /--port "\$PORT"/);
 });
 
-test("devices recover --port: needs --yes; then esptool erases, writes and resets in one session", async () => {
+test("devices recover --port: needs --yes; then esptool erases, writes and resets in one session", {skip: process.platform === "win32" && "a sh script stands in for Python"}, async () => {
   const record = path.join(dir, "esptool-args.txt");
   const fake = path.join(dir, "fake-python");
   fs.writeFileSync(fake, `#!/bin/sh

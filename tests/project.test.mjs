@@ -83,7 +83,7 @@ test("new: the template named, CardenzaHAL as the submodule, 203.json and a READ
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.project, "pocket_metronome");
   const dir = path.join(root, "pocket-metronome");
-  assert.equal(r.json.dir, dir);
+  assert.equal(fs.realpathSync(r.json.dir), fs.realpathSync(dir));
   assert.ok(fs.existsSync(path.join(dir, "components", "CardenzaHAL", "cardenzaHAL.h")), "the HAL as a submodule");
   assert.match(fs.readFileSync(path.join(dir, ".gitmodules"), "utf8"), /components\/CardenzaHAL/);
   assert.match(fs.readFileSync(path.join(dir, "CMakeLists.txt"), "utf8"), /^project\(pocket_metronome\)$/m);

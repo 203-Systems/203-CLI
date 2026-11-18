@@ -69,7 +69,7 @@ test("relative links in the Markdown resolve", () => {
   }
 });
 
-test("package.json's files are what is shipped, and install.sh installs them with a 203c command", async () => {
+test("package.json's files are what is shipped, and install.sh installs them with a 203c command", {skip: process.platform === "win32" && "install.sh is a POSIX shell script (Windows: npm)"}, async () => {
   const pkg = JSON.parse(read("package.json"));
   assert.deepEqual(pkg.files, ["SKILL.md", "LICENSE", "scripts/", "reference/", "products/"]);
   assert.equal(pkg.bin["203c"], "scripts/203c.mjs");

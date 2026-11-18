@@ -1,8 +1,19 @@
 {
   "name": "203c",
   "version": "3.5.0",
-  "private": true,
-  "description": "203-CLI: 203c, the 203 Systems firmware community's command line, and the Agent Skill with every product's development guide (Cardenza, NullPerator, Mystrix)",
+  "description": "203c, the 203 Systems firmware community's CLI (Cardenza 鸣片, NullPerator, Mystrix): start a firmware project, install it on a device over USB, read its log, publish it; with the Agent Skill and every device's development guide",
+  "keywords": [
+    "203c",
+    "203-systems",
+    "cardenza",
+    "firmware",
+    "esp32-s3",
+    "esp-idf",
+    "cli",
+    "agent-skill",
+    "claude-code"
+  ],
+  "author": "203 Systems",
   "license": "MIT",
   "type": "module",
   "homepage": "https://cardenza.203.io/community/develop",
@@ -26,9 +37,13 @@
   "engines": {
     "node": ">=18"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "reference": "node scripts/203c.mjs help --reference > reference/cli.md",
-    "rules": "node tools/sync-rules.mjs"
+    "rules": "node tools/sync-rules.mjs",
+    "pack:check": "npm pack --dry-run"
   }
 }

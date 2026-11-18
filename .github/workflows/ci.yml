@@ -1,4 +1,5 @@
-# The tests on every push and pull request (Linux on three Node versions, macOS on one), and whether
+# The tests on every push and pull request (Linux on three Node versions, macOS and Windows on one), what npm would
+# publish (npm pack --dry-run: the package 203c, released by release.yml on a tag), and whether
 # reference/firmware-project.md is still CardenzaHAL's docs/FIRMWARE-PROJECT.md.
 name: CI
 on:
@@ -18,6 +19,8 @@ jobs:
         include:
           - os: macos-latest
             node: 22
+          - os: windows-latest
+            node: 22
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -29,6 +32,16 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node scripts/203c.mjs --version
       - run: npm test
+      # The package as npm would publish it, installed and run the way people get it (npm install -g 203c).
+      - run: npm pack --dry-run
+      - name: Install the packed 203c and its skill
+        shell: bash
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP"
+          npm install -g "$RUNNER_TEMP"/203c-*.tgz
+          203c --version
+          HOME="$RUNNER_TEMP/home" USERPROFILE="$RUNNER_TEMP/home" 203c skill install --json
+          test -f "$RUNNER_TEMP/home/.claude/skills/203-community/SKILL.md"
   # Informational: the community may take a HAL branch's rules before the HAL merges them.
   rules:
     runs-on: ubuntu-latest

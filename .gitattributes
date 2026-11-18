@@ -1,0 +1,2 @@
+# LF everywhere, Windows checkouts too: the tests read these files, and install.sh and 203c.mjs run as they are.
+* text=auto eol=lf

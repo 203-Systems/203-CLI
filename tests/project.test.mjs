@@ -161,3 +161,23 @@ test("link: 203.json, the page's source link and the trusted publisher follow th
   assert.equal(theirs.error.code, "not_yours");
   assert.match(theirs.error.next[0], /fork V6QK28/);
 });
+
+test("skill install: the Agent Skill from this 203c into a skills folder, replaced whole on an update; doctor sees it", async () => {
+  const skills = path.join(root, "skills");
+  const dry = await cli(["skill", "install", "--dir", skills, "--dry-run", "--json"], {token: ""});
+  assert.equal(dry.code, 0, dry.stderr);
+  assert.ok(!fs.existsSync(skills), "a dry run writes nothing");
+  const r = await cli(["skill", "install", "--dir", skills, "--json"], {token: ""});
+  assert.equal(r.code, 0, r.stderr);
+  const dir = path.join(skills, "203-community");
+  for (const item of ["SKILL.md", "LICENSE", "scripts/203c.mjs", "reference/cli.md", "products/cardenza/README.md"]) assert.ok(fs.existsSync(path.join(dir, item)), item);
+  fs.writeFileSync(path.join(dir, "stale.txt"), "old");
+  const again = await cli(["skill", "install", "--dir", skills, "--json"], {token: ""});
+  assert.equal(again.json.skill[0].status, "updated");
+  assert.ok(!fs.existsSync(path.join(dir, "stale.txt")), "replaced whole");
+  const home = path.join(root, "home-skill");
+  const doctor = await cli(["doctor", "--json"], {token: "", env: {HOME: home, USERPROFILE: home, CLAUDE_SKILLS_DIR: skills}});
+  assert.equal(doctor.json.checks.find(c => c.name === "skill").ok, true, JSON.stringify(doctor.json.checks));
+  const none = await cli(["doctor", "--json"], {token: "", env: {HOME: home, USERPROFILE: home, CLAUDE_SKILLS_DIR: path.join(root, "no-skills")}});
+  assert.ok(none.json.warnings.some(w => w.code === "skill_missing"), JSON.stringify(none.json.warnings));
+});

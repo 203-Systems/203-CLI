@@ -1,7 +1,7 @@
 # 203c command reference
 
 Generated from the CLI's command table (`node scripts/203c.mjs help --reference > reference/cli.md`). `203c` is the command
-install.sh puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it from the firmware project's folder. Every
+npm install -g 203c puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it from the firmware project's folder. Every
 command takes the global options; with `--json` the answer is JSON on stdout and an error is one JSON line on stderr (its
 last line): `{"error","code","field","hint","next":[commands],"exit"}`. `--help --json` gives any command (or, alone,
 all of them) as JSON.
@@ -206,6 +206,17 @@ Write 203.json (the project file) from what the project says: CMake project(), v
 
     203c init --summary "A four-track groovebox" --json
     203c init --name "My synth" --bin build/my_synth.bin --publish-source --json
+
+### `203c skill install`
+
+Put the Agent Skill (SKILL.md, the guides, this 203c) into the coding agents' skills folders: Claude Code's ~/.claude/skills (CLAUDE_SKILLS_DIR), Codex's ~/.codex/skills when it is there; run it after npm install -g 203c and after every update
+
+- `--dir DIR` Install into this skills folder only (it gets 203-community/)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c skill install
+    203c skill install --dry-run --json
+    203c skill install --dir ~/.agents/skills
 
 ### `203c new NAME [DIR]`
 

@@ -14,6 +14,7 @@ import {PROJECT_FILE, LEGACY_FILE, NAME_RULE, nameOk, checkProject, cloneUrlOf, 
   versionTxt, writeProject} from "./project.mjs";
 import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
 import {CliError, EXIT} from "./guide.mjs";
+import {skillState} from "./skill.mjs";
 import {EMSDK_HINT, describeSim, explainBuild, findHal, findProject, halScript, readSimDir, runBuild, sameBuild, simLine, simState, toolchain,
   uploadSim, waitSim, playUrl} from "./sim.mjs";
 import {
@@ -176,6 +177,11 @@ export async function doctor(ctx) {
   const node = Number(process.versions.node.split(".")[0]);
   check("node", node >= 18, `Node ${process.versions.node}${node >= 18 ? "" : " (203c needs Node 18 or newer)"}`);
   check("cli", true, `203c ${CLI_VERSION}`);
+  // The Agent Skill beside it (npm installs the command only: 203c skill install puts the skill where agents read it).
+  const skill = skillState();
+  check("skill", skill.ok, skill.detail, {optional: true});
+  if (!skill.ok) r.warn("skill_missing", `The Agent Skill is ${/not installed/.test(skill.detail) ? "not installed" : "older than this 203c"}: coding agents read the rules from it`,
+    {next: [ctx.run(["skill", "install"])]});
   let info = null;
   try { info = await ctx.client.request("GET", "/", {auth: false}); }
   catch (error) {

@@ -1,0 +1,45 @@
+# Publishes 203c to npm (https://www.npmjs.com/package/203c) when a tag vX.Y.Z equal to package.json's version is pushed,
+# after the tests pass. npm trusted publishing: the job's GitHub OIDC token, no NPM_TOKEN secret; npm records the
+# provenance (this repository, this workflow, the commit). Set up once on npmjs.com: the package 203c › Settings ›
+# Trusted publishing › GitHub Actions: organization 203-Systems, repository 203-CLI, workflow release.yml.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+  npm:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write          # npm trusted publishing (OIDC) and provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: The tag is package.json's version
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          test "$GITHUB_REF_NAME" = "v$version" || { echo "::error::tag $GITHUB_REF_NAME is not v$version (package.json)"; exit 1; }
+          test "$(node scripts/203c.mjs --version)" = "$version" || { echo "::error::CLI_VERSION is not $version"; exit 1; }
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@latest
+      - run: npm publish --provenance --access public

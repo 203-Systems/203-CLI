@@ -37,14 +37,24 @@ function program() {
   const shown = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : script;
   return "node " + quote(shown);
 }
-// The 203c command install.sh writes (a two-line script running this file), when it is the first 203c on
-// PATH: then the commands 203c prints (next, hints) are "203c …", as SKILL.md writes them.
+// The first 203c on PATH runs this file: npm's link to it (macOS, Linux), npm's shims (Windows: 203c.cmd, and a sh script
+// beside it), or the two-line script install.sh writes. Then the commands 203c prints (next, hints) are "203c …", as
+// SKILL.md writes them.
 function installedCommand(script) {
+  const real = file => { try { return fs.realpathSync(file); } catch { return null; } };
+  const self = real(script) ?? script;
+  const npm = /node_modules[\\/]203c[\\/]scripts[\\/]203c\.mjs/;
   for (const dir of String(process.env.PATH ?? "").split(path.delimiter)) {
     if (!dir) continue;
-    let text;
-    try { text = fs.readFileSync(path.join(dir, "203c"), "utf8"); } catch { continue; }
-    return text.length < 1000 && text.includes(`"${script}"`);
+    for (const name of ["203c", "203c.cmd"]) {
+      const file = path.join(dir, name);
+      if (!fs.existsSync(file)) continue;
+      if (real(file) === self) return true;
+      let text;
+      try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+      if (text.length > 4000) return false;
+      return text.includes(`"${script}"`) || (npm.test(text) && npm.test(self));
+    }
   }
   return false;
 }
@@ -380,7 +390,7 @@ export function referenceMarkdown() {
   const prog = "203c";
   const lines = ["# 203c command reference", "",
     "Generated from the CLI's command table (`node scripts/203c.mjs help --reference > reference/cli.md`). `203c` is the command",
-    "install.sh puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it from the firmware project's folder. Every",
+    "npm install -g 203c puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it from the firmware project's folder. Every",
     "command takes the global options; with `--json` the answer is JSON on stdout and an error is one JSON line on stderr (its",
     "last line): `{\"error\",\"code\",\"field\",\"hint\",\"next\":[commands],\"exit\"}`. `--help --json` gives any command (or, alone,",
     "all of them) as JSON.", "",

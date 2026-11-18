@@ -120,4 +120,4 @@ test("no secrets, private addresses or e-mail addresses", () => {
 
 const PUBLIC_HOSTS = new Set(["203.io", "cardenza.203.io", "community.203.io", "matrix.203.io", "np-wiki.203.io", "dev.203.io",
   "github.com", "raw.githubusercontent.com", "docs.espressif.com", "dl.espressif.com", "emscripten.org", "nodejs.org",
-  "matrix-os-keymap-editor.vercel.app", "127.0.0.1", "localhost"]);
+  "matrix-os-keymap-editor.vercel.app", "www.npmjs.com", "registry.npmjs.org", "127.0.0.1", "localhost"]);

@@ -1,13 +1,16 @@
 # 203-CLI: rules for changing it
 
-This repository is public and is the one source of `203c` and the 203-community Agent Skill. The 203 community
-serves it: it packs a pinned commit of this repository (the files in `package.json` `files`) as the skill that
-`curl -fsSL https://cardenza.203.io/community/skill/install.sh | sh` installs. A change here reaches users when the
-community pins the new commit.
+This repository is public and is the one source of `203c` and the 203-community Agent Skill. People install it from
+npm, the package `203c` (`npm install -g 203c`, then `203c skill install`), published by `.github/workflows/release.yml`
+when a tag `vX.Y.Z` equal to `package.json`'s version is pushed (npm trusted publishing: no token; the files in
+`package.json` `files`). Advertise only that. The 203 community also packs a pinned commit as the skill its old
+`install.sh` installs (kept working for scripts that have it, CI among them): it reaches those when the community pins
+the new commit.
 
 ## What 203c promises (keep it)
 
-- Zero dependencies, Node 18 or later, macOS and Linux (Windows: everything but the USB cable). No build step.
+- Zero dependencies, no install scripts, Node 18 or later, macOS, Linux and Windows (on Windows everything but the USB
+  cable, which the website does there); CI tests all three. No build step.
 - With `--json` every answer is JSON on stdout and an error is one JSON line on stderr, its last line, with
   `error`, `code`, `hint`, `exit` and `next` (commands ready to run; never `--force` / `--yes` from a guess). The exit
   codes are the table in `scripts/guide.mjs` (`EXIT_TEXT`) and `SKILL.md`. Commands, flags, error codes and help

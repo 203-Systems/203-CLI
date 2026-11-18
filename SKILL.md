@@ -11,8 +11,9 @@ Everything goes through one command, `203c` (Node 18+, nothing else to install):
 203c <command> … --json
 ```
 
-`curl -fsSL https://cardenza.203.io/community/skill/install.sh | sh` installs this skill and the `203c` command
-(`~/.local/bin/203c`). Where `203c` is not found, run `node <this skill's folder>/scripts/203c.mjs` instead (e.g.
+Install (macOS, Linux, Windows; Node.js 18+): `npm install -g 203c`, then `203c skill install` puts this skill where
+the agents read it (run it again after an update; `203c doctor` says when it is older than the command). Where `203c`
+is not found, run `node <this skill's folder>/scripts/203c.mjs` instead (e.g.
 `node ~/.claude/skills/203-community/scripts/203c.mjs`): the same CLI. **Run it from the firmware project's folder**
 (where `203.json` and `build/` are): paths are relative to the current folder, and `publish` reads `./203.json`.
 The commands 203c prints in `next` are ready to run as they are (with the full path when `203c` is not on PATH).

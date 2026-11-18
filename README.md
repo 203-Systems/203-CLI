@@ -24,26 +24,21 @@ share it on the 203 community:
 
 ## Install
 
-```sh
-curl -fsSL https://cardenza.203.io/community/skill/install.sh | sh
-```
-
-It installs the skill into `~/.claude/skills/203-community` (`CLAUDE_SKILLS_DIR` to choose) and the `203c` command
-into `~/.local/bin` (`COMMUNITY_BIN_DIR`), checking the download's SHA-256; no sudo. What it installs is this
-repository at the commit the community pins. Node.js 18 or later is all `203c` needs: it has no dependencies.
-
-On Windows: the same line in Git Bash (Claude Code's own shell there, and Git for Windows'), or without a shell
-`npm install -g github:203-Systems/203-CLI` (the command only; the skill is for agents with a shell). 203c runs
-everywhere Node does; the USB cable (`flash`, `log`) is used on macOS and Linux, and on Windows from the website in
-Chrome or Edge.
-
-From a clone instead (to read the code first, to work offline, or to try a change to `203c`):
+On macOS, Linux and Windows alike, with [Node.js](https://nodejs.org) 18 or later:
 
 ```sh
-git clone https://github.com/203-Systems/203-CLI.git
-sh 203-CLI/install.sh            # the same layout, from this checkout
-node 203-CLI/scripts/203c.mjs --help   # or run it in place
+npm install -g 203c       # the 203c command
+203c skill install        # its Agent Skill, for Claude Code and Codex (run it again after every update)
 ```
+
+`203c` has no dependencies and no install scripts. `skill install` copies the skill into `~/.claude/skills/203-community`
+(`CLAUDE_SKILLS_DIR` to choose; `~/.codex/skills` too when Codex is there; `--dir` for another agent's folder). The USB
+cable (`flash`, `log`) is used on macOS and Linux; on Windows the website does it in Chrome or Edge, and every other
+command works as anywhere.
+
+From a clone instead (to read the code first, or to try a change to `203c`): `git clone
+https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203c skill install`, or run it in place
+with `node 203-CLI/scripts/203c.mjs`.
 
 ## Use
 

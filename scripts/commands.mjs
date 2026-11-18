@@ -9,6 +9,7 @@ import {flashDevice} from "./flash.mjs";
 import {deviceLog} from "./devlog.mjs";
 import {newProject} from "./scaffold.mjs";
 import {inbox, link} from "./feedback.mjs";
+import {skillInstall} from "./skill.mjs";
 import path from "node:path";
 
 const B = help => ({bool: true, help});
@@ -101,6 +102,9 @@ cmd("init", "Write 203.json (the project file) from what the project says: CMake
     "publish-source": B("Attach a source archive to every version (publish_source: true)"), force: B("Overwrite an existing 203.json")},
   run: init, topic: "manifest", examples: ['init --summary "A four-track groovebox" --json', 'init --name "My synth" --bin build/my_synth.bin --publish-source --json']});
 
+cmd("skill install", "Put the Agent Skill (SKILL.md, the guides, this 203c) into the coding agents' skills folders: Claude Code's ~/.claude/skills (CLAUDE_SKILLS_DIR), Codex's ~/.codex/skills when it is there; run it after npm install -g 203c and after every update", {group: "Start",
+  offline: true, flags: {dir: V("DIR", "Install into this skills folder only (it gets 203-community/)"), ...DRY},
+  run: skillInstall, topic: "start", examples: ["skill install", "skill install --dry-run --json", "skill install --dir ~/.agents/skills"]});
 cmd("new NAME [DIR]", "Start a firmware project: CardenzaHAL as a git submodule and its template, named NAME, with 203.json, the README and the release workflow; it builds as it is (no sign-in)", {group: "Start",
   anyone: true, flags: {summary: FIRMWARE_FIELDS.summary, tags: FIRMWARE_FIELDS.tags, device: V("DEVICE", "The device (default cardenza, the only one with a template so far)"),
     project: V("ID", "CMake's project() name, the BIN's name (default from NAME: \"Pocket Metronome\" → pocket_metronome)"), ...DRY},

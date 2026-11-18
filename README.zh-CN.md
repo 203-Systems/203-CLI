@@ -18,23 +18,16 @@
 
 ## 安装
 
-```sh
-curl -fsSL https://cardenza.203.io/community/skill/install.sh | sh
-```
-
-Skill 装到 `~/.claude/skills/203-community`（`CLAUDE_SKILLS_DIR` 可改），`203c` 命令装到 `~/.local/bin`（`COMMUNITY_BIN_DIR` 可改），下载会校验 SHA-256，不需要 sudo。装的就是社区锁定的那个提交的本仓库。`203c` 只需要 Node.js 18 或更新的版本，没有任何依赖。
-
-Windows：在 Git Bash（Claude Code 在 Windows 上用的就是它，Git for Windows 自带）里运行同一行；没有 shell 时用
-`npm install -g github:203-Systems/203-CLI`（只装命令，Skill 给有 shell 的 AI 用）。`203c` 在有 Node 的地方都能运行；
-USB 线（`flash`、`log`）在 macOS 和 Linux 上用，Windows 上用网站（Chrome 或 Edge）。
-
-也可以从克隆安装（先看代码、离线使用、或者试改 `203c`）：
+macOS、Linux、Windows 都一样，装好 [Node.js](https://nodejs.org) 18 或更新的版本后：
 
 ```sh
-git clone https://github.com/203-Systems/203-CLI.git
-sh 203-CLI/install.sh            # 同样的布局，来自这份克隆
-node 203-CLI/scripts/203c.mjs --help   # 或者直接运行
+npm install -g 203c       # 203c 命令
+203c skill install        # 它的 Agent Skill，给 Claude Code 和 Codex（每次更新后再运行一次）
 ```
+
+`203c` 没有任何依赖，也没有安装脚本。`skill install` 把 Skill 复制到 `~/.claude/skills/203-community`（`CLAUDE_SKILLS_DIR` 可改；装了 Codex 时也放进 `~/.codex/skills`；`--dir` 指定别的 AI 的目录）。USB 线（`flash`、`log`）在 macOS 和 Linux 上用；Windows 上用网站（Chrome 或 Edge），其他命令哪里都一样。
+
+也可以从克隆安装（先看代码，或者试改 `203c`）：`git clone https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203c skill install`，或者直接 `node 203-CLI/scripts/203c.mjs` 运行。
 
 ## 用法
 

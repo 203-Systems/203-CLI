@@ -430,3 +430,15 @@ test("log on Windows says what to use there", async () => {
   assert.deepEqual([...cut.rest], [0xf0, 0x24, 0x43, 0x63], "a message cut in two waits for its end");
   assert.equal(hidConsole(Uint8Array.from([0xcb, 0xc3, 2, 0x68, 0x69, ...new Array(59).fill(0)])).text, "hi");
 });
+
+test("flash on Windows: the website, for a COM port too", {skip: process.platform !== "win32" && "Windows"}, async () => {
+  const file = path.join(dir, "win.bin");
+  fs.writeFileSync(file, app);
+  const r = await cli(["flash", "--bin", "win.bin", "--port", "COM5", "--json"]);
+  assert.equal(r.code, 1, r.stderr);
+  assert.equal(r.error.code, "unsupported_platform");
+  assert.match(r.error.hint, /Flash a local file/);
+  const log = await cli(["log", "--json"]);
+  assert.equal(log.error.code, "unsupported_platform");
+  assert.match(log.error.hint, /cardenza_usb\.py console/);
+});

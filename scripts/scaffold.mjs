@@ -13,6 +13,8 @@ import {CliError, EXIT} from "./guide.mjs";
 
 const RULES = "https://github.com/203-Systems/CardenzaHAL/blob/main/docs/FIRMWARE-PROJECT.md";
 export const TEMPLATE_NAME = "my_firmware";
+// Windows has python (and py), rarely python3.
+const PYTHON = process.platform === "win32" ? "python" : "python3";
 
 /** CMake's project() name for a firmware's name: lower-case letters, digits and _ ("Pocket Metronome" → pocket_metronome). */
 export function projectId(name) {
@@ -38,7 +40,7 @@ const edit = (file, change) => { if (fs.existsSync(file)) fs.writeFileSync(file,
 function readme({name, summary, id, tool}) {
   // Commands with their comments in one column.
   const block = rows => rows.map(([command, comment]) => `${command.padEnd(Math.max(...rows.map(r => r[0].length)) + 2)}# ${comment}`).join("\n");
-  const hal = "python3 components/CardenzaHAL/tools/";
+  const hal = `${PYTHON} components/CardenzaHAL/tools/`;
   const build = tool
     ? [[hal + "cardenza.py doctor", "what this computer still needs"], [hal + "cardenza.py build", `checks, then build/${id}.bin`],
        [hal + "cardenza.py web", "the browser version: build-web/site"]]
@@ -129,7 +131,7 @@ export async function newProject(ctx) {
     git(["add", "-A"], dir);
     const halCommit = git(["-C", hal, "rev-parse", "--short", "HEAD"], dir).stdout || null;
     const rel = path.relative(ctx.cwd, dir) || ".";
-    const build = tool ? "python3 components/CardenzaHAL/tools/cardenza.py build" : "idf.py build";
+    const build = tool ? `${PYTHON} components/CardenzaHAL/tools/cardenza.py build` : "idf.py build";
     const todo = [
       ...(summary ? [] : ["203.json \"summary\": what it does, 1-100 characters (the first publish needs it)"]),
       "a LICENSE file, and its SPDX id in 203.json \"license\"",

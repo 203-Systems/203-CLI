@@ -231,7 +231,8 @@ export async function flashDevice(ctx) {
   const supported = ["linux", "darwin"].includes(process.platform);
   const firmware = (!port || !fs.existsSync(port)) && supported ? findFirmware() : null;
   if (!o.dry_run) {
-    if (!port && !supported) {
+    // Windows: Node has no serial port API (no native modules here), a COM port included: the website does it.
+    if (!supported) {
       throw new CliError("unsupported_platform", "203c flash talks to the serial port on macOS and Linux", {exit: EXIT.refused,
         hint: o.bin ? `On Windows the website does it in Chrome or Edge: ${siteOf(ctx.api)}/firmware › Flash a local file (烧录本地固件), and choose ${o.bin}`
           : "On Windows use " + WEBSITE, data: {url: siteOf(ctx.api) + (o.bin ? "/firmware" : "/" + code)}});

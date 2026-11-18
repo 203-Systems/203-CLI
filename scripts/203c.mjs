@@ -984,4 +984,7 @@ function report(error, argv) {
 // The context of the command being run, to explain the API's refusals in its terms.
 let lastContext = null;
 const argv = process.argv.slice(2);
-main(argv).then(code => process.exit(code ?? 0), error => process.exit(report(error, argv)));
+// Exit once stdout and stderr have written everything: to a pipe they are asynchronous on macOS, and exiting at once
+// cut long answers short there (--help --json read by an agent).
+const exitAfterOutput = code => process.stdout.write("", () => process.stderr.write("", () => process.exit(code)));
+main(argv).then(code => exitAfterOutput(code ?? 0), error => exitAfterOutput(report(error, argv)));

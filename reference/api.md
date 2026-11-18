@@ -79,6 +79,7 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 |---|---|---|---|
 | `POST /me/devices/{id}/commands` | Send a firmware to a bound, online device (install, or install and start), or its newest 203 Launcher (update_launcher); offline: 409 device_offline — body: action, code?, channel?, target? | write | 201 Command |
 | `GET /me/devices/{id}/commands/{cid}` | A command's progress (ask every 2 s) | read | Command |
+| `POST /me/devices/{id}/commands/{cid}/cancel` | Cancel a command not finished yet: it ends at once, failed with cancelled true (a device that is downloading it may still finish or fail by itself); a finished one is answered as it is | write | Command |
 | `POST /me/devices/{id}/installed` | The website installed a build on this device over a USB cable: its signed statement (checked) is recorded as the device's build, verified — body: signed | website only | MyDevice |
 
 ## Experience, badges, titles

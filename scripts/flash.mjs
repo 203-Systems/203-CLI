@@ -105,6 +105,14 @@ function cableError(error, ctx, port) {
     if (error.code === "busy") return new CliError("launcher_busy", "The Launcher is busy in a menu", {exit: EXIT.later, next: again, hint: "Go back to its home screen, then run it again"});
     if (error.code === "timeout") return new CliError("device_timeout", "The device stopped answering", {exit: EXIT.later, next: again, hint: "Plug the USB cable in again, stay in the Launcher, then run it again"});
     if (error.code === "unsupported") return new CliError("launcher_old", "This Launcher cannot install over USB", {exit: EXIT.refused, hint: "Update the Launcher first (its home screen: Update Launcher)"});
+    if (error.code === "full") {
+      return new CliError("launcher_full", `No room on the device: ${error.detail}`, {exit: EXIT.refused, next: again,
+        hint: "Delete what it names on the device (the Launcher's list of installed software) or other software you no longer use, then run it again"});
+    }
+    if (error.code === "invalid" && /launcher image/i.test(error.detail || "")) {
+      return new CliError("launcher_image", "That is a 203 Launcher image, not a firmware: the Launcher is not installed this way", {exit: EXIT.refused, field: "bin",
+        hint: "Give the firmware's own application image (build/<project>.bin); the Launcher updates itself (its home screen: Update Launcher)"});
+    }
     return new CliError("install_refused", `The Launcher refused it: ${error.detail || error.code}`, {exit: EXIT.refused, next: again});
   }
   // The port itself (unplugged, or gone while it was written): what the system said.
@@ -325,9 +333,16 @@ export async function flashDevice(ctx) {
       const pct = Math.floor((sent / total) * 100);
       if (pct >= shown + 10 || sent === total) { shown = pct; ctx.say(`Writing ${pct}%`); }
     });
+    // What the Launcher did with it (Launchers from 2026-11-18): replaced the installed copy of it, or into free space.
+    const done = dev.installed;
     await close();
-    return {json: {status: "installed", target, port, launcher, ...(restarted ? {restarted: restarted.name} : {}), ...info},
-      text: `Installed ${what} on the ${target} on ${port}: the device restarts into it.`};
+    const how = !done ? "" : done.replaced
+      ? ` Replaced ${[done.old, done.old_version].filter(Boolean).join(" ")} → ${done.version || "?"}.`
+      : " Installed into free space.";
+    return {json: {status: "installed", target, port, launcher, ...(restarted ? {restarted: restarted.name} : {}), ...info,
+        ...(done ? {installed: {how: done.replaced ? "replaced" : "free", name: done.name, version: done.version,
+          ...(done.replaced ? {old: done.old, old_version: done.old_version} : {})}} : {})},
+      text: `Installed ${what} on the ${target} on ${port}: the device restarts into it.${how}`};
   } catch (error) {
     const e = cableError(error, ctx, port);
     if (e instanceof CliError && lines.length && !e.data.console) e.data = {...e.data, console: lines.slice(-12).join("\n")};

@@ -134,6 +134,7 @@ test("flash CODE, signed out: the device's newest build, downloaded with its sig
     const installed = port.state.apps.at(-1);
     assert.deepEqual([installed.name, installed.size, installed.community, installed.code], ["Test_Synth", app.length + trailer.length, true, "VER234"],
       "the Launcher got the image and the community's signature after it");
+    assert.deepEqual(r.json.installed, {how: "free", name: "Test_Synth", version: "1.2.0"}, "what the Launcher said it did");
   });
   assert.ok(requests.length >= 3, "it asked the API");
   assert.ok(requests.every(q => q.auth === null), "no credential was sent: none is needed");
@@ -149,6 +150,16 @@ test("flash --bin: a local application image; --channel picks a firmware's line"
     assert.equal(r.json.source, "file");
     assert.equal(r.json.name, "TestSynth", "named after the image's project");
     assert.deepEqual([port.state.apps.at(-1).name, port.state.apps.at(-1).community], ["TestSynth", false]);
+    // The same build again: the Launcher replaces its installed copy, and 203c says so.
+    const again = await cli(["flash", "--bin", "local.bin", "--port", slave]);
+    assert.equal(again.code, 0, again.stderr);
+    assert.match(again.stdout, /Replaced TestSynth 1\.2\.0 → 1\.2\.0\./);
+  });
+  await withLauncher("full", async (slave) => {
+    const r = await cli(["flash", "--bin", "local.bin", "--port", slave, "--json"]);
+    assert.equal(r.code, 1, r.stderr);
+    assert.equal(r.error.code, "launcher_full");
+    assert.match(r.error.error, /Delete Old Synth 0\.1\.0/, "what to delete, as the Launcher said it");
   });
   await withLauncher("home", async (slave) => {
     const r = await cli(["flash", "ABC234", "--channel", "beta", "--port", slave, "--json"]);

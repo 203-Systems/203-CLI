@@ -5,9 +5,14 @@
 //                                    user_name=<%-encoded|-> api=<%-encoded|->   (one line), then OK
 //   account bind <token> <user_id> <user_name> <api>   (the name and the API base percent-encoded)  → OK
 //   account unbind                 → OK
-//   flash firmware <name> <size>   → READY <size>; then the bytes in 2 KB chunks, each answered ACK <sent>/<size>;
-//                                    OK flashed, rebooting (a file with the community's signature trailer is
-//                                    registered as a community install, COMMUNITY.md "Signed builds")
+//   flash firmware <name> <size> [<claim>]   → READY <size>; then the bytes in 2 KB chunks, each answered ACK <sent>/<size>
+//                                    (the first chunk may be answered ERR full … naming what to delete, or ERR invalid …
+//                                    for a Launcher image, instead); INSTALLED replaced name= version= old= old_version=
+//                                    or INSTALLED free name= version= (percent-encoded; Launchers from 2026-11-18); OK
+//                                    flashed, rebooting. A file with the community's signature trailer is registered as a
+//                                    community install (COMMUNITY.md "Signed builds"); its app ID (else its firmware code),
+//                                    sent as <claim>, lets the Launcher replace the installed copy of that firmware in
+//                                    place (older Launchers ignore it; without it, the copy of the same name and project).
 // Every answer ends with OK … or ERR <code> <message> (ERR busy … away from the home screen, ERR invalid … for a
 // field it refuses, ERR unknown command … on a Launcher without the command). Log lines printed meanwhile are skipped.
 // Percent-encoding as the fs commands': every byte outside A-Z a-z 0-9 . _ ~ - / as %XX.
@@ -15,7 +20,8 @@
 // No DOM and no other module of the site: tests/launcher-usb.test.mjs runs it in Node against the demo below.
 // ?usb=demo on a page answers with an in-memory Launcher on a fake port (demoPort) instead of the chooser: for trying
 // the pages without a device, and for screenshots. ?usb=demo-other: the device is bound to another account; demo-old:
-// a Launcher without `account`; demo-busy: away from its home screen; ?usbid=<12 hex>: that chip's id.
+// a Launcher without `account`; demo-busy: away from its home screen; demo-full: no room for the file; ?usbid=<12 hex>: that
+// chip's id.
 //
 // A firmware running instead of the Launcher (the user, 2026-11-18: "自动让设备重启回 Launcher 再刷"): a firmware on CardenzaHAL
 // is one composite USB device (203 Systems' vendor ID 0x0203; MIDI, audio, HID; its product name says Cardenza) with no
@@ -98,7 +104,26 @@ function errOf(line) {
   const at = rest.search(/[\s:]/);
   const code = (at < 0 ? rest : rest.slice(0, at)).toLowerCase();
   const message = at < 0 ? '' : rest.slice(at + 1).replace(/^[:\s]+/, '');
-  return new LauncherError(['busy', 'invalid', 'io'].includes(code) ? code : 'refused', message || rest);
+  return new LauncherError(['busy', 'invalid', 'io', 'full'].includes(code) ? code : 'refused', message || rest);
+}
+
+/** An INSTALLED line: {replaced, name, version, old, old_version} (null for what it does not say), or null. */
+export function parseInstalled(line) {
+  const m = /^INSTALLED (replaced|free)\b(.*)$/.exec(line || '');
+  if (!m) return null;
+  const f = {};
+  for (const part of m[2].trim().split(/\s+/)) {
+    const at = part.indexOf('=');
+    if (at > 0) f[part.slice(0, at)] = unpct(part.slice(at + 1)) || null;
+  }
+  return {replaced: m[1] === 'replaced', name: f.name ?? null, version: f.version ?? null, old: f.old ?? null, old_version: f.old_version ?? null};
+}
+
+/** What a file's community trailer says the firmware is, for `flash firmware`'s claim: its app ID, else its firmware code. */
+export function installClaim(bytes) {
+  const st = trailerStatement(bytes);
+  const claim = st && (st.app_id || st.firmware);
+  return typeof claim === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(claim) ? claim : null;
 }
 
 /** Lines from a serial port, buffered across reads. */
@@ -216,9 +241,14 @@ export class LauncherConsole {
     await this.send('account unbind');
     await this.done();
   }
-  /** `flash firmware`: the file in 2 KB chunks, each acknowledged; progress(sent, total). The Launcher then restarts into it. */
+  /**
+   * `flash firmware`: the file in 2 KB chunks, each acknowledged; progress(sent, total). The Launcher then restarts into
+   * it. Answers the OK line; `installed` is then what the Launcher said it did (parseInstalled), or null (an older one).
+   */
   async flash(name, bytes, progress = () => {}) {
-    await this.send(`flash firmware ${name} ${bytes.length}`);
+    this.installed = null;
+    const claim = installClaim(bytes);
+    await this.send(`flash firmware ${name} ${bytes.length}${claim ? ' ' + claim : ''}`);
     const ready = await this.answer(/^(READY |ERR\b)/);
     if (ready.startsWith('ERR')) throw errOf(ready);
     if (ready.trim() !== `READY ${bytes.length}`) throw new LauncherError('refused', ready);
@@ -231,6 +261,10 @@ export class LauncherConsole {
       if (ack.startsWith('ERR')) throw errOf(ack);
       progress(sent, bytes.length);
     }
+    const line = await this.answer(/^(INSTALLED |OK\b|ERR\b)/, 60000);
+    if (line.startsWith('ERR')) throw errOf(line);
+    if (!line.startsWith('INSTALLED ')) return line;
+    this.installed = parseInstalled(line);
     return this.done(60000);
   }
   async close() {
@@ -292,7 +326,7 @@ function trailerStatement(bytes) {
 }
 
 /**
- * A fake Web Serial port with the demo Launcher behind it. `mode`: home, other, old, busy. `onLine(line)`: sees each
+ * A fake Web Serial port with the demo Launcher behind it. `mode`: home, other, old, busy, full (no room). `onLine(line)`: sees each
  * command line first (firmware-usb.js's demo device: Esc during a countdown); true swallows it. unplug(): the port goes
  * away as a restarting device's does (reads end, writes fail).
  */
@@ -355,7 +389,7 @@ export function demoPort({mode = 'home', id = '', pace = 4000, slow = 0, onLine 
       if (busy) { say('ERR busy: return to Launcher first'); return; }
       const size = Number(words[3]);
       if (!Number.isInteger(size) || size <= 0 || size > 8 << 20) { say('ERR invalid size'); return; }
-      upload = {name: words[2], size, bytes: new Uint8Array(size), got: 0};
+      upload = {name: words[2], size, bytes: new Uint8Array(size), got: 0, claim: words[4] || null};
       say('READY ' + size);
       return;
     }
@@ -368,10 +402,15 @@ export function demoPort({mode = 'home', id = '', pace = 4000, slow = 0, onLine 
     const st = trailerStatement(u.bytes);
     const community = !!st && st.type === '203.build' && st.kind === 'app' && st.target === s.target;
     say(community ? `Signed build: ${st.name} ${st.version} (${st.code}), a community install` : 'Unsigned image: registered as an import', 300);
-    s.apps = [...(s.apps || []).filter((a) => a.name !== u.name), {name: u.name, size: u.size, community, code: community ? st.code : null}].slice(-8);
+    // The installed copy of the same firmware is replaced in place (its claim, else its name), as the Launcher does.
+    const version = (community && st.version) || new TextDecoder().decode(u.bytes.subarray(48, 80)).replace(/\0.*$/s, '');
+    const old = (s.apps || []).find((a) => (u.claim && a.claim === u.claim) || a.name === u.name) || null;
+    s.apps = [...(s.apps || []).filter((a) => a !== old), {name: u.name, size: u.size, community, code: community ? st.code : null, claim: u.claim, version}].slice(-8);
     demoSave(s);
     say('', 10);
-    say('OK flashed, rebooting', 400);
+    say(old ? `INSTALLED replaced name=${pct(u.name)} version=${pct(version)} old=${pct(old.name)} old_version=${pct(old.version || '')}`
+      : `INSTALLED free name=${pct(u.name)} version=${pct(version)}`, 300);
+    say('OK flashed, rebooting', 100);
   }
   const ackDelay = () => Math.max(1, Math.min(60, Math.round(pace / Math.max(1, Math.ceil(upload.size / CHUNK)))));
   return {
@@ -391,6 +430,12 @@ export function demoPort({mode = 'home', id = '', pace = 4000, slow = 0, onLine 
             const before = upload.got;
             upload.got += take;
             i += take;
+            // The slot is chosen with the first chunk: no room (mode full) answers it instead of its ACK.
+            if (mode === 'full' && before === 0) {
+              say('ERR full No room for 1200 KB (largest free space 300 KB). Delete Old Synth 0.1.0 or other software on the device, then install again');
+              upload = null;
+              break;
+            }
             // One ACK a chunk the host sent, as the Launcher reads them.
             if (Math.floor(upload.got / CHUNK) > Math.floor(before / CHUNK) || upload.got === upload.size) say(`ACK ${upload.got}/${upload.size}`, ackDelay());
             if (upload.got === upload.size) finish();

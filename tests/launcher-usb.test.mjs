@@ -4,7 +4,7 @@
 // Run: node --test tests/launcher-usb.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import {LauncherConsole, LauncherError, demoPort, parseAccount, pct, unpct} from "../scripts/launcher-usb.mjs";
+import {LauncherConsole, LauncherError, demoPort, parseAccount, parseInstalled, pct, unpct} from "../scripts/launcher-usb.mjs";
 
 const open = async (options = {}) => {
   const port = demoPort({pace: 50, ...options});
@@ -74,7 +74,9 @@ test("flash firmware: acknowledged chunks, progress, and a signed file registere
   const want = [];
   for (let sent = 2048; sent < file.length; sent += 2048) want.push(sent);
   assert.deepEqual(seen, [...want, file.length].map((sent) => [sent, file.length]), "one ACK a 2 KB chunk");
-  assert.deepEqual(port.state.apps.at(-1), {name: "Cardenza_Synth", size: file.length, community: true, code: "Q2W7EA"});
+  assert.deepEqual(port.state.apps.at(-1), {name: "Cardenza_Synth", size: file.length, community: true, code: "Q2W7EA", claim: null, version: "0.2.0"},
+    "no app ID or firmware code in its statement: no claim");
+  assert.deepEqual(dev.installed, {replaced: false, name: "Cardenza_Synth", version: "0.2.0", old: null, old_version: null}, "INSTALLED free");
   // Without a trailer: an import.
   const plain = new Uint8Array(3000).fill(1); plain[0] = 0xe9;
   await dev.flash("Plain", plain);
@@ -82,6 +84,32 @@ test("flash firmware: acknowledged chunks, progress, and a signed file registere
   // Not an image: refused after the bytes.
   await assert.rejects(dev.flash("Junk", new Uint8Array(100)), (e) => e.code === "refused" && /image/.test(e.detail));
   await dev.close();
+});
+
+test("flash firmware: the trailer's app ID claims the firmware, its installed copy is replaced (INSTALLED), no room is ERR full", async () => {
+  const {dev, port, seen} = await open();
+  await dev.find();
+  const v1 = signedFile({type: "203.build", v: 1, kind: "app", target: "cardenza", name: "Glide", version: "0.1.0", firmware: "G1D2E3",
+    app_id: "5b0c6a8e-2f1d-4c3b-9a7e-1d2c3b4a5f60"}, 4000);
+  await dev.flash("Glide", v1);
+  assert.ok(seen.includes(`> flash firmware Glide ${v1.length} 5b0c6a8e-2f1d-4c3b-9a7e-1d2c3b4a5f60`), seen.join("\n"));
+  const v2 = signedFile({type: "203.build", v: 1, kind: "app", target: "cardenza", name: "Glide", version: "0.2.0", code: "G1D2E4",
+    app_id: "5b0c6a8e-2f1d-4c3b-9a7e-1d2c3b4a5f60"}, 4000);
+  assert.equal(await dev.flash("Glide_2", v2), "OK flashed, rebooting");
+  assert.deepEqual(dev.installed, {replaced: true, name: "Glide_2", version: "0.2.0", old: "Glide", old_version: "0.1.0"});
+  assert.deepEqual(port.state.apps.map((a) => a.version), ["0.2.0"], "one copy");
+  // A plain image: no claim (the Launcher matches the name and the project).
+  const plain = new Uint8Array(3000).fill(1); plain[0] = 0xe9;
+  await dev.flash("Plain", plain);
+  assert.ok(seen.includes("> flash firmware Plain 3000"));
+  await dev.close();
+
+  const full = await open({mode: "full"});
+  await full.dev.find();
+  await assert.rejects(full.dev.flash("Big", v1), (e) => e instanceof LauncherError && e.code === "full" && /Delete Old Synth 0\.1\.0/.test(e.detail));
+  await full.dev.close();
+  assert.equal(parseInstalled("INSTALLED free name=Pocket%20Metronome version=0.1.0").name, "Pocket Metronome");
+  assert.equal(parseInstalled("OK flashed, rebooting"), null);
 });
 
 test("a Launcher slow to answer: asked again, and what is left over from that is no command's answer", async () => {

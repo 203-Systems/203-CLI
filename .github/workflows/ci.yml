@@ -1,0 +1,43 @@
+# The tests on every push and pull request (Linux on three Node versions, macOS on one), and whether
+# reference/firmware-project.md is still CardenzaHAL's docs/FIRMWARE-PROJECT.md.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        node: [20, 22, 24]
+        include:
+          - os: macos-latest
+            node: 22
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node scripts/203c.mjs --version
+      - run: npm test
+  rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: reference/firmware-project.md is CardenzaHAL's docs/FIRMWARE-PROJECT.md
+        run: node tools/sync-rules.mjs --check

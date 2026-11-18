@@ -12,7 +12,7 @@ import {parseStl, renderThumbnail} from "./stl.mjs";
 // The live copy until community.203.io exists (COMMUNITY.md "203c (the CLI) and the developer guide").
 export const DEFAULT_API = "https://cardenza.203.io/community/api";
 // 203c's own version (doctor prints it; the API sees it in User-Agent).
-export const CLI_VERSION = "3.4.0";
+export const CLI_VERSION = "3.5.0";
 
 export class ApiError extends Error {
   constructor(status, code, message, data = {}) {

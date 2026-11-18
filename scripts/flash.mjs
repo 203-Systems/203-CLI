@@ -25,6 +25,7 @@ import {LauncherConsole, LauncherError} from "./launcher-usb.mjs";
 import {findFirmware, restartFirmware, waitForPort, HAL_COMMAND} from "./restart.mjs";
 import {inspectBin, DEFAULT_TARGET} from "./checks.mjs";
 import {CliError, EXIT} from "./guide.mjs";
+import {siteOf} from "./sim.mjs";
 
 const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -223,7 +224,9 @@ export async function flashDevice(ctx) {
   const firmware = (!port || !fs.existsSync(port)) && supported ? findFirmware() : null;
   if (!o.dry_run) {
     if (!port && !supported) {
-      throw new CliError("unsupported_platform", "203c flash talks to the serial port on macOS and Linux", {exit: EXIT.refused, hint: "On Windows use " + WEBSITE});
+      throw new CliError("unsupported_platform", "203c flash talks to the serial port on macOS and Linux", {exit: EXIT.refused,
+        hint: o.bin ? `On Windows the website does it in Chrome or Edge: ${siteOf(ctx.api)}/firmware › Flash a local file (烧录本地固件), and choose ${o.bin}`
+          : "On Windows use " + WEBSITE, data: {url: siteOf(ctx.api) + (o.bin ? "/firmware" : "/" + code)}});
     }
     if (firmware) {
       restarted = await restartToPort(ctx, {want: port, found: firmware});

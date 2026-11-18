@@ -1,6 +1,6 @@
 ---
 name: 203-community
-description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203c, and make firmware for 203 devices the recommended way (a development guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203c rules, 203.json). Use it to publish firmware versions for the Cardenza and other devices (from CI or a local build) with their simulator versions and source archives, create or fork firmware with their provenance and clone their source, set a firmware's cover and page, share sound packs, projects, works (audio/video) and 3D models, browse the sections, answer firmware requests and keep the developer tracker, see why the checks sent a version back and appeal it, install a firmware on a device over a USB cable through its Launcher (线刷, no sign-in) or send it over Wi-Fi to a bound device, search, comment, and, for admins, moderate and handle the community tracker (appeals, feedback, overrides, rechecks).
+description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203c, and make firmware for 203 devices the recommended way (a guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203c rules, 203.json). Use it to start a Cardenza firmware from CardenzaHAL's template (new), try it on the user's device over USB (flash through the Launcher, log), publish versions from a laptop or CI (trusted publishing) with simulator versions and source archives, create or fork firmware and clone their source, bind a project to its firmware or move it (link), set the cover and page, pull users' requests and comments into the project (inbox) and keep the tracker, see why the checks sent a version back and appeal it, share sound packs, projects, works and 3D models, send firmware to a bound device over Wi-Fi, search and comment, and, for admins, moderate.
 ---
 
 # 203 community
@@ -40,7 +40,8 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
    may print one `{"status":"waiting",…}` line before it while it waits). `--help --json` describes any command as JSON.
 2. **Run `doctor` first** (`203c doctor --json`): it says whether you are signed in and what to do if not.
    Every command but `login`, `logout`, `help`, `doctor`, `rules` and `ops` needs the sign-in (exit 4 without it), except what
-   goes over a USB cable: `flash` and `devices recover` work signed out (signing in is for Wi-Fi: sending to a bound device).
+   goes over a USB cable: `flash`, `log` and `devices recover` work signed out (signing in is for Wi-Fi: sending to a bound device), and `new`.
+   On a person's own terminal a command that needs the sign-in starts it by itself (the browser, once on a computer).
 3. **Before anything that publishes or uploads, run it with `--dry-run` first.** It checks the files and values the way the server will and prints the plan. Go on only when it says `"ready": true`.
 4. **Never guess a code.** Codes are 6 characters (e.g. `K7M2QX`). Get them from `firmware mine --json`, `firmware list --official --json` or `search WORDS --json`.
 5. **On an error, read `code`, `hint` and `next`.** `next[0]` is the exact command to run next. If it contains `<…>`, replace that part with the real value (the CLI refuses placeholders). Exit 6 means a decision: add `--force` / `--yes` only if the user wants it.
@@ -51,10 +52,14 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 
 | You want to … | Run |
 |---|---|
+| make a new firmware for a Cardenza (from nothing) | `new "NAME" --summary "…" --json`, then workflow 0 |
 | check that everything works | `doctor --json` |
 | sign in | `login --json` (opens the browser; the user approves on the site; it waits up to 5 minutes) — no browser: the user runs `login --with-token` (a personal token from the site) — remote: `login --no-browser --json` → give the user `verify_url` and `user_code` → `login --wait --json` |
 | see your firmware and their codes | `firmware mine --json` |
 | install a firmware on a device over a USB cable (线刷; no sign-in, no bound device; macOS / Linux) | `flash CODE --dry-run --json`, then `flash CODE --json` (the device on and on a cable, in its Launcher or running a firmware: 203c restarts a running firmware into its Launcher first; `--bin build/app.bin` for a local build, `--port PORT` when there are several) |
+| read a device's log over the USB cable (no sign-in; macOS / Linux) | `log --json` (20 s; a running firmware's console, else the serial port); a test: `log --until "ready" --seconds 30 --json` (exit 0 at the line; 1 `device_crashed` at a panic, `log_timeout`) |
+| what users asked for and said since the last look (203.json here) | `inbox --out .203/inbox.md --json` (requests with votes and new comments, comments, merge requests, versions sent back); a request in full: `dev read CODE N --json` |
+| bind this project to its firmware, or move it to a new repository | `link --dry-run --json`, then `link --json` (`--move` also unlinks the old repository's trusted publisher) |
 | publish a firmware version (new or existing firmware) | `publish --bin build/app.bin --name "NAME" --summary "…" --dry-run --json`, then without `--dry-run` |
 | publish to your firmware by its code | `publish --firmware CODE --bin build/app.bin --notes "…" --dry-run --json` |
 | release the next version of your firmware (203.json here) | raise `version.txt`, add its `## <version>` to CHANGELOG.md, build; `publish --dry-run --json`, then `publish --json` (workflow 2) |
@@ -78,7 +83,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | an admin action (`admin …`) | an admin sign-in has the admin scope: `login --admin --json` (exit 4 `admin_scope_required` says so) |
 | anything else | `help start`, `help <topic>`, `<command> --help --json` |
 
-Topics: `help start|publish|sim|ci|manifest|fork|source|rules|channels|versions|checks|page|cover|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
+Topics: `help start|new|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|cover|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
 Every command with its flags: `reference/cli.md`; every endpoint: `reference/api.md`; what the site does and the
 command for each: `reference/parity.md`; the firmware project rules: `reference/firmware-project.md` (`203c rules`).
 
@@ -92,7 +97,24 @@ summary, tags, devices, source, license, forked_from, publish_source, publish: c
 else's firmware (a clone of theirs), `publish` makes your fork first, rewrites `code` and `forked_from` and says
 so (`fork` in `--json`): tell the user, and commit 203.json.
 
-## The six common workflows
+## The common workflows
+
+### 0. A new Cardenza firmware, from nothing to a release
+
+"Make a metronome for the Cardenza" and the like. Read `products/cardenza/README.md` and `203c rules` first.
+
+```sh
+203c new "Pocket Metronome" --summary "A metronome: tap tempo, accents, a click" --json   # the project, CardenzaHAL inside
+cd pocket-metronome                                     # write main/main.cpp with the HAL's public headers
+python3 components/CardenzaHAL/tools/cardenza.py doctor # what this computer lacks (ESP-IDF 5.3.5, Emscripten, 203c, sign-in)
+python3 components/CardenzaHAL/tools/cardenza.py build  # the preferred build: checks, then idf.py build; --web: the browser version too
+203c flash --bin build/pocket_metronome.bin --json      # onto the user's Cardenza over USB, through its Launcher (never idf.py flash)
+203c log --until "ready" --seconds 30 --json            # did it start? (its log; device_crashed: decode the backtrace with the ELF)
+203c login --json                                       # once on a computer (the user approves in the browser)
+203c publish --dry-run --json   then   203c publish --json   # ask the user first; commit 203.json (its code)
+203c link --json                                        # this GitHub repository publishes from CI (trusted publishing)
+203c inbox --out .203/inbox.md --json                   # later: what users asked for and said; fix, release the next version
+```
 
 ### 1. Sign in
 

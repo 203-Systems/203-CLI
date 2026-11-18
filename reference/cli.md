@@ -103,7 +103,17 @@ all of them) as JSON.
 | `not_an_app` | 1 | flash --bin: not an application image (a merged image, bootloader, ELF …) | give build/<project>.bin; a Launcher comes back with `devices recover` |
 | `launcher_image` | 1 | flash: the code is a launcher, which the Launcher does not install | `devices recover` restores the official Launcher |
 | `download_only` | 1 | flash: the device takes a UF2 file copied onto it (Mystrix), no Launcher | `versions download VCODE --target …` and copy it onto the device |
-| `unsupported_platform` | 1 | flash: the serial port is used on macOS and Linux only | on Windows: the firmware's page on the website, 用 USB 线安装 (Chrome or Edge) |
+| `unsupported_platform` | 1 | flash and log: the USB cable is used on macOS and Linux only | on Windows: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file); the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi) |
+| `device_crashed` | 1 | log: the device printed a panic, an abort or a restart | read log_tail; decode the backtrace with the build's ELF (xtensa-esp32s3-elf-addr2line -pfiaC -e build/<project>.elf …) |
+| `log_timeout` | 1 | log --until: no line matched before --seconds ran out | read log_tail: the firmware did not print it (or starts slower: a longer --seconds) |
+| `python_missing` | 1 | log on macOS: python3 is needed for CoreMIDI | xcode-select --install |
+| `dir_not_empty` | 1 | new: the folder is there and not empty | give another DIR |
+| `git_missing` | 1 | new: git is not installed | install git |
+| `git_failed` | 1 | new: git init failed | read the message; check the folder |
+| `hal_unavailable` | 3 | new: CardenzaHAL could not be added (the network, GitHub) | run it again |
+| `no_template` | 1 | new: no project template for that device yet | read the device's guide (products/<device>/README.md) |
+| `no_firmware` | 2 | inbox, link: no CODE given and 203.json has no code (nothing published yet) | publish the first version, or give the code (firmware mine lists yours) |
+| `no_project` | 2 | link: no 203.json here or above | run it in the project's folder (new or init makes 203.json) |
 | `flash_failed` | 1 | esptool stopped while writing the device (`log_tail`) | put the device in download mode, check the cable and port, run it again: a device can always be restored again |
 | `device_offline` | 1 | the device is off or not online (设备没开机或没联网) | ask the user to switch it on with Wi-Fi (in its Launcher or any CardenzaHAL firmware), then retry |
 | `source_secrets` | 1 | the source archive holds files that look secret (`files`) | remove them from git (and revoke any pushed secret), commit, retry; or --no-source |
@@ -195,6 +205,19 @@ Write 203.json (the project file) from what the project says: CMake project(), v
 
     203c init --summary "A four-track groovebox" --json
     203c init --name "My synth" --bin build/my_synth.bin --publish-source --json
+
+### `203c new NAME [DIR]`
+
+Start a firmware project: CardenzaHAL as a git submodule and its template, named NAME, with 203.json, the README and the release workflow; it builds as it is (no sign-in)
+
+- `--summary TEXT` The cover blurb, 1-100 characters: what it does (not just the name)
+- `--tags a,b` Up to 8 tags, comma-separated; one category: instrument, groovebox, tool, network, game
+- `--device DEVICE` The device (default cardenza, the only one with a template so far)
+- `--project ID` CMake's project() name, the BIN's name (default from NAME: "Pocket Metronome" → pocket_metronome)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c new "Pocket Metronome" --summary "A metronome with tap tempo and accents" --json
+    203c new Metronome metronome --dry-run --json
 
 ## Publishing
 
@@ -366,6 +389,19 @@ Fork a firmware to change it: makes your fork (or finds yours), clones its sourc
 
     203c fork V6QK28 my-synth --json
     203c fork K7M2QX --no-clone --json
+
+### `203c link [CODE]`
+
+Bind this project (203.json) to its firmware, or move the binding after the repository moved: 203.json's code and source, the page's source link, and this GitHub repository as the trusted publisher its CI publishes with (sign-in with write)
+
+- `--move` Also remove the trusted publishers of other repositories (the project left them)
+- `--workflow FILE` The workflow that publishes (default firmware.yml when it is there)
+- `--no-ci` Leave the trusted publishers as they are
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c link --dry-run --json
+    203c link K7M2QX --json
+    203c link --move --json
 
 ### `203c clone CODE [DIR]`
 
@@ -1128,6 +1164,18 @@ Report something to the admins (sign-in with write)
 
 ## Requests
 
+### `203c inbox [CODE]`
+
+What the community said about this project's firmware (203.json, or CODE) since you last looked: requests with votes and new comments, comments, merge requests, versions sent back, notifications; --out writes it as Markdown for an agent
+
+- `--all` Everything there is, not only what is new since the last inbox
+- `--out FILE` Also write it as Markdown (e.g. .203/inbox.md: git-ignore .203/)
+- `--no-mark` Do not remember this look: the next inbox shows the same as new
+
+    203c inbox
+    203c inbox --out .203/inbox.md --json
+    203c inbox K7M2QX --all --json
+
 ### `203c requests list CODE`
 
 Requests under a firmware
@@ -1288,6 +1336,21 @@ Install a firmware on a device over a USB cable (线刷), through its 203 Launch
     203c flash V6QK28 --channel beta --port /dev/ttyACM0 --json
     203c flash --bin build/app.bin --json
     203c flash V6QK28 --dry-run --json
+
+### `203c log`
+
+A Cardenza's log over its USB cable: a running firmware's console (CardenzaHAL's system channel) or the serial port (the 203 Launcher, a firmware without USB); --until makes it a test (no sign-in; macOS and Linux)
+
+- `--seconds N` How long to read (default: until Ctrl-C on a terminal, 20 s for a program, 60 s with --until)
+- `--until REGEX` A test: stop with exit 0 at the first line that matches; exit 1 (log_timeout) when none does, or (device_crashed) at a panic or restart
+- `--fail REGEX` Stop with exit 1 (device_crashed) at a line that matches (default with --until: a panic, abort, Backtrace, a restart)
+- `--port PORT` Read this serial port (/dev/ttyACM0, /dev/cu.usbmodem…) instead of looking
+- `--out FILE` Also append the lines to FILE
+
+    203c log
+    203c log --seconds 30 --json
+    203c log --until "ready" --seconds 30 --json
+    203c log --port /dev/ttyACM0 --out boot.log
 
 ### `203c devices recover`
 
@@ -1655,6 +1718,8 @@ Every API operation with its JSON schema (for programs)
 ## Help topics
 
 - `203c help start` — Start here: what to run for what
+- `203c help new` — A new firmware for the Cardenza: make, build, try, publish, listen
+- `203c help link` — Binding a project to its firmware, and moving it
 - `203c help signin` — Signing in
 - `203c help publish` — Publishing a firmware version
 - `203c help ci` — Publishing from CI: trusted publishing from GitHub Actions (no secret)

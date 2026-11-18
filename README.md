@@ -32,6 +32,11 @@ It installs the skill into `~/.claude/skills/203-community` (`CLAUDE_SKILLS_DIR`
 into `~/.local/bin` (`COMMUNITY_BIN_DIR`), checking the download's SHA-256; no sudo. What it installs is this
 repository at the commit the community pins. Node.js 18 or later is all `203c` needs: it has no dependencies.
 
+On Windows: the same line in Git Bash (Claude Code's own shell there, and Git for Windows'), or without a shell
+`npm install -g github:203-Systems/203-CLI` (the command only; the skill is for agents with a shell). 203c runs
+everywhere Node does; the USB cable (`flash`, `log`) is used on macOS and Linux, and on Windows from the website in
+Chrome or Edge.
+
 From a clone instead (to read the code first, to work offline, or to try a change to `203c`):
 
 ```sh
@@ -44,13 +49,17 @@ node 203-CLI/scripts/203c.mjs --help   # or run it in place
 
 ```sh
 203c doctor                     # is everything ready?
-203c login                      # opens the browser; you approve on the site (remote: --no-browser)
+203c login                      # once on a computer: opens the browser, you approve on the site (remote: --no-browser)
 203c rules                      # the firmware project rules (Cardenza)
-203c init                       # writes 203.json for the project in this folder
-203c fork V6QK28 my-synth       # or start from someone's firmware (here: Cardenza Synth)
+203c new "My synth"             # a new Cardenza firmware project (CardenzaHAL and its template), or:
+203c fork V6QK28 my-synth       # start from someone's firmware (here: Cardenza Synth); init: 203.json for a project you have
+python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool (Cardenza)
+203c flash --bin build/my_synth.bin   # onto your Cardenza over USB, through its Launcher
+203c log                        # what it prints
 203c publish --dry-run          # checks everything the community will check
 203c publish
-203c help start                 # what to run for what
+203c inbox                      # later: what people asked for and said
+203c help start                 # what to run for what (every command takes --help)
 ```
 
 Run it from the firmware project's folder. Add `--json` for machines; `203c <command> --help --json` describes any

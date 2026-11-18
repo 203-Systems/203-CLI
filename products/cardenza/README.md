@@ -21,14 +21,16 @@ Community device id: **`cardenza`** (the default device of `203c publish`). Stat
    native ESP-IDF handles behind them. Reach the hardware only through it: that is what makes the same source build
    for the browser simulator, and what the community's checks expect. Missing something? Open an issue or a pull
    request on CardenzaHAL rather than writing a driver into your firmware.
-3. **Start a project** from [`examples/template`](https://github.com/203-Systems/CardenzaHAL/tree/main/examples/template)
-   (the HAL as a submodule, the board's defaults, a partition table that keeps the Launcher, `version.txt`,
-   `CHANGELOG.md`, `203.json` and the release workflow), then `203c init` to fill `203.json` in.
+3. **Start a project**: `203c new "My firmware" --summary "…"` makes it from
+   [`examples/template`](https://github.com/203-Systems/CardenzaHAL/tree/main/examples/template) (the HAL as a submodule,
+   the board's defaults, a partition table that keeps the Launcher, `version.txt`, `CHANGELOG.md`, `203.json` and the
+   release workflow), named; it builds as it is. A project you have already: `203c init` writes its `203.json`.
    **Or change a firmware that exists**: `203c fork CODE my-firmware` clones its source and records where it comes
    from. The official groovebox, [CardenzaSynth](https://github.com/203-Systems/CardenzaSynth) (Cardenza Synth,
    code `V6QK28`), is the largest example of a firmware on the HAL.
-4. **Build** for the board and for the browser, and try it (below).
-5. **Publish** with `203c` (below); after the first version, let CI publish every push and tag.
+4. **Build** with the HAL's tool, for the board and for the browser, and try it on a Cardenza (below).
+5. **Publish** with `203c` (below); after the first version, let CI publish every push and tag (`203c link`), and read
+   what users ask for with `203c inbox`.
 
 ## Toolchain
 
@@ -41,17 +43,23 @@ Community device id: **`cardenza`** (the default device of `203c publish`). Stat
 
 ## Build and try
 
+The HAL's [`tools/cardenza.py`](https://github.com/203-Systems/CardenzaHAL/blob/main/tools/cardenza.py) is the
+preferred way to build: it checks ESP-IDF 5.3, a clean HAL submodule and `203c` first, and exports ESP-IDF for the
+build when the shell has not (an agent's shell starts fresh every time).
+
 ```sh
-idf.py set-target esp32s3          # once
-idf.py build                       # build/<project>.bin: the application image you publish
-python3 components/CardenzaHAL/tools/cardenza_web.py build .          # the browser version (build-web/site)
+python3 components/CardenzaHAL/tools/cardenza.py doctor   # what this computer still needs, and how to install it
+python3 components/CardenzaHAL/tools/cardenza.py build    # build/<project>.bin: the application image you publish
+python3 components/CardenzaHAL/tools/cardenza.py web      # the browser version (build-web/site)
 python3 components/CardenzaHAL/tools/cardenza_web.py serve build-web/site   # http://localhost:8000/
 ```
 
-On a board: install your build through the Launcher, the way users get it.
+On a board: install your build through the Launcher, the way users get it, and read what it prints.
 
 ```sh
-203c flash --bin build/<project>.bin --dry-run --json   # then without --dry-run: over a USB cable, no sign-in
+203c flash --bin build/<project>.bin --json   # over a USB cable, no sign-in (macOS, Linux; Windows: the website)
+203c log --json                               # its log: the firmware's console over USB, or the serial port
+203c log --until "ready" --seconds 30 --json  # a test: exit 0 at the line, 1 at a panic or when it never comes
 ```
 
 `idf.py flash` writes the whole flash and **erases the 203 Launcher** with every firmware it installed. While
@@ -85,6 +93,9 @@ that fits the Launcher's room (`203c publish --dry-run` says how much of it a bu
 boots; and a simulator version that boots for Play. A stable version needs a cover (a 16:9 picture).
 
 ## Hardware reference
+
+What each part does and where it is in the HAL (header, functions, README section):
+[CardenzaHAL README › The hardware](https://github.com/203-Systems/CardenzaHAL/blob/main/README.md#the-hardware). In short:
 
 | | |
 |---|---|

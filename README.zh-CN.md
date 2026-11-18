@@ -24,6 +24,10 @@ curl -fsSL https://cardenza.203.io/community/skill/install.sh | sh
 
 Skill 装到 `~/.claude/skills/203-community`（`CLAUDE_SKILLS_DIR` 可改），`203c` 命令装到 `~/.local/bin`（`COMMUNITY_BIN_DIR` 可改），下载会校验 SHA-256，不需要 sudo。装的就是社区锁定的那个提交的本仓库。`203c` 只需要 Node.js 18 或更新的版本，没有任何依赖。
 
+Windows：在 Git Bash（Claude Code 在 Windows 上用的就是它，Git for Windows 自带）里运行同一行；没有 shell 时用
+`npm install -g github:203-Systems/203-CLI`（只装命令，Skill 给有 shell 的 AI 用）。`203c` 在有 Node 的地方都能运行；
+USB 线（`flash`、`log`）在 macOS 和 Linux 上用，Windows 上用网站（Chrome 或 Edge）。
+
 也可以从克隆安装（先看代码、离线使用、或者试改 `203c`）：
 
 ```sh
@@ -36,13 +40,17 @@ node 203-CLI/scripts/203c.mjs --help   # 或者直接运行
 
 ```sh
 203c doctor                     # 一切就绪了吗？
-203c login                      # 打开浏览器，在网站上批准（远程时加 --no-browser）
+203c login                      # 每台电脑一次：打开浏览器，在网站上批准（远程时加 --no-browser）
 203c rules                      # 固件项目规则（鸣片）
-203c init                       # 给当前目录的项目写 203.json
-203c fork V6QK28 my-synth       # 或者从别人的固件开始（这里是 Cardenza Synth）
+203c new "My synth"             # 新建一个鸣片固件项目（CardenzaHAL 和它的模板），或者：
+203c fork V6QK28 my-synth       # 从别人的固件开始（这里是 Cardenza Synth）；已有项目用 init 写 203.json
+python3 components/CardenzaHAL/tools/cardenza.py build   # HAL 的编译工具（鸣片）
+203c flash --bin build/my_synth.bin   # 通过 Launcher 用 USB 线装到你的鸣片上
+203c log                        # 看它打印的日志
 203c publish --dry-run          # 先按社区的检查全部检查一遍
 203c publish
-203c help start                 # 想做什么就运行什么
+203c inbox                      # 之后：大家提了什么需求、说了什么
+203c help start                 # 想做什么就运行什么（每个命令都能加 --help）
 ```
 
 在固件项目的目录里运行。给程序用时加 `--json`；`203c <命令> --help --json` 用 JSON 描述任何命令。所有命令和参数见 [`reference/cli.md`](reference/cli.md)，社区 API 见 [`reference/api.md`](reference/api.md)。

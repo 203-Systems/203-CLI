@@ -95,16 +95,16 @@ async function exchange(file, bytes, done, ms) {
   }
 }
 
-// CoreMIDI through Python's ctypes: the first destination and source whose name has "Cardenza"; the command sent as one
-// SysEx packet; the answer awaited. Prints one JSON line: {"name", "sent", "answered"} or {"error"}.
-export const COREMIDI = String.raw`
+// CoreMIDI through Python's ctypes, the part every use shares: the first destination and source whose name has "Cardenza",
+// an output port, an input port collecting what the device sends into `received` (under `lock`). It calls fail(message),
+// which the script defines before it, when something is missing.
+export const COREMIDI_PRELUDE = String.raw`
 import ctypes, ctypes.util, json, struct, sys, threading, time
-command, seconds = int(sys.argv[1]), float(sys.argv[2])
 try:
     cm = ctypes.cdll.LoadLibrary(ctypes.util.find_library("CoreMIDI"))
     cf = ctypes.cdll.LoadLibrary(ctypes.util.find_library("CoreFoundation"))
 except OSError as error:
-    print(json.dumps({"error": "CoreMIDI: %s" % error})); sys.exit(0)
+    fail("CoreMIDI: %s" % error)
 u32, vp = ctypes.c_uint32, ctypes.c_void_p
 cf.CFStringCreateWithCString.restype = vp
 cf.CFStringCreateWithCString.argtypes = [vp, ctypes.c_char_p, u32]
@@ -133,7 +133,7 @@ client, out, inp = u32(), u32(), u32()
 label = cfstring("203c")
 status = cm.MIDIClientCreate(label, None, None, ctypes.byref(client))
 if status:
-    print(json.dumps({"error": "MIDIClientCreate: %d" % status})); sys.exit(0)
+    fail("MIDIClientCreate: %d" % status)
 prop = vp.in_dll(cm, "kMIDIPropertyDisplayName").value
 def display(endpoint):
     value = vp()
@@ -152,7 +152,7 @@ def find(count, get):
     return None, ""
 destination, name = find(cm.MIDIGetNumberOfDestinations, cm.MIDIGetDestination)
 if destination is None:
-    print(json.dumps({"error": "no MIDI destination named Cardenza"})); sys.exit(0)
+    fail("no MIDI destination named Cardenza")
 source, _ = find(cm.MIDIGetNumberOfSources, cm.MIDIGetSource)
 received, lock = bytearray(), threading.Lock()
 def on_read(packets, _port, _source):
@@ -173,6 +173,16 @@ for kind, port in (("out", out), ("in", inp)):
         cm.MIDIInputPortCreate(client, label, proc, None, ctypes.byref(port))
 if source is not None:
     cm.MIDIPortConnectSource(inp, source, None)
+`;
+
+// A system command (restartFirmware): sent as one SysEx packet, the answer awaited. Prints one JSON line: {"name", "sent",
+// "answered"} or {"error"}.
+export const COREMIDI = String.raw`
+import json, sys
+def fail(message):
+    print(json.dumps({"error": message})); sys.exit(0)
+command, seconds = int(sys.argv[1]), float(sys.argv[2])
+` + COREMIDI_PRELUDE + String.raw`
 data = bytes([0xF0, 0x23, command & 0x7F, 0xF7])
 packet_list = ctypes.create_string_buffer(struct.pack("<IQH", 1, 0, len(data)) + data)
 sent = cm.MIDISend(out, destination, packet_list) == 0

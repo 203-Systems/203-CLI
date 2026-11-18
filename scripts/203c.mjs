@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import {fileURLToPath} from "node:url";
-import {Client, ApiError, DEFAULT_API, CLI_VERSION, OPS, opsByName, saveToken, forgetToken, tokenFile, loginStart, loginPoll, browserLogin, browserProblem,
+import {Client, ApiError, DEFAULT_API, CLI_VERSION, OPS, opsByName, loadToken, saveToken, forgetToken, tokenFile, loginStart, loginPoll, browserLogin, browserProblem,
   oidcExchange, oidcAvailable, inGithubActions, runCredentialOf, saveRunCredential, forgetRunCredential, runCredentialFile} from "./lib.mjs";
 import {COMMANDS, GLOBAL_FLAGS, GROUPS, GROUP_DEFAULT, ALIASES, findCommand} from "./commands.mjs";
 import {CliError, EXIT, EXIT_TEXT, ERROR_CODES, TOPICS, explainApiError, topicText, usage} from "./guide.mjs";
@@ -218,7 +218,9 @@ function bindArguments(command, positional, base) {
     const value = positional[at++];
     if (value === undefined) {
       if (param.optional) continue;
-      fail(`Missing ${param.name} for "${command.name}"`, {hint: `Usage: ${command.usage}` + (param.type === "code" ? ". Never guess a code: firmware mine lists yours" : ""),
+      // The short help right here (what it does, its usage, an example): nothing to look up for a missing argument.
+      fail(`Missing ${param.name} for "${command.name}"`, {hint: `${command.summary}. Usage: ${command.usage}` + (command.examples[0] ? `; e.g. ${base.prog} ${command.examples[0]}` : "") +
+        (param.type === "code" ? ". Never guess a code: firmware mine lists yours" : ""),
         next: [`${base.prog} ${command.name} --help${base.json ? " --json" : ""}`, ...(param.type === "code" ? [`${base.prog} firmware mine${base.json ? " --json" : ""}`] : [])]});
     }
     args[param.name] = value;
@@ -764,7 +766,9 @@ async function main(argv) {
     throw usage(`No help topic or command "${words.slice(1).join(" ")}"`, {hint: `Topics: ${Object.keys(TOPICS).join(", ")}`,
       next: [guess ? `${prog} help ${guess}${json ? " --json" : ""}` : `${prog} help start${json ? " --json" : ""}`]});
   }
-  if (wantsHelp && GROUPS.includes(String(words[0]).toLowerCase()) && !findCommand(words.map(w => String(w).toLowerCase()))) {
+  // A group alone (203c firmware) is answered with its short help: every action and what it does, nothing to look up.
+  const bareGroup = words.length === 1 && !json && !GROUP_DEFAULT[String(words[0]).toLowerCase()];
+  if ((wantsHelp || bareGroup) && GROUPS.includes(String(words[0]).toLowerCase()) && !findCommand(words.map(w => String(w).toLowerCase()))) {
     const group = String(words[0]).toLowerCase();
     if (json) return out(groupJson(group, prog));
     process.stdout.write(groupHelp(group, prog));
@@ -886,6 +890,13 @@ async function main(argv) {
   // 203c is used signed in (the user, 2026-11-14): every command but signing in, help, version, doctor and
   // the offline rules and spec needs a sign-in (COMMUNITY.md "Credentials"); but what goes over a USB cable (flash,
   // devices recover: `anyone`) needs none (the user, 2026-11-18: signing in is for Wi-Fi).
+  // On a person's own terminal the sign-in starts by itself, once on a computer (the browser asks them to approve 203c), and
+  // the command goes on (the user, 2026-11-18: "尽可能要去用户登录cli"). A program (--json, no terminal, CI) gets exit 4.
+  if (!command.offline && !command.anyone && !client.token && interactive && tokenSource === null && !browserProblem()) {
+    process.stderr.write(`"${command.name}" needs a sign-in, and this computer has none yet: signing in first (once)…\n`);
+    await login({...ctx, flags: {}, json: false});
+    client.token = loadToken(client.api);
+  }
   if (!command.offline && !command.anyone && !client.token) {
     throw new CliError("signin_required", `"${command.name}" needs a sign-in: 203c is used signed in`, {exit: EXIT.signin,
       hint: "Sign in: login opens the browser and the user approves on the site (no browser here: login --with-token, a personal token on stdin; or login --no-browser, a code to approve). " +

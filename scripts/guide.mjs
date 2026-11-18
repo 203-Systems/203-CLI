@@ -97,7 +97,17 @@ export const ERROR_CODES = [
   ["not_an_app", 1, "flash --bin: not an application image (a merged image, bootloader, ELF …)", "give build/<project>.bin; a Launcher comes back with `devices recover`"],
   ["launcher_image", 1, "flash: the code is a launcher, which the Launcher does not install", "`devices recover` restores the official Launcher"],
   ["download_only", 1, "flash: the device takes a UF2 file copied onto it (Mystrix), no Launcher", "`versions download VCODE --target …` and copy it onto the device"],
-  ["unsupported_platform", 1, "flash: the serial port is used on macOS and Linux only", "on Windows: the firmware's page on the website, 用 USB 线安装 (Chrome or Edge)"],
+  ["unsupported_platform", 1, "flash and log: the USB cable is used on macOS and Linux only", "on Windows: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file); the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi)"],
+  ["device_crashed", 1, "log: the device printed a panic, an abort or a restart", "read log_tail; decode the backtrace with the build's ELF (xtensa-esp32s3-elf-addr2line -pfiaC -e build/<project>.elf …)"],
+  ["log_timeout", 1, "log --until: no line matched before --seconds ran out", "read log_tail: the firmware did not print it (or starts slower: a longer --seconds)"],
+  ["python_missing", 1, "log on macOS: python3 is needed for CoreMIDI", "xcode-select --install"],
+  ["dir_not_empty", 1, "new: the folder is there and not empty", "give another DIR"],
+  ["git_missing", 1, "new: git is not installed", "install git"],
+  ["git_failed", 1, "new: git init failed", "read the message; check the folder"],
+  ["hal_unavailable", 3, "new: CardenzaHAL could not be added (the network, GitHub)", "run it again"],
+  ["no_template", 1, "new: no project template for that device yet", "read the device's guide (products/<device>/README.md)"],
+  ["no_firmware", 2, "inbox, link: no CODE given and 203.json has no code (nothing published yet)", "publish the first version, or give the code (firmware mine lists yours)"],
+  ["no_project", 2, "link: no 203.json here or above", "run it in the project's folder (new or init makes 203.json)"],
   ["flash_failed", 1, "esptool stopped while writing the device (`log_tail`)", "put the device in download mode, check the cable and port, run it again: a device can always be restored again"],
   ["device_offline", 1, "the device is off or not online (设备没开机或没联网)", "ask the user to switch it on with Wi-Fi (in its Launcher or any CardenzaHAL firmware), then retry"],
   ["source_secrets", 1, "the source archive holds files that look secret (`files`)", "remove them from git (and revoke any pushed secret), commit, retry; or --no-source"],
@@ -118,6 +128,7 @@ export const TOPICS = {
 Always add --json when a program reads the answer. Run doctor first. Never guess a code: list them.
 
   You want to …                                   Run
+  make a new firmware for a Cardenza (start here)  {P} new "My firmware" --summary "…" --json   ({P} help new: build, try, publish)
   check that everything works (sign-in, API, quota) {P} doctor --json
   sign in (needed for everything else)             {P} login --json   (opens the browser; remote: help signin)
   see your firmware and their codes                {P} firmware mine --json
@@ -131,6 +142,9 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   set the cover picture                            {P} firmware cover K7M2QX cover.png --json
   change the page (summary, description, links)    {P} firmware edit K7M2QX --summary "…" --source-url https://github.com/… --json
   see why a version was sent back                  {P} versions check VCODE --json
+  try a build on your Cardenza (USB cable)         {P} flash --bin build/<project>.bin --json   then   {P} log --json
+  what users asked for and said since last time    {P} inbox --out .203/inbox.md --json   ({P} help requests)
+  link this project to its firmware / move it      {P} link --dry-run --json   ({P} help link)
   share a sound pack / project / work              {P} sounds upload bank.ccpreset --firmware OFFICIAL --title "…" --dry-run --json
   find the official firmware's code                {P} firmware list --official --json
   change someone's firmware (fork, clone, publish) {P} fork V6QK28 my-synth --json   ({P} help fork)
@@ -139,7 +153,32 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   what is left of today's limits                   {P} quotas --json
   change your name or bio                          {P} me edit --name "…" --bio "…" --json
 
-Topics: {P} help <topic>   (publish sim ci manifest fork source rules channels versions checks page cover sounds projects works models signin errors devices requests launchers admin)`},
+Topics: {P} help <topic>   (new publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices requests launchers admin)`},
+
+  new: {title: "A new firmware for the Cardenza: make, build, try, publish, listen", text: `
+1. {P} new "My firmware" --summary "What it does" --json     a folder with CardenzaHAL (git submodule) and its template,
+   named; it builds as it is. (Changing someone's firmware instead: {P} help fork.)
+2. cd my-firmware; write main/main.cpp with CardenzaHAL's public headers (its README: the hardware and its API).
+3. python3 components/CardenzaHAL/tools/cardenza.py build    the HAL's build tool: checks ESP-IDF 5.3, the HAL, 203c,
+   then idf.py build (ESP-IDF is exported for it when the shell has not); build/<project>.bin. Its doctor says what is missing.
+4. {P} flash --bin build/<project>.bin --json                  onto the Cardenza on the USB cable through its 203 Launcher
+   (which stays: never idf.py flash), no sign-in; {P} log --json reads what it prints (--until "ready" makes it a test).
+5. {P} login (once on a computer: the browser asks the user to approve), then {P} publish --dry-run --json and
+   {P} publish --json: the first version makes the firmware and writes its code into 203.json (commit it).
+6. CI from then on (.github/workflows/firmware.yml, trusted publishing: {P} help ci; {P} link links the repository).
+7. {P} inbox --out .203/inbox.md --json                         what people asked for and said since the last look;
+   {P} dev read CODE N --json for a request in full, {P} comments add … to answer.
+The rules for every step: {P} rules.`},
+
+  link: {title: "Binding a project to its firmware, and moving it", text: `
+A project is bound to its firmware by 203.json's "code" (the first publish writes it), the firmware's page by its source
+link, and CI by the trusted publisher (the GitHub repository whose Actions may publish its versions).
+{P} link --dry-run --json          what it would change, from 203.json and this folder's git remote
+{P} link --json                    203.json's code and source, the page's source and clone links, this repository as
+                                   trusted publisher (workflow firmware.yml when there); idempotent
+{P} link CODE --json               bind this project to your firmware CODE (a project made before, a new clone)
+{P} link --move --json             the repository moved (renamed, transferred, a new one): also unlink the old ones
+A firmware cannot change hands: someone else makes their own from it ({P} fork CODE) and links that.`},
 
   signin: {title: "Signing in", text: `
 1. {P} doctor --json                → "signed_in": true? Then you are done.
@@ -387,6 +426,9 @@ Windows: the firmware's page on the website, 用 USB 线安装, in Chrome or Edg
                                                           downloaded with the community's signature: the Launcher updates it later
 {P} flash --bin build/app.bin --json                       a local application image
 {P} flash CODE --dry-run --json                            what it would write (nothing downloaded, no device needed)
+{P} log --json                                            what it prints: a running firmware's console (CardenzaHAL's system channel,
+                                                          over its MIDI or HID), else the serial port (the Launcher, a firmware without USB)
+{P} log --until "ready" --seconds 30 --json                a test: exit 0 at the line, 1 at a crash or when it never comes
 The port: --port PORT, else the one USB serial port there is. Nothing to switch on: the Launcher's console runs from power-on.
 A device running a firmware (CardenzaHAL: no serial port) is restarted into its Launcher first, over its MIDI (Linux: ALSA
 raw MIDI, else its HID; macOS: CoreMIDI through python3), and the port it comes back on is used; a Launcher counting down
@@ -413,6 +455,9 @@ The device in download mode: in its Launcher esptool resets it there; a running 
 into it by 203c; else (Cardenza) hold HOME while plugging the USB cable in.`},
 
   requests: {title: "Requests and the developer tracker", text: `
+{P} inbox --json                                          everything new about this project's firmware (203.json) since
+                                                          the last look: requests, comments, merges, versions sent back
+{P} inbox --out .203/inbox.md --json                      the same as Markdown in the project, for an agent to read
 {P} dev list --firmware CODE --sort top --json           your firmware's requests with their internal status
 {P} dev read CODE N --json                                the request, votes and discussion (the specification)
 {P} dev update CODE N --status in_progress --progress 10 --note "Plan: …" --json

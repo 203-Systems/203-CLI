@@ -6,6 +6,9 @@ import {doctor, publish, createFirmware, editFirmware, setCover, checklist, dryR
 import {CHANNELS, ENGINES, LICENSES} from "./checks.mjs";
 import {recoverDevice} from "./recover.mjs";
 import {flashDevice} from "./flash.mjs";
+import {deviceLog} from "./devlog.mjs";
+import {newProject} from "./scaffold.mjs";
+import {inbox, link} from "./feedback.mjs";
 import path from "node:path";
 
 const B = help => ({bool: true, help});
@@ -98,6 +101,11 @@ cmd("init", "Write 203.json (the project file) from what the project says: CMake
     "publish-source": B("Attach a source archive to every version (publish_source: true)"), force: B("Overwrite an existing 203.json")},
   run: init, topic: "manifest", examples: ['init --summary "A four-track groovebox" --json', 'init --name "My synth" --bin build/my_synth.bin --publish-source --json']});
 
+cmd("new NAME [DIR]", "Start a firmware project: CardenzaHAL as a git submodule and its template, named NAME, with 203.json, the README and the release workflow; it builds as it is (no sign-in)", {group: "Start",
+  anyone: true, flags: {summary: FIRMWARE_FIELDS.summary, tags: FIRMWARE_FIELDS.tags, device: V("DEVICE", "The device (default cardenza, the only one with a template so far)"),
+    project: V("ID", "CMake's project() name, the BIN's name (default from NAME: \"Pocket Metronome\" → pocket_metronome)"), ...DRY},
+  run: newProject, topic: "new", examples: ['new "Pocket Metronome" --summary "A metronome with tap tempo and accents" --json', "new Metronome metronome --dry-run --json"]});
+
 // ---------------------------------------------------------------------------------------------
 // Publishing
 
@@ -157,6 +165,10 @@ cmd("fork CODE [DIR]", "Fork a firmware to change it: makes your fork (or finds 
     clone: V("DIR", "Clone its source into DIR (the same as DIR)"), "no-clone": B("Make the fork only; do not clone"), ...DRY},
   run: forkFirmware, write: true, topic: "fork",
   examples: ["fork V6QK28 my-synth --json", "fork K7M2QX --no-clone --json"]});
+cmd("link [CODE]", "Bind this project (203.json) to its firmware, or move the binding after the repository moved: 203.json's code and source, the page's source link, and this GitHub repository as the trusted publisher its CI publishes with", {group: "Publishing",
+  flags: {move: B("Also remove the trusted publishers of other repositories (the project left them)"), workflow: V("FILE", "The workflow that publishes (default firmware.yml when it is there)"),
+    "no-ci": B("Leave the trusted publishers as they are"), ...DRY},
+  run: link, write: true, topic: "link", examples: ["link --dry-run --json", "link K7M2QX --json", "link --move --json"]});
 cmd("clone CODE [DIR]", "git clone a firmware's source (its clone link, else its parent's) into DIR; publish from inside goes to CODE", {group: "Publishing",
   flags: {...DRY}, run: cloneFirmware, topic: "fork", examples: ["clone K7M2QX my-synth --json"]});
 
@@ -382,6 +394,10 @@ cmd("report KIND REF", "Report something to the admins", {group: "Community",
 // ---------------------------------------------------------------------------------------------
 // Requests, trackers, merges, feedback
 
+cmd("inbox [CODE]", "What the community said about this project's firmware (203.json, or CODE) since you last looked: requests with votes and new comments, comments, merge requests, versions sent back, notifications; --out writes it as Markdown for an agent", {group: "Requests",
+  flags: {all: B("Everything there is, not only what is new since the last inbox"), out: V("FILE", "Also write it as Markdown (e.g. .203/inbox.md: git-ignore .203/)"),
+    "no-mark": B("Do not remember this look: the next inbox shows the same as new")},
+  run: inbox, topic: "requests", examples: ["inbox", "inbox --out .203/inbox.md --json", "inbox K7M2QX --all --json"]});
 cmd("requests list CODE", "Requests under a firmware", {group: "Requests", flags: {...SORT(["top", "new"]), ...PAGE}, op: "requests_list",
   args: ctx => ({code: ctx.args.CODE, sort: ctx.flags.sort, page: ctx.flags.page}), examples: ["requests list K7M2QX --sort top --json"]});
 cmd("requests show CODE N", "A request", {group: "Requests", op: "request_show", args: ctx => ({code: ctx.args.CODE, number: ctx.args.N}), examples: ["requests show K7M2QX 3 --json"]});
@@ -437,6 +453,12 @@ cmd("flash [CODE]", "Install a firmware on a device over a USB cable (线刷), t
     channel: V("stable|beta|dev", "The line of a firmware's code (default stable)", {choices: CHANNELS}), target: V("DEVICE", "The device (default: what its Launcher says; cardenza with --dry-run)"),
     name: V("NAME", "The name the Launcher keeps it under (default: the firmware's)"), ...DRY},
   run: flashDevice, topic: "devices", examples: ["flash V6QK28 --json", "flash V6QK28 --channel beta --port /dev/ttyACM0 --json", "flash --bin build/app.bin --json", "flash V6QK28 --dry-run --json"]});
+cmd("log", "A Cardenza's log over its USB cable: a running firmware's console (CardenzaHAL's system channel) or the serial port (the 203 Launcher, a firmware without USB); --until makes it a test (no sign-in; macOS and Linux)", {group: "Devices",
+  anyone: true, flags: {seconds: V("N", "How long to read (default: until Ctrl-C on a terminal, 20 s for a program, 60 s with --until)", {type: "number"}),
+    until: V("REGEX", "A test: stop with exit 0 at the first line that matches; exit 1 (log_timeout) when none does, or (device_crashed) at a panic or restart"),
+    fail: V("REGEX", "Stop with exit 1 (device_crashed) at a line that matches (default with --until: a panic, abort, Backtrace, a restart)"),
+    port: V("PORT", "Read this serial port (/dev/ttyACM0, /dev/cu.usbmodem…) instead of looking"), out: V("FILE", "Also append the lines to FILE")},
+  run: deviceLog, topic: "devices", examples: ["log", "log --seconds 30 --json", 'log --until "ready" --seconds 30 --json', "log --port /dev/ttyACM0 --out boot.log"]});
 // 恢复刷机 (the website's /recover): no bound device needed; Node has no serial port, so esptool (Python) writes it.
 cmd("devices recover", "Recovery flash: the newest official Launcher and the device's official firmware, as the Launcher would have them (erases the whole internal flash; the SD card is not touched). --out saves the images and the esptool command, --port writes them with esptool", {group: "Devices",
   flags: {target: V("DEVICE", "The device (default cardenza; GET /recovery lists them)"), port: V("PORT", "Write it now over USB with esptool (python3 -m esptool): /dev/ttyACM0, COM5 …; the device in download mode (a running CardenzaHAL firmware is restarted into it)"),

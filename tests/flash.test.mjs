@@ -220,7 +220,7 @@ async function fakeFirmware(answer) {
       if (reply) py.stdin.write(Buffer.from(reply));
     });
   });
-  return {slave, got, close: () => py.kill()};
+  return {slave, got, send: bytes => py.stdin.write(Buffer.from(bytes)), close: () => py.kill()};
 }
 
 /** A stand-in sysfs and /dev with a Cardenza running a firmware on USB (its sound card and hidraw under it). */
@@ -327,4 +327,95 @@ test("flash with a firmware that cannot be reached: what to do, and nothing else
   assert.equal(r.code, 1, r.stderr);
   assert.equal(r.error.code, "firmware_unreachable");
   assert.match(r.error.hint, /hold FN/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// 203c log: a running firmware's console over the HAL's system channel (raw MIDI: SysEx F0 23 43 01 F7 on, the text as
+// F0 24 43 … F7, F0 23 43 00 F7 off at the end; HID: report 0xCB), and a serial port's text; --until as a test.
+
+const sysexText = text => [0xf0, 0x24, 0x43, ...Buffer.from(text, "latin1"), 0xf7];
+const ends = (got, tail) => got.length >= tail.length && tail.every((b, i) => got[got.length - tail.length + i] === b);
+
+test("log: a firmware's console over raw MIDI until a line, other MIDI skipped, the console turned off at the end", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  let answered = false;
+  const midi = await fakeFirmware(got => {
+    if (answered || !ends(got, [0xf0, 0x23, 0x43, 1, 0xf7])) return null;
+    answered = true;
+    // Its ring first (half a line in one SysEx, a note-on between), then the line the test waits for.
+    return [...sysexText("I (812) CardenzaHAL: init ok\nI (90"), 0x90, 60, 100, ...sysexText("0) app: pocket_metronome 0.1.0 ready\r\n"), ...sysexText("\x1b[0;32mI (950) app: tick\x1b[0m\n")];
+  });
+  const system = fakeSystem({midi: midi.slave});
+  const r = await cli(["log", "--until", "metronome .* ready", "--seconds", "5", "--json"], {C203_SYS: system.sys, C203_DEV: system.dev});
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.status, "matched");
+  assert.equal(r.json.matched, "I (900) app: pocket_metronome 0.1.0 ready");
+  assert.equal(r.json.via, "console");
+  assert.match(r.json.log, /CardenzaHAL: init ok/);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.deepEqual(midi.got.slice(0, 5), [0xf0, 0x23, 0x43, 1, 0xf7], "the console asked for");
+  assert.ok(ends(midi.got, [0xf0, 0x23, 0x43, 0, 0xf7]), "and turned off: " + midi.got);
+  midi.close();
+});
+
+test("log: a crash ends a test with device_crashed and the backtrace; a line that never comes is log_timeout", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  let answered = false;
+  const midi = await fakeFirmware(got => {
+    if (answered || got.length < 5) return null;
+    answered = true;
+    return sysexText("Guru Meditation Error: Core  0 panic'ed (LoadProhibited)\nBacktrace: 0x42001234:0x3fc9 0x42005678:0x3fca\n");
+  });
+  const system = fakeSystem({midi: midi.slave});
+  const env = {C203_SYS: system.sys, C203_DEV: system.dev};
+  const r = await cli(["log", "--until", "ready", "--seconds", "6", "--json"], env);
+  assert.equal(r.code, 1, r.stderr);
+  assert.equal(r.error.code, "device_crashed");
+  assert.match(r.error.log_tail, /Backtrace: 0x42001234/);
+  midi.close();
+
+  const quiet = await fakeFirmware(() => null);
+  const silent = fakeSystem({midi: quiet.slave});
+  const t = await cli(["log", "--until", "ready", "--seconds", "1", "--json"], {C203_SYS: silent.sys, C203_DEV: silent.dev});
+  assert.equal(t.code, 1, t.stderr);
+  assert.equal(t.error.code, "log_timeout");
+  quiet.close();
+});
+
+test("log: over HID when there is no raw MIDI (report 0xCB, the console's reports 0xCB 0xC3)", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  let answered = false;
+  const report = text => { const r = new Array(64).fill(0); r[0] = 0xcb; r[1] = 0xc3; r[2] = text.length; Buffer.from(text, "latin1").forEach((b, i) => { r[3 + i] = b; }); return r; };
+  const hid = await fakeFirmware(got => {
+    if (answered || got.length < 64) return null;
+    answered = true;
+    return [...report("I (10) app: hello over hid\n"), ...report("I (20) app: ready\n")];
+  });
+  const system = fakeSystem({midi: path.join(dir, "no-midi-here"), hid: hid.slave});
+  const r = await cli(["log", "--until", "ready", "--seconds", "5", "--json"], {C203_SYS: system.sys, C203_DEV: system.dev});
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.json.log, /hello over hid/);
+  assert.deepEqual(hid.got.slice(0, 3), [0xcb, 0x43, 1]);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.deepEqual(hid.got.slice(-64, -61), [0xcb, 0x43, 0], "turned off");
+  hid.close();
+});
+
+test("log: a serial port's text (the Launcher, a firmware without USB), lines to --out", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  const serial = await fakeFirmware(() => null);
+  const out = path.join(dir, "boot.log");
+  const running = cli(["log", "--port", serial.slave, "--seconds", "2", "--out", out, "--json"]);
+  setTimeout(() => serial.send(Buffer.from("ESP-ROM:esp32s3-20210327\r\nI (300) app: hello\r\n")), 600);
+  const r = await running;
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.via, "serial");
+  assert.match(fs.readFileSync(out, "utf8"), /I \(300\) app: hello/);
+  serial.close();
+});
+
+test("log on Windows says what to use there", async () => {
+  const {logSource} = await import("../scripts/devlog.mjs");
+  assert.throws(() => logSource({platform: "win32"}), e => e.code === "unsupported_platform" && /cardenza_usb\.py console/.test(e.hint));
+  const {sysexConsole, hidConsole} = await import("../scripts/devlog.mjs");
+  const cut = sysexConsole(Uint8Array.from([...sysexText("ab"), 0xf0, 0x24, 0x43, 0x63]));
+  assert.equal(cut.text, "ab");
+  assert.deepEqual([...cut.rest], [0xf0, 0x24, 0x43, 0x63], "a message cut in two waits for its end");
+  assert.equal(hidConsole(Uint8Array.from([0xcb, 0xc3, 2, 0x68, 0x69, ...new Array(59).fill(0)])).text, "hi");
 });

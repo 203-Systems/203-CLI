@@ -53,7 +53,8 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool 
 203c log                        # what it prints
 203c publish --dry-run          # checks everything the community will check
 203c publish
-203c inbox                      # later: what people asked for and said
+203c sync                       # later: the page, versions, requests, comments and forks in .203/community.md
+203c project diff FORK          # what a fork (魔改版) changed
 203c help start                 # what to run for what (every command takes --help)
 ```
 

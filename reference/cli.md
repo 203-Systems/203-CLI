@@ -109,7 +109,11 @@ all of them) as JSON.
 | `log_timeout` | 1 | log --until: no line matched before --seconds ran out | read log_tail: the firmware did not print it (or starts slower: a longer --seconds) |
 | `python_missing` | 1 | log on macOS: python3 is needed for CoreMIDI | xcode-select --install |
 | `dir_not_empty` | 1 | new: the folder is there and not empty | give another DIR |
-| `git_missing` | 1 | new: git is not installed | install git |
+| `git_missing` | 1 | new, project diff: git is not installed | install git |
+| `not_a_repository` | 1 | project diff local: this folder is not a git repository | compare two versions or a fork instead, or git init |
+| `no_source` | 1 | project diff: that version or fork has no source archive (and no repository) | versions published with publish_source: true carry one; pick another version |
+| `skill_incomplete` | 1 | skill install: this 203c lacks the skill's files | npm install -g 203c again |
+| `skill_failed` | 1 | skill install: the skills folder could not be written | check the folder, or give another with --dir |
 | `git_failed` | 1 | new: git init failed | read the message; check the folder |
 | `hal_unavailable` | 3 | new: CardenzaHAL could not be added (the network, GitHub) | run it again |
 | `no_template` | 1 | new: no project template for that device yet | read the device's guide (products/<device>/README.md) |
@@ -1174,7 +1178,67 @@ Report something to the admins (sign-in with write)
 
     203c report post ab12cd34 --reason spam --json
 
-## Requests
+## Project
+
+### `203c sync [CODE]`
+
+Everything the community has about this project's firmware in one report for an agent: the page, every version and its notes, requests and comments with their replies, merge requests, forks; .203/community.md and .json, new since the last sync marked. Run it before planning changes
+
+- `--since last|all|DATE` What counts as new (default last: since the previous sync or inbox)
+- `--out DIR` Write the report here (default the project's .203/)
+- `--no-mark` Do not remember this look
+
+    203c sync
+    203c sync --json
+    203c sync --since 2026-11-01 --json
+
+### `203c project show [CODE]`
+
+The firmware's page as people see it: name, summary, description, tags, licence, links, cover and screen, counts, newest versions, the latest 10 versions with their notes
+
+    203c project show
+    203c project show V6QK28 --json
+
+### `203c project versions [CODE]`
+
+Every version with its notes, channel, status, checks and source archive, newest first (24 a page)
+
+- `--channel stable|beta|dev` One channel
+- `--page N` Page, from 1 (24 a page)
+
+    203c project versions --json
+    203c project versions --page 2 --json
+
+### `203c project feedback [CODE]`
+
+What people asked for and said: requests (votes, status, answered or not, the discussion) and comment threads with every reply and like, merge requests; each with the version newest when it was written, new ones marked
+
+- `--since last|all|DATE` What is marked new (default last: since the previous sync or inbox)
+- `--new` Only what is new
+- `--no-threads` Leave out the discussions and the replies beyond the newest (faster)
+
+    203c project feedback --json
+    203c project feedback --new --json
+    203c project feedback V6QK28 --since 2026-11-01
+
+### `203c project forks [CODE]`
+
+The forks (魔改版) of the firmware, forks of forks too: each one's base version, newest versions, counts, and the command that compares it
+
+    203c project forks
+    203c project forks V6QK28 --json
+
+### `203c project diff [A] [B]`
+
+Compare two sources file by file (+/- lines; --patch the unified diff): A and B are a fork's code, a version of this firmware (label or code), or local (this folder, B's default)
+
+- `--patch` Also the unified diff
+- `--max N` Cut the patch at N characters (default 400000)
+- `--firmware CODE` The firmware whose versions labels name (default 203.json's)
+
+    203c project diff K9FORK
+    203c project diff 1.0.0 1.1.0 --json
+    203c project diff K9FORK 1.1.0 --patch
 
 ### `203c inbox [CODE]`
 
@@ -1187,6 +1251,8 @@ What the community said about this project's firmware (203.json, or CODE) since 
     203c inbox
     203c inbox --out .203/inbox.md --json
     203c inbox K7M2QX --all --json
+
+## Requests
 
 ### `203c requests list CODE`
 
@@ -1731,6 +1797,7 @@ Every API operation with its JSON schema (for programs)
 
 - `203c help start` — Start here: what to run for what
 - `203c help new` — A new firmware for the Cardenza: make, build, try, publish, listen
+- `203c help project` — The project's firmware on the community: page, versions, what people say, forks, differences
 - `203c help link` — Binding a project to its firmware, and moving it
 - `203c help signin` — Signing in
 - `203c help publish` — Publishing a firmware version

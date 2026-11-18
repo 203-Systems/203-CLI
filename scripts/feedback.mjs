@@ -8,43 +8,20 @@
 // Both only call the API's existing operations. Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
-import {tokenFile} from "./lib.mjs";
-import {PROJECT_FILE, findProjectFile, remotePage, writeProject, cloneUrlOf} from "./project.mjs";
-import {normalizeCode} from "./checks.mjs";
+import {PROJECT_FILE, remotePage, writeProject, cloneUrlOf} from "./project.mjs";
+import {whichFirmware, readCursor, writeCursor} from "./project-view.mjs";
 import {siteOf} from "./sim.mjs";
 import {CliError, EXIT} from "./guide.mjs";
 
-const stateFile = code => path.join(path.dirname(tokenFile()), "inbox", code + ".json");
 const after = (when, since) => !since || (when && Date.parse(when) > Date.parse(since));
 const day = when => (when ? String(when).slice(0, 16).replace("T", " ") : "");
 const short = (text, n = 280) => { const t = String(text ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
 const votesOf = v => (v && typeof v === "object" ? v.score ?? (v.up ?? 0) - (v.down ?? 0) : v ?? 0);
 
-/** The firmware the command is about: CODE, else 203.json's code. {code, project: {file, dir, data} | null} */
-function whichFirmware(ctx, given) {
-  const found = findProjectFile(ctx.cwd);
-  const data = found && !found.legacy ? JSON.parse(fs.readFileSync(found.file, "utf8")) : null;
-  const raw = given ?? data?.code;
-  if (!raw) {
-    throw new CliError("no_firmware", found ? `${PROJECT_FILE} has no code yet: the firmware is made by its first publish` : `No ${PROJECT_FILE} here or above, and no CODE given`,
-      {exit: EXIT.usage, hint: found ? "Publish the first version (publish --dry-run, then publish), or link it to a firmware you have" : "Run it in the project's folder, or give the firmware's code",
-        next: found ? [ctx.run(["publish", "--dry-run"]), ctx.run(["firmware", "mine"])] : [ctx.run(["firmware", "mine"])]});
-  }
-  const parsed = normalizeCode(raw);
-  if (parsed.error) throw ctx.usage(parsed.error, {field: "CODE", hint: parsed.hint});
-  return {code: parsed.code, project: found ? {...found, data} : null};
-}
-
-function readState(code) { try { return JSON.parse(fs.readFileSync(stateFile(code), "utf8")); } catch { return null; } }
-function writeState(code, value) {
-  fs.mkdirSync(path.dirname(stateFile(code)), {recursive: true, mode: 0o700});
-  fs.writeFileSync(stateFile(code), JSON.stringify(value, null, 2) + "\n", {mode: 0o600});
-}
-
 export async function inbox(ctx) {
   const o = ctx.flags;
-  const {code} = whichFirmware(ctx, ctx.args.CODE);
-  const state = o.all ? null : readState(code);
+  const {code, project} = whichFirmware(ctx, ctx.args.CODE);
+  const state = o.all ? null : readCursor(code, project);
   const since = state?.seen ?? null;
   const now = new Date().toISOString();
   const safe = promise => promise.catch(error => ({error}));
@@ -97,7 +74,7 @@ export async function inbox(ctx) {
     result.written = file;
   }
   if (!o.no_mark) {
-    writeState(code, {seen: now, requests: Object.fromEntries((requests.items ?? []).map(r => [r.number, r.comments ?? 0]))});
+    writeCursor(code, project, {seen: now, requests: Object.fromEntries((requests.items ?? []).map(r => [r.number, r.comments ?? 0]))});
   }
   return {json: result, text: markdown.trimEnd() + (result.written ? `\n\n(written to ${result.written})` : "")};
 }

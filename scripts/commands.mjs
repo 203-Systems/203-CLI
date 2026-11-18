@@ -9,6 +9,7 @@ import {flashDevice} from "./flash.mjs";
 import {deviceLog} from "./devlog.mjs";
 import {newProject} from "./scaffold.mjs";
 import {inbox, link} from "./feedback.mjs";
+import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff, sync} from "./project-view.mjs";
 import {skillInstall} from "./skill.mjs";
 import path from "node:path";
 
@@ -398,7 +399,25 @@ cmd("report KIND REF", "Report something to the admins", {group: "Community",
 // ---------------------------------------------------------------------------------------------
 // Requests, trackers, merges, feedback
 
-cmd("inbox [CODE]", "What the community said about this project's firmware (203.json, or CODE) since you last looked: requests with votes and new comments, comments, merge requests, versions sent back, notifications; --out writes it as Markdown for an agent", {group: "Requests",
+// The project's firmware on the community, read for the developer and the AI (project-view.mjs): CODE is 203.json's by default.
+cmd("sync [CODE]", "Everything the community has about this project's firmware in one report for an agent: the page, every version and its notes, requests and comments with their replies, merge requests, forks; .203/community.md and .json, new since the last sync marked. Run it before planning changes", {group: "Project",
+  flags: {since: V("last|all|DATE", "What counts as new (default last: since the previous sync or inbox)"), out: V("DIR", "Write the report here (default the project's .203/)"),
+    "no-mark": B("Do not remember this look")},
+  run: sync, topic: "project", examples: ["sync", "sync --json", "sync --since 2026-11-01 --json"]});
+cmd("project show [CODE]", "The firmware's page as people see it: name, summary, description, tags, licence, links, cover and screen, counts, newest versions, the latest 10 versions with their notes", {group: "Project",
+  run: projectShow, topic: "project", examples: ["project show", "project show V6QK28 --json"]});
+cmd("project versions [CODE]", "Every version with its notes, channel, status, checks and source archive, newest first (24 a page)", {group: "Project",
+  flags: {channel: V("stable|beta|dev", "One channel"), ...PAGE}, run: projectVersions, topic: "project", examples: ["project versions --json", "project versions --page 2 --json"]});
+cmd("project feedback [CODE]", "What people asked for and said: requests (votes, status, answered or not, the discussion) and comment threads with every reply and like, merge requests; each with the version newest when it was written, new ones marked", {group: "Project",
+  flags: {since: V("last|all|DATE", "What is marked new (default last: since the previous sync or inbox)"), new: B("Only what is new"),
+    "no-threads": B("Leave out the discussions and the replies beyond the newest (faster)")},
+  run: projectFeedback, topic: "project", examples: ["project feedback --json", "project feedback --new --json", "project feedback V6QK28 --since 2026-11-01"]});
+cmd("project forks [CODE]", "The forks (魔改版) of the firmware, forks of forks too: each one's base version, newest versions, counts, and the command that compares it", {group: "Project",
+  run: projectForks, topic: "project", examples: ["project forks", "project forks V6QK28 --json"]});
+cmd("project diff [A] [B]", "Compare two sources file by file (+/- lines; --patch the unified diff): A and B are a fork's code, a version of this firmware (label or code), or local (this folder, B's default)", {group: "Project",
+  flags: {patch: B("Also the unified diff"), max: V("N", "Cut the patch at N characters (default 400000)", {type: "int"}), firmware: V("CODE", "The firmware whose versions labels name (default 203.json's)")},
+  run: projectDiff, topic: "project", examples: ["project diff K9FORK", "project diff 1.0.0 1.1.0 --json", "project diff K9FORK 1.1.0 --patch"]});
+cmd("inbox [CODE]", "What the community said about this project's firmware (203.json, or CODE) since you last looked: requests with votes and new comments, comments, merge requests, versions sent back, notifications; --out writes it as Markdown for an agent", {group: "Project",
   flags: {all: B("Everything there is, not only what is new since the last inbox"), out: V("FILE", "Also write it as Markdown (e.g. .203/inbox.md: git-ignore .203/)"),
     "no-mark": B("Do not remember this look: the next inbox shows the same as new")},
   run: inbox, topic: "requests", examples: ["inbox", "inbox --out .203/inbox.md --json", "inbox K7M2QX --all --json"]});

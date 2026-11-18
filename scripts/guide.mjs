@@ -103,7 +103,11 @@ export const ERROR_CODES = [
   ["log_timeout", 1, "log --until: no line matched before --seconds ran out", "read log_tail: the firmware did not print it (or starts slower: a longer --seconds)"],
   ["python_missing", 1, "log on macOS: python3 is needed for CoreMIDI", "xcode-select --install"],
   ["dir_not_empty", 1, "new: the folder is there and not empty", "give another DIR"],
-  ["git_missing", 1, "new: git is not installed", "install git"],
+  ["git_missing", 1, "new, project diff: git is not installed", "install git"],
+  ["not_a_repository", 1, "project diff local: this folder is not a git repository", "compare two versions or a fork instead, or git init"],
+  ["no_source", 1, "project diff: that version or fork has no source archive (and no repository)", "versions published with publish_source: true carry one; pick another version"],
+  ["skill_incomplete", 1, "skill install: this 203c lacks the skill's files", "npm install -g 203c again"],
+  ["skill_failed", 1, "skill install: the skills folder could not be written", "check the folder, or give another with --dir"],
   ["git_failed", 1, "new: git init failed", "read the message; check the folder"],
   ["hal_unavailable", 3, "new: CardenzaHAL could not be added (the network, GitHub)", "run it again"],
   ["no_template", 1, "new: no project template for that device yet", "read the device's guide (products/<device>/README.md)"],
@@ -144,7 +148,9 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   change the page (summary, description, links)    {P} firmware edit K7M2QX --summary "…" --source-url https://github.com/… --json
   see why a version was sent back                  {P} versions check VCODE --json
   try a build on your Cardenza (USB cable)         {P} flash --bin build/<project>.bin --json   then   {P} log --json
-  what users asked for and said since last time    {P} inbox --out .203/inbox.md --json   ({P} help requests)
+  everything about this project's firmware (an AI) {P} sync --json   (.203/community.md: page, versions, requests, comments, forks)
+  what users asked for and said since last time    {P} inbox --json   ({P} help project)
+  compare a fork (魔改版) with this project          {P} project forks --json   then   {P} project diff FORK --patch
   link this project to its firmware / move it      {P} link --dry-run --json   ({P} help link)
   share a sound pack / project / work              {P} sounds upload bank.ccpreset --firmware OFFICIAL --title "…" --dry-run --json
   find the official firmware's code                {P} firmware list --official --json
@@ -154,7 +160,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   what is left of today's limits                   {P} quotas --json
   change your name or bio                          {P} me edit --name "…" --bio "…" --json
 
-Topics: {P} help <topic>   (new publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices requests launchers admin)`},
+Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices requests launchers admin)`},
 
   new: {title: "A new firmware for the Cardenza: make, build, try, publish, listen", text: `
 1. {P} new "My firmware" --summary "What it does" --json     a folder with CardenzaHAL (git submodule) and its template,
@@ -170,6 +176,22 @@ Topics: {P} help <topic>   (new publish sim ci manifest link fork source rules c
 7. {P} inbox --out .203/inbox.md --json                         what people asked for and said since the last look;
    {P} dev read CODE N --json for a request in full, {P} comments add … to answer.
 The rules for every step: {P} rules.`},
+
+  project: {title: "The project's firmware on the community: page, versions, what people say, forks, differences", text: `
+In the project's folder (203.json's code; or give CODE), read-only, plain text or --json:
+{P} sync --json                       everything in one report for an agent: .203/community.md and community.json (the page,
+                                     every version and its notes, requests and comments with replies, merges, forks);
+                                     new since the last sync marked. Run it before planning changes.
+{P} project show --json               the page: summary, description, tags, licence, links, cover, counts, newest versions
+{P} project versions --page 2 --json  every version with its notes, status, checks and source archive (24 a page)
+{P} project feedback --new --json     requests (votes, status, answered?, discussion) and comment threads (replies, likes),
+                                     merge requests; --since last|all|DATE; each with the version newest when it was written
+{P} project forks --json              its forks (魔改版), forks of forks too: base version, newest versions, counts
+{P} project diff FORK                 a fork against this folder, file by file (+/- lines); --patch for the unified diff
+{P} project diff 1.0.0 1.1.0          two versions of this firmware (their source archives: publish_source: true)
+{P} inbox --json                      only what is new since the last look (and versions sent back, notifications)
+Answer and track from here: {P} comments add firmware CODE --parent ID --body "…", {P} comments add request CODE/N --body "…",
+{P} dev update CODE N --status planned|in_progress|done (owners; never notifies). The last look is kept in .203/state.json.`},
 
   link: {title: "Binding a project to its firmware, and moving it", text: `
 A project is bound to its firmware by 203.json's "code" (the first publish writes it), the firmware's page by its source

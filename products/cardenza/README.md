@@ -30,7 +30,7 @@ Community device id: **`cardenza`** (the default device of `203c publish`). Stat
    code `V6QK28`), is the largest example of a firmware on the HAL.
 4. **Build** with the HAL's tool, for the board and for the browser, and try it on a Cardenza (below).
 5. **Publish** with `203c` (below); after the first version, let CI publish every push and tag (`203c link`), and read
-   what users ask for with `203c inbox`.
+   what users ask for with `203c sync` (`.203/community.md`: requests, comments, forks) before each change.
 
 ## Toolchain
 

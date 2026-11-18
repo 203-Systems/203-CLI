@@ -37,6 +37,24 @@ before(async () => {
   if (GIT) { git(["init", "-q", hal]); git(["add", "-A"], hal); git(["commit", "-q", "-m", "hal"], hal); }
 
   const later = new Date(Date.now() - 3600e3).toISOString(), earlier = new Date(Date.now() - 30 * 86400e3).toISOString();
+  const middle = new Date(Date.now() - 10 * 86400e3).toISOString();
+  // Source archives as publish_source makes them (git archive, one top folder): 0.1.0, 0.1.1 and a fork's.
+  const archives = {};
+  if (GIT) {
+    const src = path.join(root, "src");
+    git(["init", "-q", src]);
+    const snap = (name, files) => {
+      for (const [file, text] of Object.entries(files)) {
+        if (text === null) fs.rmSync(path.join(src, file), {force: true});
+        else { fs.mkdirSync(path.dirname(path.join(src, file)), {recursive: true}); fs.writeFileSync(path.join(src, file), text); }
+      }
+      git(["add", "-A"], src); git(["commit", "-q", "-m", name], src);
+      archives[name] = spawnSync("git", ["archive", "--format=tar.gz", "--prefix=pocket-metronome/", "HEAD"], {cwd: src}).stdout;
+    };
+    snap("0.1.0", {"main/main.cpp": "int bpm = 120;\nvoid tick() {}\n", "README.md": "# Pocket Metronome\n"});
+    snap("0.1.1", {"main/main.cpp": "int bpm = 120;\nint accent = 1;\nvoid tick() {}\n"});
+    snap("fork", {"main/main.cpp": "int bpm = 140;\nint accent = 1;\nvoid tick() {}\n", "main/tap.cpp": "void tap() {}\n", "README.md": null});
+  }
   stand = await standInApi((req, send, body) => {
     const authed = req.headers.authorization === "Bearer " + TOKEN;
     const url = new URL(req.url, "http://127.0.0.1");
@@ -44,7 +62,28 @@ before(async () => {
     if (!authed && req.method === "POST") return send(401, {error: "Sign in first", code: "signin_required"});
     if (url.pathname === "/api/me") return authed ? send(200, {id: "u1", name: "Ada", role: "user", scopes: ["read", "write"]}) : send(401, {error: "Sign in first", code: "signin_required"});
     if (url.pathname === "/api/firmware/K7M2QX") return send(200, {code: "K7M2QX", name: "Pocket Metronome", owner: {id: "u1", name: "Ada"}, source_url: "https://github.com/olduser/pocket-metronome",
+      summary: "A metronome with tap tempo", description: "Tap **ENTER** four times.", tags: ["tool"], license: "MIT",
+      cover: {url: "/files/cover.png", size: 10, sha256: null}, latest: {stable: {code: "V2B3C6", version: "0.1.1", channel: "stable", published: middle}},
       counts: {downloads: 12, likes: 3, family: 0}});
+    const archive = /^\/files\/src-(.+)\.tar\.gz$/.exec(url.pathname);
+    if (archive && archives[archive[1]]) return send(200, archives[archive[1]], "application/gzip");
+    const src = v => ({url: `/files/src-${v}.tar.gz`, size: archives[v]?.length ?? 0, sha256: "", files: 2, uploaded: earlier});
+    const versions = {"0.1.0": {code: "V2B3C5", version: "0.1.0", channel: "stable", status: "published", published: earlier, created: earlier, notes: "First version.", source: src("0.1.0")},
+      "0.1.1": {code: "V2B3C6", version: "0.1.1", channel: "stable", status: "published", published: middle, created: middle, notes: "- Accents.", source: src("0.1.1")}};
+    const byLabel = /^\/api\/firmware\/K7M2QX\/versions\/([0-9.]+)$/.exec(url.pathname);
+    if (byLabel) return versions[byLabel[1]] ? send(200, {...versions[byLabel[1]], firmware: {code: "K7M2QX", name: "Pocket Metronome"}}) : send(404, {error: "Not found", code: "not_found"});
+    if (url.pathname === "/api/codes/FRK234") return send(200, {kind: "firmware", firmware: "FRK234", version: null});
+    if (url.pathname === "/api/firmware/FRK234") return send(200, {code: "FRK234", name: "Pocket Metronome Pro", owner: {id: "u5", name: "eve"},
+      source_archive: {version: {code: "FRV234", version: "0.2.0", channel: "stable", published: later}, url: "/files/src-fork.tar.gz", size: 1, sha256: "", files: 2}});
+    if (url.pathname === "/api/firmware" && url.searchParams.get("family") === "K7M2QX") return send(200, {items: [
+      {code: "FRK234", name: "Pocket Metronome Pro", owner: {id: "u5", name: "eve"}, summary: "Faster, with tap tempo", forked_from: {code: "K7M2QX", name: "Pocket Metronome", version: {code: "V2B3C5", version: "0.1.0"}},
+        latest: {stable: {code: "FRV234", version: "0.2.0", channel: "stable", published: later}}, counts: {likes: 1, downloads: 3, forks: 0}}], next_cursor: null});
+    if (url.pathname === "/api/comments/31/replies") return send(200, {total: 2, page: 1, page_size: 24, items: [
+      {id: 32, author: {id: "u1", name: "Ada"}, created: later, body: "Next version", likes: 1}, {id: 33, author: {id: "u2", name: "bo"}, created: later, body: "Thanks!"}]});
+    const read = /^\/api\/dev\/requests\/K7M2QX\/(\d+)$/.exec(url.pathname);
+    if (read) return send(200, {number: Number(read[1]), discussion: read[1] === "4"
+      ? [{id: 50, author: {id: "u2", name: "bo"}, created: later, body: "Please"}, {id: 51, author: {id: "u1", name: "Ada"}, created: later, body: "Planned for 0.2.0"}]
+      : [{id: 52, author: {id: "u3", name: "cy"}, created: earlier, body: "+1"}]});
     if (url.pathname === "/api/firmware/V6QK28") return send(200, {code: "V6QK28", name: "Cardenza Synth", owner: {id: "u9", name: "203 Systems"}});
     if (url.pathname === "/api/dev/requests") {
       assert.equal(url.searchParams.get("firmware"), "K7M2QX");
@@ -54,11 +93,11 @@ before(async () => {
         {number: 1, title: "Louder click", author: {name: "di"}, created: earlier, votes: 1, comments: 0, internal: {status: "done", progress: 100, updated: earlier}}]});
     }
     if (url.pathname === "/api/firmware/K7M2QX/comments") return send(200, {items: [
-      {id: 31, author: {name: "bo"}, created: later, body: "The click is too quiet on the speaker", replies: [{id: 32, author: {name: "Ada"}, created: later, body: "Next version"}]},
+      {id: 31, author: {id: "u2", name: "bo"}, created: later, body: "The click is too quiet on the speaker", likes: 2, reply_count: 2, replies: [{id: 32, author: {id: "u1", name: "Ada"}, created: later, body: "Next version"}]},
       {id: 20, author: {name: "cy"}, created: earlier, body: "Nice"}]});
     if (url.pathname === "/api/firmware/K7M2QX/merges") return send(200, {items: []});
-    if (url.pathname === "/api/firmware/K7M2QX/versions") return send(200, {items: [{code: "V2B3C4", version: "0.2.0", channel: "stable", status: "rejected", created: later},
-      {code: "V2B3C5", version: "0.1.0", channel: "stable", status: "published", created: earlier}]});
+    if (url.pathname === "/api/firmware/K7M2QX/versions") return send(200, {total: 3, page: 1, page_size: 24, items: [{code: "V2B3C4", version: "0.2.0", channel: "stable", status: "rejected", created: later},
+      versions["0.1.1"], versions["0.1.0"]]});
     if (url.pathname === "/api/me/notifications") return send(200, {items: [{id: 1, kind: "request", read: false, created: later, subject: {kind: "request", ref: "K7M2QX/4", title: "Tap tempo"}, text: "bo asked: Tap tempo"},
       {id: 2, kind: "like", read: false, created: later, subject: {kind: "firmware", ref: "ZZZZZZ", title: "Other"}}], unread: 2});
     if (url.pathname === "/api/firmware/K7M2QX/publishers" && req.method === "GET") return send(200, {items: state.publishers});
@@ -111,8 +150,8 @@ test("inbox: what is new since the last look, as JSON and as Markdown for an age
   const dir = path.join(root, "inbox-project");
   fs.mkdirSync(dir, {recursive: true});
   fs.writeFileSync(path.join(dir, "203.json"), JSON.stringify({format: 1, name: "Pocket Metronome", code: "K7M2QX"}));
-  fs.mkdirSync(path.join(home, "203c", "inbox"), {recursive: true});
-  fs.writeFileSync(path.join(home, "203c", "inbox", "K7M2QX.json"), JSON.stringify({seen: new Date(Date.now() - 86400e3).toISOString(), requests: {4: 0, 2: 0}}));
+  fs.mkdirSync(path.join(dir, ".203"), {recursive: true});
+  fs.writeFileSync(path.join(dir, ".203", "state.json"), JSON.stringify({K7M2QX: {seen: new Date(Date.now() - 86400e3).toISOString(), requests: {4: 0, 2: 0}}}));
   const r = await cli(["inbox", "--out", ".203/inbox.md", "--json"], {cwd: dir});
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.firmware.code, "K7M2QX");
@@ -180,4 +219,71 @@ test("skill install: the Agent Skill from this 203c into a skills folder, replac
   assert.equal(doctor.json.checks.find(c => c.name === "skill").ok, true, JSON.stringify(doctor.json.checks));
   const none = await cli(["doctor", "--json"], {token: "", env: {HOME: home, USERPROFILE: home, CLAUDE_SKILLS_DIR: path.join(root, "no-skills")}});
   assert.ok(none.json.warnings.some(w => w.code === "skill_missing"), JSON.stringify(none.json.warnings));
+});
+
+test("sync, project show / versions / feedback / forks: the page, versions, requests and comments with their threads, forks; one report for an agent", {skip: !GIT && "git"}, async () => {
+  const dir = path.join(root, "sync-project");
+  fs.mkdirSync(dir, {recursive: true});
+  fs.writeFileSync(path.join(dir, "203.json"), JSON.stringify({format: 1, name: "Pocket Metronome", code: "K7M2QX"}));
+  const show = await cli(["project", "show", "--json"], {cwd: dir});
+  assert.equal(show.code, 0, show.stderr);
+  assert.equal(show.json.firmware.description, "Tap **ENTER** four times.");
+  assert.match(show.json.firmware.cover_url, /^http:\/\/127\.0\.0\.1:\d+\/files\/cover\.png$/);
+  assert.deepEqual(show.json.versions.map(v => v.version), ["0.2.0", "0.1.1", "0.1.0"]);
+  assert.equal(show.json.versions[1].notes, "- Accents.");
+  const text = await cli(["project", "show"], {cwd: dir});
+  assert.match(text.stdout, /^# Pocket Metronome \(K7M2QX\)/);
+
+  const fb = await cli(["project", "feedback", "--since", "all", "--json"], {cwd: dir});
+  assert.equal(fb.code, 0, fb.stderr);
+  assert.equal(fb.json.owner, true);
+  const tap = fb.json.requests.find(r => r.number === 4);
+  assert.deepEqual([tap.answered, tap.discussion.length, tap.status], [true, 2, "new"]);
+  assert.equal(fb.json.requests.find(r => r.number === 2).answered, false);
+  const thread = fb.json.comments.find(c => c.id === 31);
+  assert.deepEqual(thread.replies.map(r => r.id), [32, 33], "every reply, beyond the newest the list carries");
+  assert.equal(thread.answered, true);
+  assert.equal(thread.likes, 2);
+  assert.equal(thread.version_at, "0.1.1", "the version newest when it was written");
+  assert.equal(fb.json.comments.find(c => c.id === 20).version_at, "0.1.0");
+
+  const forks = await cli(["project", "forks", "--json"], {cwd: dir});
+  assert.equal(forks.code, 0, forks.stderr);
+  assert.deepEqual(forks.json.items.map(f => [f.code, f.owner, f.base.version, f.latest.stable]), [["FRK234", "eve", "0.1.0", "0.2.0"]]);
+
+  const sync = await cli(["sync", "--json"], {cwd: dir});
+  assert.equal(sync.code, 0, sync.stderr);
+  const md = fs.readFileSync(path.join(dir, ".203", "community.md"), "utf8");
+  for (const part of ["# Pocket Metronome (K7M2QX)", "Tap **ENTER** four times.", "### 0.1.1 (V2B3C6)", "### #4 Tap tempo", "Planned for 0.2.0", "Thanks!", "Pocket Metronome Pro (FRK234)"]) {
+    assert.ok(md.includes(part), part);
+  }
+  const report = JSON.parse(fs.readFileSync(path.join(dir, ".203", "community.json"), "utf8"));
+  assert.equal(report.forks.length, 1);
+  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, ".203", "state.json"), "utf8")).K7M2QX.seen, "the look remembered in the project");
+  const again = await cli(["project", "feedback", "--new", "--json"], {cwd: dir});
+  assert.equal(again.json.requests.length + again.json.comments.length, 0, "nothing new right after a sync");
+});
+
+test("project diff: two versions' source archives, a fork against this folder; --patch the unified diff", {skip: !GIT && "git"}, async () => {
+  const dir = path.join(root, "diff-project");
+  fs.mkdirSync(path.join(dir, "main"), {recursive: true});
+  git(["init", "-q", dir]);
+  fs.writeFileSync(path.join(dir, "203.json"), JSON.stringify({format: 1, name: "Pocket Metronome", code: "K7M2QX"}));
+  fs.writeFileSync(path.join(dir, "main", "main.cpp"), "int bpm = 120;\nint accent = 1;\nvoid tick() {}\n");
+  fs.writeFileSync(path.join(dir, "README.md"), "# Pocket Metronome\n");
+  git(["add", "-A"], dir);
+  const versions = await cli(["project", "diff", "0.1.0", "0.1.1", "--json"], {cwd: dir});
+  assert.equal(versions.code, 0, versions.stderr);
+  assert.deepEqual(versions.json.files.changed, [{path: "main/main.cpp", added: 1, deleted: 0, binary: false}]);
+  assert.deepEqual([versions.json.a.version, versions.json.b.version], ["0.1.0", "0.1.1"]);
+  const fork = await cli(["project", "diff", "FRK234", "--patch", "--json"], {cwd: dir});
+  assert.equal(fork.code, 0, fork.stderr);
+  assert.equal(fork.json.a.kind, "firmware");
+  assert.equal(fork.json.b.kind, "local");
+  assert.deepEqual(fork.json.files.added.map(f => f.path), ["203.json", "README.md"], "only in this folder");
+  assert.deepEqual(fork.json.files.removed.map(f => f.path), ["main/tap.cpp"], "only in the fork");
+  assert.match(fork.json.patch, /^--- a\/main\/main\.cpp\n\+\+\+ b\/main\/main\.cpp\n@@ .*\n-int bpm = 140;\n\+int bpm = 120;/m);
+  const none = await cli(["project", "diff", "9.9.9", "--json"], {cwd: dir});
+  assert.equal(none.code, 1);
+  assert.equal(none.error.code, "not_found");
 });

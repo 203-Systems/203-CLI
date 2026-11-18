@@ -460,7 +460,7 @@ key left of the screen) for 1 s and choose Back to Launcher in its system menu, 
 menu (released before it): hold FN while it starts (or while 203c restarts it) and the Launcher stays in its menus.
 
 Sent over Wi-Fi to a bound device (signing in and binding are for Wi-Fi):
-{P} devices list --json                                   → each device's id, online (and where: its Launcher or a firmware running), running
+{P} devices list --json                                   → each device's id, number (as its Account page shows it), online (and where: its Launcher or a firmware running), running
 {P} devices send ID CODE --json                            install it (do not run); --start: install and run; --channel beta|dev
 {P} devices send ID CODE --no-wait --json                  only send it (the answer's id), then {P} devices status ID COMMAND [--wait] --json
 The device must be on and online: in its Launcher, or running any CardenzaHAL firmware (it hands over to its Launcher).

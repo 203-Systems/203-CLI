@@ -1,6 +1,6 @@
 // The command line itself, with no community behind it: help as text and as JSON, reference/cli.md current, the
-// rules, usage errors that name the right command or flag, the sign-in rules, and doctor / whoami / init against a
-// stand-in API (GET /, GET /me, GET /me/quotas). The community runs 203c against its whole API in its own tests.
+// rules, usage errors that name the right command or flag, the sign-in rules, and doctor / whoami / init / devices list
+// against a stand-in API (GET /, GET /me, GET /me/quotas, GET /me/devices). The community runs 203c against its whole API in its own tests.
 // Run: node --test tests/cli.test.mjs
 import {test, before, after} from "node:test";
 import assert from "node:assert/strict";
@@ -24,6 +24,10 @@ before(async () => {
         : send(401, {error: "Sign in first", code: "signin_required"});
     }
     if (req.url === "/api/me/quotas") return send(200, {items: [{what: "versions_dev", used: 1, limit: 300, left: 299, per: "day"}]});
+    if (req.url === "/api/me/devices") {
+      return send(200, {items: [{id: 4, name: "Desk Cardenza", target: "cardenza", number: "BF8YK39R", launcher_version: "0.3.1-cardenza",
+        bound: true, online: true, where: "launcher", last_seen: "2026-11-18T10:16:48Z"}], bind: null});
+    }
     return false;
   });
   home = fs.mkdtempSync(path.join(os.tmpdir(), "203c-home-"));
@@ -166,4 +170,11 @@ test("init writes 203.json from the project: CMake's project(), version.txt, LIC
   assert.equal(project.version, undefined, "the version stays in version.txt");
   assert.ok(out.todo.some(line => line.includes("summary")));
   assert.match(out.next[0], /publish --dry-run/);
+});
+
+test("devices list names each device by its device number, as its Account page does", async () => {
+  const listed = await cli(["devices", "list"], {token: TOKEN});
+  assert.equal(listed.code, 0, listed.stderr);
+  assert.match(listed.stdout, /^4 {5}Desk Cardenza {2}No\. BF8YK39R {2}cardenza {2}online \(in its Launcher\)/m);
+  assert.equal(ok(await cli(["devices", "list", "--json"], {token: TOKEN})).items[0].number, "BF8YK39R");
 });

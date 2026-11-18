@@ -436,7 +436,8 @@ function human(name, value) {
   }
   if (name === "quotas") return value.items.map(q => `${q.what.padEnd(22)} ${String(q.left).padStart(4)} left of ${q.limit}${q.per === "day" ? " (last 24 h)" : ""}`).join("\n");
   if (name === "devices") {
-    return value.items.length ? value.items.map(d => `${String(d.id).padEnd(5)} ${d.name}  ${d.target}  ${d.online ? "online" + (d.where ? " (" + (d.where === "firmware" ? "a firmware running" : "in its Launcher") + ")" : "")
+    // number: the device number (8 characters from its chip's ID, the same after any reflash; its Account page shows it).
+    return value.items.length ? value.items.map(d => `${String(d.id).padEnd(5)} ${d.name}${d.number ? "  No. " + d.number : ""}  ${d.target}  ${d.online ? "online" + (d.where ? " (" + (d.where === "firmware" ? "a firmware running" : "in its Launcher") + ")" : "")
       : "off or not online"}${d.last_seen ? "  last seen " + String(d.last_seen).slice(0, 16).replace("T", " ") : ""}`).join("\n")
       : "No device is signed in to this account (a Launcher signs in from Account on its home screen, older Launchers System Settings › Account › Bind account; the user approves its code on the site).";
   }

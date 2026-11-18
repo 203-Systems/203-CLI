@@ -1,7 +1,8 @@
 # 203c command reference
 
 Generated from the CLI's command table (`node scripts/203c.mjs help --reference > reference/cli.md`). `203c` is the command
-npm install -g 203c puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it from the firmware project's folder. Every
+`npm install -g github:203-Systems/203-CLI` (`npm install -g 203c` once published) puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it
+from the firmware project's folder. Every
 command takes the global options; with `--json` the answer is JSON on stdout and an error is one JSON line on stderr (its
 last line): `{"error","code","field","hint","next":[commands],"exit"}`. `--help --json` gives any command (or, alone,
 all of them) as JSON.
@@ -92,9 +93,9 @@ all of them) as JSON.
 | `port_unavailable` | 1 | flash: the port cannot be opened (no permission, another program has it, not a serial port) | Linux: the dialout group; close serial monitors and the website's page; check `--port` |
 | `port_failed` | 3 | flash: the port failed while it was used (unplugged) | plug it in again and run it again |
 | `no_launcher` | 1 | flash: no 203 Launcher answered on the port (another device's port, or the Launcher in USB Drive mode) | leave USB Drive (its home screen) or give the right `--port`, then run it again |
-| `firmware_unreachable` | 1 | flash / devices recover: the device runs a firmware and 203c cannot ask it to restart (Linux: no permission for its MIDI or HID; macOS: no python3 for CoreMIDI) | Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (hold HOME, left of the screen, for 1 s and choose Back to Launcher; a firmware without that menu: hold FN while turning it on) |
-| `no_launcher_port` | 3 | flash / devices recover: the firmware was asked to restart and no serial port came up | plug the cable in again and run it again; a firmware that does not take the command: hold HOME for 1 s and choose Back to Launcher (no such menu: hold FN while turning it on) |
-| `launcher_countdown` | 3 | flash: the restarted Launcher started the firmware again before 203c reached it (twice) | hold HOME on the device for 1 s and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows |
+| `firmware_unreachable` | 1 | flash / devices recover: the device runs a firmware and 203c cannot ask it to restart (Linux: no permission for its MIDI or HID; macOS: no python3 for CoreMIDI) | Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in) |
+| `no_launcher_port` | 3 | flash / devices recover: the firmware was asked to restart and no serial port came up | plug the cable in again and run it again; a firmware that does not take the command: press HOME and choose Back to Launcher (no such menu: hold FN while plugging it in) |
+| `launcher_countdown` | 3 | flash: the restarted Launcher started the firmware again before 203c reached it (twice) | press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows |
 | `launcher_busy` | 3 | flash: the Launcher is in a menu | go back to its home screen, then run it again |
 | `device_timeout` | 3 | flash: the device stopped answering | plug the cable in again and run it again |
 | `launcher_old` | 1 | flash: this Launcher cannot install over USB | update the Launcher (its home screen: Update Launcher) |
@@ -112,7 +113,7 @@ all of them) as JSON.
 | `git_missing` | 1 | new, project diff: git is not installed | install git |
 | `not_a_repository` | 1 | project diff local: this folder is not a git repository | compare two versions or a fork instead, or git init |
 | `no_source` | 1 | project diff: that version or fork has no source archive (and no repository) | versions published with publish_source: true carry one; pick another version |
-| `skill_incomplete` | 1 | skill install: this 203c lacks the skill's files | npm install -g 203c again |
+| `skill_incomplete` | 1 | skill install: this 203c lacks the skill's files | npm install -g github:203-Systems/203-CLI again |
 | `skill_failed` | 1 | skill install: the skills folder could not be written | check the folder, or give another with --dir |
 | `git_failed` | 1 | new: git init failed | read the message; check the folder |
 | `hal_unavailable` | 3 | new: CardenzaHAL could not be added (the network, GitHub) | run it again |

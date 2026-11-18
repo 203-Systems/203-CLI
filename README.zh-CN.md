@@ -21,8 +21,8 @@
 macOS、Linux、Windows 都一样，装好 [Node.js](https://nodejs.org) 18 或更新的版本后：
 
 ```sh
-npm install -g 203c       # 203c 命令
-203c skill install        # 它的 Agent Skill，给 Claude Code 和 Codex（每次更新后再运行一次）
+npm install -g github:203-Systems/203-CLI   # 203c 命令（发布到 npm 之后改用 npm install -g 203c）
+203c skill install                             # 它的 Agent Skill，给 Claude Code 和 Codex（每次更新后再运行一次）
 ```
 
 `203c` 没有任何依赖，也没有安装脚本。`skill install` 把 Skill 复制到 `~/.claude/skills/203-community`（`CLAUDE_SKILLS_DIR` 可改；装了 Codex 时也放进 `~/.codex/skills`；`--dir` 指定别的 AI 的目录）。USB 线（`flash`、`log`）在 macOS 和 Linux 上用；Windows 上用网站（Chrome 或 Edge），其他命令哪里都一样。

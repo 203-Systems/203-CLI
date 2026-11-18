@@ -86,9 +86,9 @@ export const ERROR_CODES = [
   ["port_unavailable", 1, "flash: the port cannot be opened (no permission, another program has it, not a serial port)", "Linux: the dialout group; close serial monitors and the website's page; check `--port`"],
   ["port_failed", 3, "flash: the port failed while it was used (unplugged)", "plug it in again and run it again"],
   ["no_launcher", 1, "flash: no 203 Launcher answered on the port (another device's port, or the Launcher in USB Drive mode)", "leave USB Drive (its home screen) or give the right `--port`, then run it again"],
-  ["firmware_unreachable", 1, "flash / devices recover: the device runs a firmware and 203c cannot ask it to restart (Linux: no permission for its MIDI or HID; macOS: no python3 for CoreMIDI)", "Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (hold HOME, left of the screen, for 1 s and choose Back to Launcher; a firmware without that menu: hold FN while turning it on)"],
-  ["no_launcher_port", 3, "flash / devices recover: the firmware was asked to restart and no serial port came up", "plug the cable in again and run it again; a firmware that does not take the command: hold HOME for 1 s and choose Back to Launcher (no such menu: hold FN while turning it on)"],
-  ["launcher_countdown", 3, "flash: the restarted Launcher started the firmware again before 203c reached it (twice)", "hold HOME on the device for 1 s and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows"],
+  ["firmware_unreachable", 1, "flash / devices recover: the device runs a firmware and 203c cannot ask it to restart (Linux: no permission for its MIDI or HID; macOS: no python3 for CoreMIDI)", "Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in)"],
+  ["no_launcher_port", 3, "flash / devices recover: the firmware was asked to restart and no serial port came up", "plug the cable in again and run it again; a firmware that does not take the command: press HOME and choose Back to Launcher (no such menu: hold FN while plugging it in)"],
+  ["launcher_countdown", 3, "flash: the restarted Launcher started the firmware again before 203c reached it (twice)", "press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows"],
   ["launcher_busy", 3, "flash: the Launcher is in a menu", "go back to its home screen, then run it again"],
   ["device_timeout", 3, "flash: the device stopped answering", "plug the cable in again and run it again"],
   ["launcher_old", 1, "flash: this Launcher cannot install over USB", "update the Launcher (its home screen: Update Launcher)"],
@@ -106,7 +106,7 @@ export const ERROR_CODES = [
   ["git_missing", 1, "new, project diff: git is not installed", "install git"],
   ["not_a_repository", 1, "project diff local: this folder is not a git repository", "compare two versions or a fork instead, or git init"],
   ["no_source", 1, "project diff: that version or fork has no source archive (and no repository)", "versions published with publish_source: true carry one; pick another version"],
-  ["skill_incomplete", 1, "skill install: this 203c lacks the skill's files", "npm install -g 203c again"],
+  ["skill_incomplete", 1, "skill install: this 203c lacks the skill's files", "npm install -g github:203-Systems/203-CLI again"],
   ["skill_failed", 1, "skill install: the skills folder could not be written", "check the folder, or give another with --dir"],
   ["git_failed", 1, "new: git init failed", "read the message; check the folder"],
   ["hal_unavailable", 3, "new: CardenzaHAL could not be added (the network, GitHub)", "run it again"],
@@ -455,15 +455,16 @@ Windows: the firmware's page on the website, 用 USB 线安装, in Chrome or Edg
 The port: --port PORT, else the one USB serial port there is. Nothing to switch on: the Launcher's console runs from power-on.
 A device running a firmware (CardenzaHAL: no serial port) is restarted into its Launcher first, over its MIDI (Linux: ALSA
 raw MIDI, else its HID; macOS: CoreMIDI through python3), and the port it comes back on is used; a Launcher counting down
-to the firmware is kept in its menus. If that fails (firmware_unreachable, launcher_countdown): on the device, hold HOME (the
-key left of the screen) for 1 s and choose Back to Launcher in its system menu, then run it again; a firmware without that
+to the firmware is kept in its menus. If that fails (firmware_unreachable, launcher_countdown): on the device, press HOME (the
+key left of the screen) and choose Back to Launcher in its system menu, then run it again; a firmware without that
 menu (released before it): hold FN while it starts (or while 203c restarts it) and the Launcher stays in its menus.
 
 Sent over Wi-Fi to a bound device (signing in and binding are for Wi-Fi):
 {P} devices list --json                                   → each device's id, online (and where: its Launcher or a firmware running), running
 {P} devices send ID CODE --json                            install it (do not run); --start: install and run; --channel beta|dev
 {P} devices send ID CODE --no-wait --json                  only send it (the answer's id), then {P} devices status ID COMMAND [--wait] --json
-The device must be on and online: in its Launcher, or running any CardenzaHAL firmware (it hands over to its Launcher).
+The device must be on and online: in its Launcher, or running a CardenzaHAL firmware that stays online (the HAL's presence
+service; it hands over to its Launcher. Cardenza Synth 0.2.1 does not: leave it for the Launcher first).
 Off or not online: refused at once (device_offline), nothing is queued. Launchers are never sent (flashed on the website).
 {P} devices update-launcher ID --json                      its 203 Launcher to the newest for it (devices list: launcher_update);
                                                           up_to_date when it runs it; followed until the new Launcher runs (started)

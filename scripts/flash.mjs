@@ -123,10 +123,10 @@ function cableError(error, ctx, port) {
   return error;   // the API's refusal (ApiError) and anything else, as they are
 }
 
-// How a person puts the device in its Launcher by hand (the user, 2026-11-18: "你应该让人长按Home键"): HOME held a second
-// opens the HAL's system menu, whose Back to Launcher restarts into the Launcher's home screen; a firmware without that menu
-// (released before it): FN held while the device starts keeps the Launcher in its menus.
-const BY_HAND = "hold HOME (the key left of the screen) for 1 s and choose Back to Launcher (a firmware without that menu: hold FN while turning it on)";
+// How a person puts the device in its Launcher by hand: a press of HOME opens the HAL's system menu (CardenzaHAL from
+// 2026-11-18: a press, no hold; Cardenza Synth 0.2.1 and newer), whose Back to Launcher restarts into the Launcher's home
+// screen; a firmware without that menu (released before it): FN held while plugging in keeps the Launcher in its menus.
+const BY_HAND = "press HOME (the key left of the screen) and choose Back to Launcher (a firmware without that menu: hold FN while plugging it in)";
 
 /**
  * A firmware running on the device (no Launcher port): restarted into its Launcher (or, `command` download, the ROM's
@@ -277,7 +277,7 @@ export async function flashDevice(ctx) {
           if (!again) throw error;   // no firmware came back: what the port or the Launcher said
           if (attempt > 0) {
             throw new CliError("launcher_countdown", `${restarted.name} restarted into its Launcher, which started the firmware again before 203c reached it`, {exit: EXIT.later, next: [ctx.cmd()],
-              hint: "Put it in its Launcher yourself: hold HOME (the key left of the screen) for 1 s and choose Back to Launcher, then run it again. A firmware without that menu: hold FN, run it again, and let go of FN once the Launcher's menu shows (FN held while it restarts keeps the Launcher in its menus)"});
+              hint: "Put it in its Launcher yourself: press HOME (the key left of the screen) and choose Back to Launcher, then run it again. A firmware without that menu: hold FN, run it again, and let go of FN once the Launcher's menu shows (FN held while it restarts keeps the Launcher in its menus)"});
           }
           restarted = await restartToPort(ctx, {want: o.port ? String(o.port) : null, found: again});
           port = restarted.port;

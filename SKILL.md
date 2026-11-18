@@ -11,7 +11,8 @@ Everything goes through one command, `203c` (Node 18+, nothing else to install):
 203c <command> … --json
 ```
 
-Install (macOS, Linux, Windows; Node.js 18+): `npm install -g 203c`, then `203c skill install` puts this skill where
+Install (macOS, Linux, Windows; Node.js 18+): `npm install -g github:203-Systems/203-CLI` (`npm install -g 203c` once it is published on
+npm), then `203c skill install` puts this skill where
 the agents read it (run it again after an update; `203c doctor` says when it is older than the command). Where `203c`
 is not found, run `node <this skill's folder>/scripts/203c.mjs` instead (e.g.
 `node ~/.claude/skills/203-community/scripts/203c.mjs`): the same CLI. **Run it from the firmware project's folder**
@@ -317,6 +318,6 @@ Chinese-speaking user pass `--lang zh`).
 ## Also
 
 - Requests like pull requests (the owner): `dev list --firmware CODE --json`, `dev read CODE N --json` (the spec and its discussion), `dev update CODE N --status in_progress --progress 10 --note "…" --json` (`help requests`).
-- Devices: over a USB cable, signed in or not: `flash CODE --json` (or `--bin FILE`; a running firmware is restarted into its Launcher first; `firmware_unreachable` or `launcher_countdown`: ask the user to hold HOME (the key left of the screen) for 1 s and choose Back to Launcher, then run it again (a firmware without that menu: hold FN while it restarts or is switched on); `help devices`); over Wi-Fi to a bound device: `devices list --json`, `devices send ID CODE --start --json`, its Launcher to the newest: `devices update-launcher ID --json` (`--no-wait`: only send it, then `devices status ID COMMAND --wait --json`; `help devices`); a device that no longer starts: `devices recover --dry-run --json`, then `--out DIR` or `--port PORT --yes` (erases its internal flash; esptool writes it).
+- Devices: over a USB cable, signed in or not: `flash CODE --json` (or `--bin FILE`; a running firmware is restarted into its Launcher first; `firmware_unreachable` or `launcher_countdown`: ask the user to press HOME (the key left of the screen) and choose Back to Launcher, then run it again (a firmware without that menu: hold FN while it restarts or is plugged in); `help devices`); over Wi-Fi to a bound device: `devices list --json`, `devices send ID CODE --start --json`, its Launcher to the newest: `devices update-launcher ID --json` (`--no-wait`: only send it, then `devices status ID COMMAND --wait --json`; `help devices`); a device that no longer starts: `devices recover --dry-run --json`, then `--out DIR` or `--port PORT --yes` (erases its internal flash; esptool writes it).
 - 3D models: `models upload case.stl --title "…" --license CC-BY-4.0 --target cardenza --dry-run --json` (`help models`).
 - Admins: `help admin`.

@@ -11,8 +11,7 @@ Everything goes through one command, `203c` (Node 18+, nothing else to install):
 203c <command> … --json
 ```
 
-Install (macOS, Linux, Windows; Node.js 18+): `npm install -g github:203-Systems/203-CLI` (`npm install -g 203c` once it is published on
-npm), then `203c skill install` puts this skill where
+Install (macOS, Linux, Windows; Node.js 18+): `npm install -g 203c`, then `203c skill install` puts this skill where
 the agents read it (run it again after an update; `203c doctor` says when it is older than the command). Where `203c`
 is not found, run `node <this skill's folder>/scripts/203c.mjs` instead (e.g.
 `node ~/.claude/skills/203-community/scripts/203c.mjs`): the same CLI. **Run it from the firmware project's folder**

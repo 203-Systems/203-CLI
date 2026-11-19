@@ -1,7 +1,7 @@
 # 203c command reference
 
 Generated from the CLI's command table (`node scripts/203c.mjs help --reference > reference/cli.md`). `203c` is the command
-`npm install -g github:203-Systems/203-CLI` (`npm install -g 203c` once published) puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it
+`npm install -g 203c` puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it
 from the firmware project's folder. Every
 command takes the global options; with `--json` the answer is JSON on stdout and an error is one JSON line on stderr (its
 last line): `{"error","code","field","hint","next":[commands],"exit"}`. `--help --json` gives any command (or, alone,
@@ -113,7 +113,7 @@ all of them) as JSON.
 | `git_missing` | 1 | new, project diff: git is not installed | install git |
 | `not_a_repository` | 1 | project diff local: this folder is not a git repository | compare two versions or a fork instead, or git init |
 | `no_source` | 1 | project diff: that version or fork has no source archive (and no repository) | versions published with publish_source: true carry one; pick another version |
-| `skill_incomplete` | 1 | skill install: this 203c lacks the skill's files | npm install -g github:203-Systems/203-CLI again |
+| `skill_incomplete` | 1 | skill install: this 203c lacks the skill's files | npm install -g 203c again |
 | `skill_failed` | 1 | skill install: the skills folder could not be written | check the folder, or give another with --dir |
 | `git_failed` | 1 | new: git init failed | read the message; check the folder |
 | `hal_unavailable` | 3 | new: CardenzaHAL could not be added (the network, GitHub) | run it again |

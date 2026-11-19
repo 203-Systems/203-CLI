@@ -391,7 +391,7 @@ export function referenceMarkdown() {
   const prog = "203c";
   const lines = ["# 203c command reference", "",
     "Generated from the CLI's command table (`node scripts/203c.mjs help --reference > reference/cli.md`). `203c` is the command",
-    "`npm install -g github:203-Systems/203-CLI` (`npm install -g 203c` once published) puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it",
+    "`npm install -g 203c` puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it",
     "from the firmware project's folder. Every",
     "command takes the global options; with `--json` the answer is JSON on stdout and an error is one JSON line on stderr (its",
     "last line): `{\"error\",\"code\",\"field\",\"hint\",\"next\":[commands],\"exit\"}`. `--help --json` gives any command (or, alone,",

@@ -59,7 +59,7 @@ export async function skillInstall(ctx) {
   const missing = SKILL_ITEMS.filter(item => !fs.existsSync(path.join(PACKAGE_ROOT, item)));
   if (missing.length) {
     throw new CliError("skill_incomplete", `This 203c (${PACKAGE_ROOT}) lacks ${missing.join(", ")}: it cannot install the skill`, {exit: EXIT.refused,
-      hint: "Install 203c again: npm install -g github:203-Systems/203-CLI"});
+      hint: "Install 203c again: npm install -g 203c"});
   }
   const real = p => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
   const plan = folders.map(f => ({...f, path: path.join(f.dir, SKILL_NAME), before: installedVersion(f.dir), self: real(path.join(f.dir, SKILL_NAME)) === real(PACKAGE_ROOT)}));

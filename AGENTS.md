@@ -2,8 +2,6 @@
 
 This repository is public and is the one source of `203c` and the 203-community Agent Skill. People install it from
 npm, the package `203c` (`npm install -g 203c`, then `203c skill install`), published by `.github/workflows/release.yml`
-(until the first release is on npm, advertise `npm install -g github:203-Systems/203-CLI` instead, with "npm install -g 203c once
-published")
 when a tag `vX.Y.Z` equal to `package.json`'s version is pushed (npm trusted publishing: no token; the files in
 `package.json` `files`). Advertise only that. The 203 community also packs a pinned commit as the skill its old
 `install.sh` installs (kept working for scripts that have it, CI among them): it reaches those when the community pins

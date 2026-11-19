@@ -106,7 +106,7 @@ export const ERROR_CODES = [
   ["git_missing", 1, "new, project diff: git is not installed", "install git"],
   ["not_a_repository", 1, "project diff local: this folder is not a git repository", "compare two versions or a fork instead, or git init"],
   ["no_source", 1, "project diff: that version or fork has no source archive (and no repository)", "versions published with publish_source: true carry one; pick another version"],
-  ["skill_incomplete", 1, "skill install: this 203c lacks the skill's files", "npm install -g github:203-Systems/203-CLI again"],
+  ["skill_incomplete", 1, "skill install: this 203c lacks the skill's files", "npm install -g 203c again"],
   ["skill_failed", 1, "skill install: the skills folder could not be written", "check the folder, or give another with --dir"],
   ["git_failed", 1, "new: git init failed", "read the message; check the folder"],
   ["hal_unavailable", 3, "new: CardenzaHAL could not be added (the network, GitHub)", "run it again"],

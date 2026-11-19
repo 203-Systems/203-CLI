@@ -27,8 +27,8 @@ share it on the 203 community:
 On macOS, Linux and Windows alike, with [Node.js](https://nodejs.org) 18 or later:
 
 ```sh
-npm install -g github:203-Systems/203-CLI   # the 203c command (npm install -g 203c once it is published on npm)
-203c skill install                             # its Agent Skill, for Claude Code and Codex (run it again after every update)
+npm install -g 203c    # the 203c command
+203c skill install     # its Agent Skill, for Claude Code and Codex (run it again after every update)
 ```
 
 `203c` has no dependencies and no install scripts. `skill install` copies the skill into `~/.claude/skills/203-community`

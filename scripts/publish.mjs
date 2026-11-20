@@ -2009,7 +2009,7 @@ function checklistOf(ctx, fw, newestStable) {
     {item: "a cover (a 16:9 picture; a stable version needs one)", ok: !!(fw.cover || fw.inherited_cover || fw.screen), before_stable: fw.kind !== "launcher",
       fix: run("cover", code, "cover.png"), ...(coverNow ? {now: coverNow, better: run("cover", code, "cover.png")} : {})},
     // The gallery (COMMUNITY.md "Pictures"): shown large above the description; nothing shows without it.
-    {item: "pictures above the description (screenshots or photos of it running)", ok: (fw.images ?? []).length > 0, fix: run("images", "add", code, "docs/home.png", "--caption", "<what it shows>")},
+    {item: "a gallery: pictures of it running, shown large on its page", ok: (fw.images ?? []).length > 0, fix: run("images", "add", code, "docs/home.png", "--caption", "<what it shows>")},
     {item: `a description of 80 characters or more (what it is, how to use it, the keys)${(fw.description ?? "").trim() && (fw.description ?? "").trim().length < 80 ? `: it has ${(fw.description ?? "").trim().length}` : ""}`,
       ok: (fw.description ?? "").trim().length >= 80, fix: run("edit", code, "--description-file", "docs/page.md")},
     {item: "a category tag (" + FIRMWARE_CATEGORIES.join(", ") + ")", ok: (fw.tags ?? []).some(t => FIRMWARE_CATEGORIES.includes(t)), fix: run("edit", code, "--tags", "groovebox")},

@@ -1734,7 +1734,8 @@ export async function publish(ctx, {mode}) {
     : `${b.target}: ${b.local.rel} (${size(b.local.bytes.length)}, ${b.report.kind === "merged" ? "merged image" : b.report.kind === "uf2" ? `UF2, ${b.report.uf2?.blocks ?? "?"} blocks, download only:` : "ESP32-S3 app"} ${b.report.version ?? ""}` +
     `${b.report.hal ? ", " + halName(b.report.hal) : ""}${b.report.budget ? `, ${b.report.budget.percent} % of the Launcher's ${size(b.report.budget.limit)}` : ""})`;
   const shownName = fw?.name ?? page.name ?? nameGiven ?? "the firmware";
-  if (creating) r.step(`make the firmware "${page.name ?? nameGiven}" (${priv.visibility ?? "public"}${channel !== "stable" ? ", " + channel + " channel on" : ""})`);
+  // Making the firmware comes first in the plan (the pictures' and the cover's steps were planned before it).
+  if (creating) r.plan.unshift(`make the firmware "${page.name ?? nameGiven}" (${priv.visibility ?? "public"}${channel !== "stable" ? ", " + channel + " channel on" : ""})`);
   if (fw && Object.keys(pageChanges).length) r.step(`change ${Object.keys(pageChanges).join(", ")} on ${fw.name}'s page`);
   if (fw && channel !== "stable" && !fw.channels?.[channel]) r.step(`turn the ${channel} channel of ${fw.name} on`);
   if (cover) r.step(`set the cover to ${cover.describe}`);

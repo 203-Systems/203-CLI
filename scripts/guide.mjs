@@ -4,6 +4,7 @@
 
 import {NAME_RULE} from "./project.mjs";
 import {BLOCKED_CODES, COMMUNITY_HOSTS, OFFLINE_EN, OFFLINE_ZH, defaultLang, isDnsFailure, sandboxSteps} from "./lib.mjs";
+import {GUIDE_URL, guidePart} from "./description.mjs";
 
 // Exit codes: the same for every command (SKILL.md and reference/cli.md list them).
 export const EXIT = {ok: 0, refused: 1, usage: 2, later: 3, signin: 4, rejected: 5, confirm: 6};
@@ -58,6 +59,8 @@ export const ERROR_CODES = [
   ["still_checking", 3, "the checks did not finish in time", "run the same command again (it resumes) or `versions check VCODE`"],
   ["needs_force", 6, "a quality warning (e.g. no release notes on stable, a lower version, a BIN that says another version)", "fix it, or add --force if it is really meant"],
   ["cover_required", 6, "a stable version of a firmware with no cover at all (no picture, none from its original, no screen after boot, no web build with it)", "add one (`--cover cover.png`, `firmware cover CODE cover.png`) or send the web build; `--without-cover` only if the user wants none"],
+  ["gallery_pictures", 1, "publish (signed in yourself, an app): the gallery would not hold 3-5 different pictures (`count`, `duplicates`); also firmware images add / edit --place gallery past 5", "take screenshots with the firmware running on a Cardenza on USB (`board screen --out docs/screens/1.png`, then 2, 3), list them in 203.json's publish.images (or `firmware images add CODE …`), run it again; nothing was uploaded"],
+  ["description_too_long", 1, "the description is over 3000 characters (pictures not counted; `length`): a product page, not a manual", "keep what it is, 3-6 features, what it needs and how to start (aim for 800); key tables to its tutorial, building to the README, history to the release notes (`help description`)"],
   ["needs_confirmation", 6, "an action that needs a yes (deleting, a name someone else uses, turning a channel on)", "add --yes if the user agrees"],
   ["launcher_official_only", 1, "only the official 203 Launcher is offered: launchers are made and forked by admins only", "publish your firmware as an app (leave out --launcher); do not fork a launcher"],
   ["sim_not_hal", 1, "the simulator version cannot be built: the firmware calls the chip's drivers instead of CardenzaHAL (`unsupported` lists them)", "use the HAL's API; publish goes on with the BIN alone (no Play)"],
@@ -260,6 +263,10 @@ One command does it all and can be run again safely (it never makes duplicates; 
 - Channel: --channel stable (default), beta or dev. "release" is stable, "nightly" is dev.
 - Notes: --notes "…", --notes-file CHANGES.md, or the CHANGELOG.md entry of that version (needed on stable).
 - Also: --cover cover.png, --tags groovebox,synth, --source-url https://github.com/…, --commit $(git rev-parse HEAD).
+- Pictures: the gallery must end with 3-5 different screenshots of it (203.json's publish.images, else the firmware's):
+  publish stops before uploading anything without them (gallery_pictures; {P} board screen takes them; help pictures).
+- The description (--description-file, 203.json's description_file: docs/description.md): short, for people deciding to
+  install; over 1500 characters a warning, over 3000 refused (description_too_long; {P} help description).
 - Simulator version: for a CardenzaHAL firmware it also builds the same source for the browser (CardenzaHAL's
   tools/cardenza_web.py) and uploads it with the BIN; the community shows Play once it boots ({P} help sim).
   --no-sim leaves it out; --sim-dir DIR uploads one built before; --hal DIR / --project DIR when not found.
@@ -290,6 +297,9 @@ for the repositories a firmware's owner links, as PyPI's trusted publishing does
   anything else (a branch, a pull request) dev only; beyond it: exit 1, oidc_channel.
 - The credential never changes the firmware's page: publish leaves 203.json's page fields, the cover and the channels
   as they are (a note says so); the dev / beta channel is turned on once by the owner ({P} firmware edit K7M2QX --dev).
+- Nor its pictures: a gallery that is not 3-5 different screenshots is a warning (gallery_short, and a ::warning
+  annotation on the run), never a failure, so releases go on; the owner adds them once (the edit page's 图片, or
+  {P} firmware images add K7M2QX … signed in), which a publish signed in yourself requires (help pictures).
 - Refusals: oidc_untrusted (no publisher matches: the message says what: repository, workflow, environment),
   oidc_invalid (GitHub's token: audience, expired, replayed …), oidc_unavailable (no permissions: id-token: write).
 - The label: version.txt's version, then -dev.<run>: unique, in order, and the BIN says the same version
@@ -321,8 +331,9 @@ in the common case; flags win over it; it writes "code" back after the first pub
     "forked_from": {"code": "V6QK28", "version": "0.3.0"},   // null for an original
     "publish_source": true,               // attach a source archive (git archive of the commit) to every version
     "publish": {"channel": "stable", "bins": {"cardenza": "build/my_synth.bin"}, "notes_file": "CHANGELOG.md",
-                "cover": "docs/cover.png", "description_file": "README.md",      // its local pictures go up too
-                "images": ["docs/home.png", {"file": "docs/seq.png", "caption": "The sequencer"}]}   // the gallery
+                "cover": "docs/cover.png", "description_file": "docs/description.md",   // the page's text (help description)
+                "images": ["docs/screens/home.png", {"file": "docs/screens/seq.png", "caption": "The sequencer"},
+                           "docs/screens/mix.png"]}   // the gallery: 3-5 different screenshots (help pictures)
   }
 - A "code" that is someone else's firmware (you cloned theirs): publish makes your fork of it first, rewrites "code"
   and "forked_from", and says so ("fork" in --json). A "forked_from" without "code": the new firmware is its fork.
@@ -354,7 +365,9 @@ What people see first: the cover (16:9 picture) and the summary (≤ 100 charact
   - a summary that says what it does (not just the name): "Four-track groovebox: drums, Juno, DX7, sampler"
   - a cover: {P} firmware cover CODE cover.png (PNG/JPEG/WebP, 16:9, e.g. 1280x720, ≤ 2 MB); a stable version needs one
   - pictures shown large above the description, like a store page's: {P} firmware images add CODE shot.png (help pictures)
-  - a description (Markdown): what it is, how to use it, the keys; --description-file docs/page.md (its pictures go up too)
+  - a description (Markdown) for people deciding to install: what it is, 3-6 features, what it needs, how to start
+    (aim for 800 characters, at most 3000; the manual goes in its tutorial): docs/description.md, {P} help description
+  - 3-5 different screenshots in the gallery ({P} board screen; help pictures): 203c publish needs them
   - one category tag: instrument, groovebox, tool, network or game (--tags groovebox,synth)
   - the source: --source-url https://github.com/… and --clone-url https://github.com/….git
   - release notes on every stable version
@@ -369,10 +382,21 @@ screen after boot of its web build; else a plain grey cover. A stable version ne
 cover_required (give --cover cover.png, or send the web build); --without-cover only when the user wants none.
 Beta and dev versions (CI's builds) never need one. The checklist says what shows now: {P} firmware checklist CODE --json`},
 
-  pictures: {title: "Pictures: the gallery above the description, and pictures in the description", text: `
+  description: {title: "Writing the description: short, for people deciding to install (the guide, its template and an example)", text: "{DESCRIPTION}"},
+
+  pictures: {title: "Pictures: the gallery above the description (3-5 screenshots), and pictures in the description", text: `
 A firmware's page shows its gallery large above the description (like a store page: the picture chosen, then a strip
 of thumbnails; nothing when there are none), and the description places pictures of its own where its text says.
 PNG, JPEG or WebP up to 2 MB each, a caption of at most 60 characters; at most 9 in the gallery, 20 in the description.
+The gallery is 3-5 different screenshots of the firmware itself: the screen people see first, then its main features.
+Take them with it running on a Cardenza on the USB cable (CardenzaHAL's USB started: CardenzaHAL::USB::Init()):
+  {P} board screen --out docs/screens/1.png       (a PNG of the screen; the page enlarges it pixel for pixel)
+A device without a screen: photos of it running. The browser simulator has no screenshot of its own.
+{P} publish, signed in yourself, needs them: it stops before uploading anything (gallery_pictures, exit 1) unless the
+gallery it leaves (203.json's publish.images, else the firmware's as it is) holds 3-5 pictures, all different (by
+their SHA-256); firmware images add / edit --place gallery stop past 5, and taking pictures out below 3 is a warning.
+A trusted-publishing run (CI) cannot change pictures: it warns (gallery_short, also a GitHub annotation) and goes on.
+On the website the gallery is a suggestion. A launcher's gallery is not held to it.
 {P} firmware images add CODE home.png --caption "The home screen" --json       the gallery (in the order added)
 {P} firmware images add CODE flow.png --description --json                    the description's: prints ![](image:ID)
 {P} firmware images list CODE --json        both, with ids, captions and whether the description uses each
@@ -572,12 +596,14 @@ script); the 203 community is on no default list: the user allows ${COMMUNITY_HO
 {P} admin official CODE (the official tag on a firmware published here: its owner keeps publishing it with 203c), {P} admin reports, {P} admin hide|unhide|delete KIND REF --reason …`},
 };
 
-export function topicText(name, prog) {
+export function topicText(name, prog, lang = defaultLang()) {
   const topic = TOPICS[name];
   if (!topic) return null;
   const exits = EXIT_TEXT.map(([code, text]) => `  ${code}  ${text}`).join("\n");
   const codes = ERROR_CODES.map(([code, exit, meaning, todo]) => `  ${code.padEnd(19)} exit ${exit}  ${meaning}; ${todo}`).join("\n");
-  return `${topic.title}\n${topic.text.replace(/\{P\}/g, prog).replace("{EXITS}", exits).replace("{CODES}", codes).replace("{STEPS}", () => sandboxSteps("en"))}\n`;
+  // The description's guide is the website's (reference/description-guide.md), in the client's language.
+  const text = topic.text === "{DESCRIPTION}" ? guidePart(lang).replace(/ \{#[a-z-]+\}$/gm, "") + (lang === "zh" ? `\n\n网页版：${GUIDE_URL}` : `\n\nOn the website: ${GUIDE_URL}`) : topic.text;
+  return `${topic.title}\n${text.replace(/\{P\}/g, prog).replace("{EXITS}", exits).replace("{CODES}", codes).replace("{STEPS}", () => sandboxSteps("en"))}\n`;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -150,6 +150,25 @@ The community checks every build: an ESP32-S3 application image (not the bootloa
 that fits the Launcher's room (`203c publish --dry-run` says how much of it a build uses), built on CardenzaHAL, that
 boots; and a simulator version that boots for Play. A stable version needs a cover (a 16:9 picture).
 
+### The page: a short description and 3–5 screenshots
+
+People who are not developers decide on the page whether to install it, so it reads like a product page
+([the guide](https://cardenza.203.io/community/guide/description), `203c help description`):
+
+- **The description** is `docs/description.md` (203.json's `publish.description_file`; `203c new` and `203c init`
+  write it from the guide's template: fill in every `<…>`). One or two sentences on what it is, `## Features` with 3–6
+  bullets, `## Needs` when it needs something, `## Get started` in 1–3 lines, and a line to its tutorial. Aim for 800
+  characters (pictures not counted): 203c warns over 1500 and refuses over 3000 (`description_too_long`), and so does
+  the community. Not in it: key tables and every mode's keys (its tutorial), building it (the README, which is for
+  developers and is not the page), what changed (the release notes).
+- **The gallery**, the large pictures above the description, is 3–5 different screenshots of the firmware itself: the
+  screen people see first, then its main features. With it running on a Cardenza on USB (it starts CardenzaHAL's USB,
+  `CardenzaHAL::USB::Init()`): `203c board screen --out docs/screens/1.png`, and so on; list them in 203.json's
+  `publish.images`. `203c publish` signed in yourself stops before uploading anything unless the gallery it leaves has
+  3–5 pictures, all different (`gallery_pictures`); on the website they are only suggested. A trusted-publishing run
+  (CI) cannot change pictures, so it never fails for them: it warns (`gallery_short`, an annotation on the run) and the
+  owner adds them once.
+
 ## Hardware reference
 
 What each part does and where it is in the HAL (header, functions, README section):

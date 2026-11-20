@@ -78,7 +78,8 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | your versions, a version's state | `versions list CODE --json` (`--channel beta`, `--target cardenza`), `versions show VCODE --json`, `versions check VCODE --json` |
 | the simulator version (Play) of a version | `sim build --json`, then `sim upload VCODE build-web/site --json`; `sim check VCODE --json` (workflow 6) |
 | set the cover picture | `firmware cover CODE cover.png --json` |
-| show screenshots large above the description (the gallery, like a store page) | `firmware images add CODE shot.png --caption "…" --json` (at most 9; `firmware images list|edit|order|remove CODE …`) |
+| show screenshots large above the description (the gallery, like a store page) | 3–5 different screenshots of the firmware: `board screen --out docs/screens/1.png --json` with it running on a Cardenza on USB, then `firmware images add CODE docs/screens/1.png … --json` or 203.json's `publish.images` (publish needs 3–5; `firmware images list|edit|order|remove CODE …`; `help pictures`) |
+| write the description | `help description` (the guide): for people deciding to install, not a manual: what it is, 3–6 features, what it needs, how to start; aim for 800 characters, at most 3000; in `docs/description.md` (`publish.description_file`) |
 | put pictures in the description | `firmware images add CODE flow.png --description --json`, then `![words](image:ID)` in the text; or name local files in the description file (`![](docs/shot.png)`): `--description-file` uploads them (`help pictures`) |
 | improve the page (summary, description, links, tags) | `firmware checklist CODE --json`, then the `fix` commands it lists |
 | start a firmware project / its 203.json | `rules`, then `init --json` (writes 203.json from CMake, version.txt, git, LICENSE) |
@@ -94,7 +95,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | an admin action (`admin …`) | an admin sign-in has the admin scope: `login --admin --json` (exit 4 `admin_scope_required` says so) |
 | anything else | `help start`, `help <topic>`, `<command> --help --json` |
 
-Topics: `help start|new|project|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|cover|pictures|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
+Topics: `help start|new|project|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|description|cover|pictures|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
 Every command with its flags: `reference/cli.md`; every endpoint: `reference/api.md`; what the site does and the
 command for each: `reference/parity.md`; the firmware project rules: `reference/firmware-project.md` (`203c rules`).
 
@@ -220,6 +221,13 @@ Tell the user the firmware code (the Launcher installs it), the version code, th
   (its entry for that version) or a `CHANGELOG.md` here. A dev build needs none (a missing CHANGELOG entry is skipped).
 - `--name NAME` publishes to your firmware of that name, or makes it (then it needs `--summary`: at most 100 characters, saying what it does). `--firmware CODE` publishes to one you have.
 - Running it again is safe: an interrupted run resumes; an already published version answers `"status":"already_published"` (exit 0).
+- The gallery must end with 3–5 different screenshots of it (`publish.images`, else the firmware's as it is): without
+  them publish stops before uploading anything (`gallery_pictures`, exit 1). Take them with the firmware running on the
+  user's Cardenza (`board screen --out docs/screens/1.png --json`, 2, 3…), put them in `publish.images`, run it again;
+  never publish someone else's pictures or ones that are not of this firmware. A trusted-publishing run (CI) only
+  warns (`gallery_short`). The description over 3000 characters (pictures not counted) is refused
+  (`description_too_long`), over 1500 warned about: shorten it as the guide says (`help description`), move the manual
+  to its tutorial; never pad or cut it blindly.
 - `--channel beta` / `dev` on a firmware whose channel is off stops with `channel_off` (exit 6): with the user's yes,
   `--yes` turns it on while publishing (the dry run with `--yes` is then ready).
 - A CardenzaHAL firmware also gets its **simulator version**: publish builds the same source for the browser
@@ -234,10 +242,12 @@ Tell the user the firmware code (the Launcher installs it), the version code, th
 # (a fork without a picture shows its original's, marked Fork: ok, with "now" and "better", the command for its own)
 203c firmware cover K7M2QX docs/cover.png --dry-run --json      # PNG/JPEG/WebP, 16:9, ≤ 2 MB
 203c firmware cover K7M2QX docs/cover.png --json
-203c firmware images add K7M2QX docs/home.png --caption "The home screen" --json   # shown large above the description
-203c firmware edit K7M2QX --description-file docs/page.md --tags groovebox,synth \
+203c board screen --out docs/screens/1.png --json                                    # the firmware running on the user's Cardenza
+203c firmware images add K7M2QX docs/screens/1.png --caption "The home screen" --json   # 3–5 different ones, shown large above the description
+203c firmware edit K7M2QX --description-file docs/description.md --tags groovebox,synth \
   --source-url https://github.com/me/my-synth --clone-url https://github.com/me/my-synth.git --json
-# docs/page.md may name local pictures, ![The grid](grid.png): they go up as the description's (once) and show there
+# docs/description.md: the guide's template filled in (help description: what it is, 3–6 features, needs, get started;
+# aim for 800 characters). It may name local pictures, ![The grid](grid.png): they go up as the description's (once)
 ```
 
 ### 4. Share a sound pack, a project or a work (official firmware only)
@@ -306,7 +316,9 @@ With `--json` an error is one JSON line on stderr (the last line):
 | `version_taken` | publish a new version (raise it in the source, build, publish) |
 | `needs_force` | a quality warning (no notes on stable, a lower version, a BIN that says another version, a summary that only repeats the name): fix it, or `--force` if the user wants |
 | `cover_required` | a stable version of a firmware with no cover at all: ask the user for a 16:9 picture (`--cover cover.png`, or `firmware cover CODE cover.png`) or send the web build; a fork shows its original's by itself; `--without-cover` only if the user wants none (beta and dev never need one) |
-| `placeholder` | replace the `<…>` text with the real value |
+| `placeholder` | replace the `<…>` text with the real value (in a description: the template's, `help description`) |
+| `gallery_pictures` | publish needs 3–5 different screenshots in the gallery: take them with the firmware running (`board screen --out docs/screens/N.png`), list them in 203.json's `publish.images` (or `firmware images add`), run it again; more than 5: keep the best; never invent pictures |
+| `description_too_long` | the description is over 3000 characters (pictures not counted): rewrite it as the guide says (`help description`: what it is, 3–6 features, needs, get started), the manual to its tutorial, building to the README, history to the release notes |
 | `official_only` / `section_closed` | sounds, projects and works: official firmware only / that section is not open yet |
 | `sim_toolchain` / `sim_build_failed` / `sim_not_hal` | the simulator version (workflow 6): install, fix, or `--no-sim` with the user's yes |
 | `simulator_fails` | the simulator version did not boot in the checker's browser: fix, `sim upload`, or `sim check VCODE --again` |

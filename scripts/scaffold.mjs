@@ -10,6 +10,7 @@ import {spawnSync} from "node:child_process";
 import {HAL_REPO} from "./sim.mjs";
 import {nameOk, NAME_RULE, writeProject, PROJECT_FILE} from "./project.mjs";
 import {CliError, EXIT} from "./guide.mjs";
+import {GALLERY_MIN, GALLERY_MOST, GUIDE_URL, scaffoldDescription} from "./description.mjs";
 
 const RULES = "https://github.com/203-Systems/CardenzaHAL/blob/main/docs/FIRMWARE-PROJECT.md";
 export const TEMPLATE_NAME = "my_firmware";
@@ -70,6 +71,10 @@ ${block([["203c login", "once on a computer: the browser asks you to approve"], 
     ["203c publish", "the first version; then CI: .github/workflows/firmware.yml"], ["203c inbox", "what people asked for and said"]])}
 \`\`\`
 
+The page people see: \`docs/description.md\` is its description, short and for people deciding to install, not this
+README ([the guide](${GUIDE_URL}), \`203c help description\`), and ${GALLERY_MIN}–${GALLERY_MOST} screenshots of it in 203.json's \`publish.images\` are
+its pictures (\`203c board screen --out docs/screens/1.png\` with it running on a Cardenza on USB).
+
 The rules every firmware on CardenzaHAL follows: [FIRMWARE-PROJECT.md](${RULES}).
 `;
 }
@@ -122,8 +127,11 @@ export async function newProject(ctx) {
     const summary = o.summary ? String(o.summary).trim() : null;
     if (summary && (summary.length < 1 || summary.length > 100)) throw ctx.usage("--summary is 1-100 characters", {field: "summary"});
     const {summary: _ignored, ...rest} = template;
+    // The description's template (the HAL's brings one; a Chinese one for a Chinese client).
+    const description = scaffoldDescription(dir, ctx.client?.lang);
     const project = {...rest, name, code: null, ...(author ? {author} : {}), ...(summary ? {summary} : {}),
-      ...(o.tags ? {tags: o.tags} : {}), publish: {...template.publish, bins: {cardenza: `build/${id}.bin`}}};
+      ...(o.tags ? {tags: o.tags} : {}), publish: {...template.publish, bins: {cardenza: `build/${id}.bin`},
+        ...(description.rel && !template.publish?.description_file ? {description_file: description.rel} : {})}};
     writeProject(path.join(dir, PROJECT_FILE), project);
     const tool = fs.existsSync(path.join(hal, "tools", "cardenza.py"));
     fs.writeFileSync(path.join(dir, "README.md"), readme({name, summary, id, tool}));
@@ -136,6 +144,8 @@ export async function newProject(ctx) {
       ...(summary ? [] : ["203.json \"summary\": what it does, 1-100 characters (the first publish needs it)"]),
       "a LICENSE file, and its SPDX id in 203.json \"license\"",
       "main/main.cpp: the firmware (the template shows the keys; read the HAL's README for the API)",
+      `${project.publish.description_file ?? "docs/description.md"}: the page's description, from the template: fill in every <…> (203c help description)`,
+      `${GALLERY_MIN}–${GALLERY_MOST} screenshots of it in 203.json "publish.images" (203c board screen --out docs/screens/1.png with it running; the first publish needs them)`,
       "git commit (everything is staged), then a repository online and its link in 203.json \"source\"",
     ];
     const next = [`cd ${rel}`, build, `203c flash --bin build/${id}.bin`, "203c log", "203c publish --dry-run"];

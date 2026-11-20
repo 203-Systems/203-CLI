@@ -12,7 +12,7 @@ import path from "node:path";
 import readline from "node:readline";
 import {fileURLToPath} from "node:url";
 import {Client, ApiError, DEFAULT_API, CLI_VERSION, OPS, opsByName, loadToken, saveToken, forgetToken, tokenFile, loginStart, loginPoll, browserLogin, browserProblem,
-  oidcExchange, oidcAvailable, inGithubActions, runCredentialOf, saveRunCredential, forgetRunCredential, runCredentialFile} from "./lib.mjs";
+  oidcExchange, oidcAvailable, inGithubActions, runCredentialOf, saveRunCredential, forgetRunCredential, runCredentialFile, defaultLang} from "./lib.mjs";
 import {COMMANDS, GLOBAL_FLAGS, GROUPS, GROUP_DEFAULT, ALIASES, findCommand} from "./commands.mjs";
 import {CliError, EXIT, EXIT_TEXT, ERROR_CODES, TOPICS, explainApiError, topicText, usage} from "./guide.mjs";
 import {isPlaceholder, nearest, normalizeChannel, normalizeCode, normalizeTags} from "./checks.mjs";
@@ -770,7 +770,11 @@ async function main(argv) {
   }
   if (words[0] === "help") {
     const topic = String(words[1]).toLowerCase();
-    if (TOPICS[topic]) return json ? out({topic, title: TOPICS[topic].title, text: topicText(topic, prog)}) : (process.stdout.write(topicText(topic, prog)), EXIT.ok);
+    // --lang (or COMMUNITY_LANG, the locale) picks the description guide's language.
+    const at = argv.findIndex(t => t === "--lang" || t.startsWith("--lang="));
+    const given = at < 0 ? null : argv[at].startsWith("--lang=") ? argv[at].slice(7) : argv[at + 1];
+    const lang = /^zh/i.test(given || defaultLang()) ? "zh" : "en";
+    if (TOPICS[topic]) return json ? out({topic, title: TOPICS[topic].title, text: topicText(topic, prog, lang)}) : (process.stdout.write(topicText(topic, prog, lang)), EXIT.ok);
     const found = findCommand(words.slice(1).map(w => String(w).toLowerCase()));
     if (found) return json ? out(commandJson(found.command, prog)) : (process.stdout.write(commandHelp(found.command, prog) + "\n"), EXIT.ok);
     const group = String(words[1]).toLowerCase();

@@ -132,6 +132,11 @@ test("new: the template named, CardenzaHAL as the submodule, 203.json and a READ
   assert.equal(project.summary, "A metronome with tap tempo");
   assert.deepEqual(project.publish.bins, {cardenza: "build/pocket_metronome.bin"});
   assert.match(fs.readFileSync(path.join(dir, "README.md"), "utf8"), /tools\/cardenza\.py build/, "the HAL's build tool");
+  // The page's description from the guide's template (a HAL without one: 203c writes it), named in 203.json; the
+  // screenshots to take before the first publish.
+  assert.equal(project.publish.description_file, "docs/description.md");
+  assert.match(fs.readFileSync(path.join(dir, "docs/description.md"), "utf8"), /^<What it is and who it is for/);
+  assert.ok(r.json.todo.some(t => /docs\/description\.md: the page's description/.test(t)) && r.json.todo.some(t => /publish\.images/.test(t)), JSON.stringify(r.json.todo));
   assert.ok(r.json.next.includes("203c flash --bin build/pocket_metronome.bin") || r.json.next.some(n => /flash --bin build\/pocket_metronome\.bin/.test(n)));
   assert.match(git(["status", "--porcelain"], dir).stdout, /^A  203\.json$/m, "staged, not committed");
 

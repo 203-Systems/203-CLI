@@ -42,6 +42,7 @@ const PUBLISH_FLAGS = {
   notes: V("TEXT", "Release notes (Markdown); @FILE reads a file"), "notes-file": V("PATH", "Release notes from a file (CHANGELOG.md: the entry of this version)"),
   commit: V("SHA", "The commit it was built from (7-40 hex, or a git ref like HEAD)"), "source-url": V("URL", "A link to this version's source"),
   notices: V("PATH", "NOTICES.txt (third-party licences, ≤ 1 MB)"),
+  image: V("PATH", "A gallery picture (repeat: 3-5 different screenshots of the firmware, PNG/JPEG/WebP ≤ 2 MB; the gallery becomes exactly these, as 203.json's publish.images; help pictures)", {repeat: true}),
   "no-wait": B("Do not wait for the checks (answers status checking)"), timeout: V("SECONDS", "How long to wait for the checks (default 1200)", {type: "number"}),
   poll: V("SECONDS", "How often to ask while it is checked (default 5)", {type: "number"}),
   "no-sim": B("No simulator version (no Play): do not build or upload one"),

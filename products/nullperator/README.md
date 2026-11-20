@@ -65,6 +65,10 @@ merged image, the bootloader or the ELF. The community checks the image and that
 not on CardenzaHAL (expected here), and it has no simulator version (Play) for this device yet. One firmware can
 carry builds for several devices: `--bin cardenza=… --bin nullperator=…`.
 
+The page: 203c publishes with 3–5 different pictures of it running in the gallery (screenshots or photos:
+`--image a.png --image b.png --image c.png`, or 203.json's `publish.images`; `203c help pictures`) and a short
+description for people deciding to install (`203c help description`).
+
 ## Hardware reference
 
 From the product page and the firmware's public pin map:

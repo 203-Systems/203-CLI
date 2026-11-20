@@ -64,6 +64,8 @@ all of them) as JSON.
 | `still_checking` | 3 | the checks did not finish in time | run the same command again (it resumes) or `versions check VCODE` |
 | `needs_force` | 6 | a quality warning (e.g. no release notes on stable, a lower version, a BIN that says another version) | fix it, or add --force if it is really meant |
 | `cover_required` | 6 | a stable version of a firmware with no cover at all (no picture, none from its original, no screen after boot, no web build with it) | add one (`--cover cover.png`, `firmware cover CODE cover.png`) or send the web build; `--without-cover` only if the user wants none |
+| `gallery_pictures` | 1 | publish (signed in yourself, an app): the gallery would not hold 3-5 different pictures (`count`, `duplicates`); also firmware images add / edit --place gallery past 5 | take screenshots with the firmware running on a Cardenza on USB (`board screen --out docs/screens/1.png`, then 2, 3), list them in 203.json's publish.images (or `firmware images add CODE …`), run it again; nothing was uploaded |
+| `description_too_long` | 1 | the description is over 3000 characters (pictures not counted; `length`): a product page, not a manual | keep what it is, 3-6 features, what it needs and how to start (aim for 800); key tables to its tutorial, building to the README, history to the release notes (`help description`) |
 | `needs_confirmation` | 6 | an action that needs a yes (deleting, a name someone else uses, turning a channel on) | add --yes if the user agrees |
 | `launcher_official_only` | 1 | only the official 203 Launcher is offered: launchers are made and forked by admins only | publish your firmware as an app (leave out --launcher); do not fork a launcher |
 | `sim_not_hal` | 1 | the simulator version cannot be built: the firmware calls the chip's drivers instead of CardenzaHAL (`unsupported` lists them) | use the HAL's API; publish goes on with the BIN alone (no Play) |
@@ -276,6 +278,7 @@ Publish a firmware version in one go: makes the firmware if needed, uploads, wai
 - `--commit SHA` The commit it was built from (7-40 hex, or a git ref like HEAD)
 - `--source-url URL` https link to the source (e.g. the GitHub repository)
 - `--notices PATH` NOTICES.txt (third-party licences, ≤ 1 MB)
+- `--image PATH` A gallery picture (repeat: 3-5 different screenshots of the firmware, PNG/JPEG/WebP ≤ 2 MB; the gallery becomes exactly these, as 203.json's publish.images; help pictures) (repeatable)
 - `--no-wait` Do not wait for the checks (answers status checking)
 - `--timeout SECONDS` How long to wait for the checks (default 1200)
 - `--poll SECONDS` How often to ask while it is checked (default 5)
@@ -317,6 +320,7 @@ Publish a version of your firmware CODE (the same checks as publish; never makes
 - `--commit SHA` The commit it was built from (7-40 hex, or a git ref like HEAD)
 - `--source-url URL` A link to this version's source
 - `--notices PATH` NOTICES.txt (third-party licences, ≤ 1 MB)
+- `--image PATH` A gallery picture (repeat: 3-5 different screenshots of the firmware, PNG/JPEG/WebP ≤ 2 MB; the gallery becomes exactly these, as 203.json's publish.images; help pictures) (repeatable)
 - `--no-wait` Do not wait for the checks (answers status checking)
 - `--timeout SECONDS` How long to wait for the checks (default 1200)
 - `--poll SECONDS` How often to ask while it is checked (default 5)
@@ -2012,7 +2016,8 @@ Every API operation with its JSON schema (for programs)
 - `203c help checks` — When the checks send a version back (exit 5)
 - `203c help page` — A good firmware page
 - `203c help cover` — Covers
-- `203c help pictures` — Pictures: the gallery above the description, and pictures in the description
+- `203c help description` — Writing the description: short, for people deciding to install (the guide, its template and an example)
+- `203c help pictures` — Pictures: the gallery above the description (3-5 screenshots), and pictures in the description
 - `203c help sounds` — Sound packs (official firmware only; the section may not be open yet)
 - `203c help projects` — Projects (official firmware only)
 - `203c help works` — Works (official firmware only)

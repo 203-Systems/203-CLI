@@ -82,6 +82,10 @@ Without a code yet, `--name "…" --summary "…"` makes the firmware (or keep t
 the same way: `203c help ci` (trusted publishing from GitHub Actions, no stored secret). `203c targets --json` lists
 each device's UF2 family and size limit.
 
+The page: 203c publishes with 3–5 different photos of it running in the gallery (`--image a.jpg --image b.jpg
+--image c.jpg`, or 203.json's `publish.images`; `203c help pictures`) and a short description for people deciding to
+install (`203c help description`).
+
 ## Hardware reference
 
 | | Mystrix / Mystrix Pro | Mystrix 2 |

@@ -17,6 +17,8 @@ import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
 import {CliError, EXIT, maybeSandbox} from "./guide.mjs";
 import {skillState} from "./skill.mjs";
 import {checkUpdates, optedOut} from "./updates.mjs";
+import {DESCRIPTION_MAX, DESCRIPTION_TARGET, DESCRIPTION_WARN, GALLERY_MIN, GALLERY_MOST, GUIDE_URL, descriptionLength, galleryRule, placeholderIn,
+  scaffoldDescription} from "./description.mjs";
 import {EMSDK_HINT, describeSim, explainBuild, findHal, findProject, halScript, readSimDir, runBuild, sameBuild, simLine, simState, toolchain,
   uploadSim, waitSim, playUrl} from "./sim.mjs";
 import {
@@ -66,7 +68,7 @@ function failWith(ctx, r, extra = {}) {
   const problems = r.sorted();
   const first = problems[0];
   throw new CliError(first.code, first.error, {exit: r.exit(), field: first.field, hint: first.hint, next: first.next,
-    data: {...(problems.length > 1 ? {problems: problems.map(clean)} : {}), ...extra}});
+    data: {...(first.data ?? {}), ...(problems.length > 1 ? {problems: problems.map(clean)} : {}), ...extra}});
 }
 const clean = item => Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined));
 
@@ -617,6 +619,129 @@ function captionOf(r, value, flag = "caption") {
   return text;
 }
 
+// ---------------------------------------------------------------------------------------------
+// The description and the gallery as the community wants them (the user, 2026-11-20; the guide, description.mjs). These
+// rules speak the client's language (--lang, COMMUNITY_LANG, the locale).
+
+const inZh = ctx => ctx.client?.lang === "zh";
+const words2 = (ctx, en, zh) => inZh(ctx) ? zh : en;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/**
+ * A description about to be sent (create, edit, publish), its local pictures already image:<id>: a new or changed one over
+ * 3000 characters (pictures not counted) is refused, over 1500 warned about, and one still holding the template's
+ * placeholders refused. One the firmware has already (`before`) passes as it is.
+ */
+function checkDescription(ctx, r, text, {before, where} = {}) {
+  if (typeof text !== "string" || (before !== undefined && samePageValue(text, before))) return;
+  const file = where ?? words2(ctx, "the description", "简介");
+  const token = placeholderIn(text);
+  if (token) {
+    r.problem("placeholder", words2(ctx, `The description still holds the template's ${token}: write it in your own words`,
+      `简介里还留着模板的提示 ${token}：换成自己的话`), {field: "description", exit: EXIT.usage,
+      hint: words2(ctx, `Fill in every <…> of ${file} (203c help description: the guide, with an example)`, `把 ${file} 里的每个 <…> 换成自己的内容（203c help description：写法和例子）`),
+      next: [ctx.run(["help", "description"], {json: false})]});
+  }
+  const length = descriptionLength(text);
+  const where2 = words2(ctx, `Key tables and every mode's keys go in its tutorial, building it in the README, what changed in the release notes. The guide: ${GUIDE_URL} (203c help description)`,
+    `键位表和每个模式的按键放到教程里，编译方法放到 README，每个版本的变化放到发布说明。写法：${GUIDE_URL}（203c help description）`);
+  if (length > DESCRIPTION_MAX) {
+    r.problem("description_too_long", words2(ctx, `The description is ${length} characters (pictures not counted): at most ${DESCRIPTION_MAX}. It is a product page for people deciding to install, not a manual`,
+      `简介有 ${length} 个字符（插图不算），最多 ${DESCRIPTION_MAX}。简介是给想安装的人看的产品介绍，不是说明书`), {field: "description", data: {length, max: DESCRIPTION_MAX, guide: GUIDE_URL},
+      hint: words2(ctx, `Keep what it is, 3–6 features, what it needs and how to start (aim for ${DESCRIPTION_TARGET}). `, `留下它是什么、3–6 个功能、需要什么、怎么开始（目标 ${DESCRIPTION_TARGET} 字以内）。`) + where2,
+      next: [ctx.run(["help", "description"], {json: false})]});
+  } else if (length > DESCRIPTION_WARN) {
+    r.warn("long_description", words2(ctx, `The description is ${length} characters (pictures not counted): over ${DESCRIPTION_WARN}, long for a page people read before installing`,
+      `简介有 ${length} 个字符（插图不算），超过了 ${DESCRIPTION_WARN}，对安装前看的页面来说太长`), {field: "description", data: {length, target: DESCRIPTION_TARGET, max: DESCRIPTION_MAX},
+      hint: words2(ctx, `Aim for ${DESCRIPTION_TARGET}: what it is, 3–6 features, what it needs, how to start; over ${DESCRIPTION_MAX} it cannot be saved. `,
+        `目标 ${DESCRIPTION_TARGET} 字以内：它是什么、3–6 个功能、需要什么、怎么开始；超过 ${DESCRIPTION_MAX} 就保存不了。`) + where2});
+  }
+}
+
+// How to make a gallery: screenshots of the firmware running, from the development channel (203c board screen).
+function screenshotsHint(ctx, code) {
+  const add = code ? ` firmware images add ${code} docs/screens/1.png docs/screens/2.png docs/screens/3.png` : "";
+  return words2(ctx, "Run it on a Cardenza on the USB cable and take a screenshot of each main screen: 203c board screen --out docs/screens/1.png (then 2.png, 3.png; " +
+    "the firmware starts CardenzaHAL's USB: CardenzaHAL::USB::Init()). List them in 203.json's \"publish\": {\"images\": [\"docs/screens/1.png\", …]} (or --image for each) and run this again" +
+    (add ? `, or add them now: 203c${add}` : "") + ". A device without a screen: photos of it running.",
+  "在 USB 线连着的 Cardenza 上运行它，每个主要画面截一张：203c board screen --out docs/screens/1.png（再 2.png、3.png；固件要启动 CardenzaHAL 的 USB：" +
+    "CardenzaHAL::USB::Init()）。写进 203.json 的 \"publish\": {\"images\": [\"docs/screens/1.png\", …]}（或者每张一个 --image），再运行一次" + (add ? `；或者现在就加上：203c${add}` : "") +
+    "。没有屏幕的设备：拍几张它运行时的照片。");
+}
+
+/**
+ * The gallery a publish with 203c leaves: 3-5 different pictures (the user, 2026-11-20: "使用CLI应该强制上传3~5张不同的"; the site
+ * only suggests it). `items`: [{sha, name}] (203.json's publish.images when given, else the firmware's gallery). Refused
+ * (gallery_pictures) when `refuse`, else a warning (gallery_short). Answers the rule.
+ */
+function galleryCheck(ctx, r, items, {code, fromManifest, refuse}) {
+  const rule = galleryRule(items);
+  if (rule.ok) return rule;
+  const {count, duplicates} = rule;
+  const listIds = code ? [ctx.run(["firmware", "images", "list", code])] : [];
+  if (!refuse) {
+    r.warn("gallery_short", rule.problem === "same" ? words2(ctx, `The gallery shows the same picture twice (${duplicates.join(", ")}): the next 203c publish of a version needs 3–5 different ones`,
+      `图片里有重复的（${duplicates.join("、")}）：下次用 203c 发布新版本需要 3–5 张不同的`)
+      : words2(ctx, `The gallery has ${plural(count, "picture")}: the next 203c publish of a version needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
+        `图片有 ${count} 张：下次用 203c 发布新版本需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`), {field: "images", data: {count, min: GALLERY_MIN, max: GALLERY_MOST},
+      hint: rule.problem === "few" ? screenshotsHint(ctx, code) : words2(ctx, "Keep 3–5 different ones (203.json's publish.images)", "留下 3–5 张不同的（203.json 的 publish.images）"), next: listIds});
+    return rule;
+  }
+  const message = rule.problem === "few"
+    ? words2(ctx, `The gallery would have ${plural(count, "picture")}: 203c publishes a firmware with ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it (shown large above its description: what people look at first)`,
+      `图片只有 ${count} 张：用 203c 发布，固件要有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图（显示在简介上面的大图，大家最先看的就是它们）`)
+    : rule.problem === "many"
+      ? words2(ctx, `The gallery would have ${count} pictures: 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}; keep the best and leave out the rest`,
+        `图片有 ${count} 张：用 203c 发布最多 ${GALLERY_MOST} 张，留下最好的 ${GALLERY_MIN}–${GALLERY_MOST} 张，其余去掉`)
+      : words2(ctx, `The gallery would show the same picture twice (${duplicates.join(", ")}): ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
+        `图片里有重复的（${duplicates.join("、")}）：要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`);
+  const hint = rule.problem === "few" ? screenshotsHint(ctx, code)
+    : rule.problem === "many"
+      ? fromManifest ? words2(ctx, "Keep 3–5 in 203.json's publish.images or --image (publish removes the others from the gallery)", "203.json 的 publish.images 或 --image 里留 3–5 张（发布时会把其余的从图片里去掉）")
+        : words2(ctx, `List the 3–5 to keep in 203.json's publish.images (publish removes the others), or remove some: 203c firmware images remove ${code} ID… --yes (the ids: 203c firmware images list ${code})`,
+          `在 203.json 的 publish.images 里写要留的 3–5 张（发布时会去掉其余的），或者删掉几张：203c firmware images remove ${code} ID… --yes（ID 见 203c firmware images list ${code}）`)
+      : fromManifest ? words2(ctx, "Name each file once (publish.images, --image), each a different screenshot", "每个文件只写一次（publish.images、--image），每张都是不同的截图")
+        : words2(ctx, `Remove the copy: 203c firmware images remove ${code} ID --yes (the ids: 203c firmware images list ${code})`,
+          `删掉重复的那张：203c firmware images remove ${code} ID --yes（ID 见 203c firmware images list ${code}）`);
+  const next = rule.problem === "few" ? [ctx.run(["board", "screen", "--out", "docs/screens/1.png"]),
+    code ? ctx.run(["firmware", "images", "add", code, "docs/screens/1.png", "docs/screens/2.png", "docs/screens/3.png"]) : null] : listIds;
+  r.problem("gallery_pictures", message, {field: "images", data: {count, distinct: rule.distinct, min: GALLERY_MIN, max: GALLERY_MOST, duplicates}, hint, next});
+  return rule;
+}
+
+/** A trusted-publishing run (CI) cannot change pictures: a gallery that is not 3-5 different pictures is a warning, never a failure. */
+function galleryAdvice(ctx, r, fw) {
+  const rule = galleryRule((fw?.images ?? []).map(x => ({sha: x.sha256 ?? null, name: x.id})));
+  if (rule.ok) return;
+  const name = fw.name, code = fw.code;
+  const message = rule.problem === "few"
+    ? words2(ctx, `${name}'s gallery has ${plural(rule.count, "picture")}: a firmware's page shows ${GALLERY_MIN}–${GALLERY_MOST} different screenshots above its description, and a trusted-publishing run cannot add them`,
+      `${name} 的图片只有 ${rule.count} 张：固件页的简介上面应有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图，自动发布不能添加图片`)
+    : rule.problem === "many"
+      ? words2(ctx, `${name}'s gallery has ${rule.count} pictures: 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}, and a trusted-publishing run cannot change them`,
+        `${name} 的图片有 ${rule.count} 张：用 203c 发布最多 ${GALLERY_MOST} 张，自动发布不能改图片`)
+      : words2(ctx, `${name}'s gallery shows the same picture twice: ${GALLERY_MIN}–${GALLERY_MOST} different ones, and a trusted-publishing run cannot change them`,
+        `${name} 的图片里有重复的：要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的，自动发布不能改图片`);
+  const hint = words2(ctx, `Its owner fixes it once (this release goes on): on the site, the firmware's edit page › Pictures, or signed in as the owner: 203c firmware images add ${code} a.png b.png c.png ` +
+    "(or 203.json's publish.images, then 203c publish). Screenshots: 203c board screen --out docs/screens/1.png with it running on a Cardenza on USB.",
+  `由固件的所有者补一次（这次发布照常进行）：在网站上，固件的编辑页 › 图片；或者用自己的登录：203c firmware images add ${code} a.png b.png c.png（或写进 203.json 的 publish.images，` +
+    "再 203c publish）。截图：固件在 USB 线连着的 Cardenza 上运行时，203c board screen --out docs/screens/1.png。");
+  r.warn("gallery_short", message, {field: "images", data: {count: rule.count, min: GALLERY_MIN, max: GALLERY_MOST}, hint});
+  // GitHub Actions shows it on the run's page (a workflow command; stderr, so that --json's stdout stays one JSON answer).
+  if (process.env.GITHUB_ACTIONS === "true") {
+    const escape = text => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+    process.stderr.write(`::warning title=${escape("203c: the gallery").replace(/:/g, "%3A").replace(/,/g, "%2C")}::${escape(message + ". " + hint)}\n`);
+  }
+}
+
+/** Pictures taken out of the gallery leave fewer than 3: allowed, with a word on what the next publish needs. */
+function galleryLeft(ctx, r, left, code) {
+  r.warn("gallery_short", words2(ctx, `The gallery will have ${plural(left, "picture")}: the next 203c publish needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
+    `去掉后图片剩 ${left} 张：下次用 203c 发布需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`), {field: "images", data: {count: left, min: GALLERY_MIN, max: GALLERY_MOST},
+    hint: words2(ctx, `Add others: 203c firmware images add ${code} a.png b.png … (screenshots: 203c board screen --out docs/screens/1.png)`,
+      `再加几张：203c firmware images add ${code} a.png b.png …（截图：203c board screen --out docs/screens/1.png）`)});
+}
+
 const pictureRow = (fw, x) => ({id: x.id, place: x.place, caption: x.caption ?? "", width: x.width ?? null, height: x.height ?? null, sha256: x.sha256 ?? null,
   url: x.url, reference: reference(x.id), in_description: usesPicture(fw.description, x.id)});
 
@@ -656,12 +781,25 @@ export async function addPictures(ctx) {
   }
   const count = have.filter(x => x.place === place).length;
   const most = place === "gallery" ? GALLERY_MAX : TEXT_PICTURES_MAX;
-  if (fw && count + plans.length > most) {
+  // A gallery of more than 5 cannot be published with 203c (a launcher's may hold the community's 9).
+  if (fw && place === "gallery" && fw.kind !== "launcher" && plans.length && count + plans.length > GALLERY_MOST) {
+    r.problem("gallery_pictures", words2(ctx, `The gallery has ${plural(count, "picture")}: ${plans.length} more would be ${count + plans.length}, and 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}`,
+      `图片已有 ${count} 张，再加 ${plans.length} 张就是 ${count + plans.length} 张：用 203c 发布最多 ${GALLERY_MOST} 张`), {field: "images",
+      data: {count: count + plans.length, min: GALLERY_MIN, max: GALLERY_MOST, duplicates: []},
+      hint: words2(ctx, `Remove the ones you like least first (203c firmware images remove ${code} ID --yes; the ids: 203c firmware images list ${code}), or add fewer`,
+        `先删掉不太好的几张（203c firmware images remove ${code} ID --yes；ID 见 203c firmware images list ${code}），或者少加几张`),
+      next: [ctx.run(["firmware", "images", "list", code])]});
+  } else if (fw && count + plans.length > most) {
     r.problem("conflict", `${place === "gallery" ? "The gallery" : "The description"} has ${count} pictures: ${plans.length} more would be over ${most}`, {field: place === "gallery" ? "images" : "description_images",
       hint: "Remove some first (firmware images list shows them)", next: [ctx.run(["firmware", "images", "list", code])]});
   }
   for (const plan of plans) r.step(`add ${plan.describe} to ${place === "gallery" ? "the gallery (above the description)" : "the description's pictures"}${caption ? ` with the caption "${caption}"` : ""}`);
   for (const x of skipped) ctx.note(`${x.file} is already there (${x.id}, ${x.place})`);
+  const after = count + plans.length;
+  if (fw && place === "gallery" && fw.kind !== "launcher" && after < GALLERY_MIN && !r.problems.length) {
+    ctx.note(words2(ctx, `the gallery will have ${plural(after, "picture")}: 203c publish needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
+      `图片会有 ${after} 张：用 203c 发布需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`));
+  }
   if (o.dry_run) return dryOut(ctx, r);
   if (r.problems.length) failWith(ctx, r);
   const added = [];
@@ -701,9 +839,18 @@ export async function editPicture(ctx) {
   if (x && caption !== undefined && caption !== (x.caption ?? "")) body.caption = caption;
   if (x && o.place !== undefined && o.place !== x.place) {
     body.place = o.place;
-    if (o.place === "gallery" && (fw.images ?? []).length >= GALLERY_MAX) {
+    const inGallery = (fw.images ?? []).length;
+    if (o.place === "gallery" && fw.kind !== "launcher" && inGallery >= GALLERY_MOST) {
+      r.problem("gallery_pictures", words2(ctx, `The gallery has ${inGallery} pictures: one more would be ${inGallery + 1}, and 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}`,
+        `图片已有 ${inGallery} 张，再加一张就是 ${inGallery + 1} 张：用 203c 发布最多 ${GALLERY_MOST} 张`), {field: "images",
+        data: {count: inGallery + 1, min: GALLERY_MIN, max: GALLERY_MOST, duplicates: []},
+        hint: words2(ctx, `Remove one first (203c firmware images remove ${code} ID --yes), or move one out: 203c firmware images edit ${code} ID --place description`,
+          `先删掉一张（203c firmware images remove ${code} ID --yes），或者把一张移到简介里：203c firmware images edit ${code} ID --place description`),
+        next: [ctx.run(["firmware", "images", "list", code])]});
+    } else if (o.place === "gallery" && inGallery >= GALLERY_MAX) {
       r.problem("conflict", `The gallery has ${GALLERY_MAX} pictures, the most`, {field: "images", hint: "Remove one first", next: [ctx.run(["firmware", "images", "list", code])]});
     }
+    if (o.place === "description" && x.place === "gallery" && fw.kind !== "launcher" && inGallery - 1 < GALLERY_MIN) galleryLeft(ctx, r, inGallery - 1, code);
     if (o.place === "description" && (fw.description_images ?? []).length >= TEXT_PICTURES_MAX) {
       r.problem("conflict", `The description has ${TEXT_PICTURES_MAX} pictures, the most`, {field: "description_images", hint: "Remove one first", next: [ctx.run(["firmware", "images", "prune", code, "--dry-run"])]});
     }
@@ -716,8 +863,9 @@ export async function editPicture(ctx) {
   if (r.problems.length) failWith(ctx, r);
   const updated = Object.keys(body).length ? await ctx.op("firmware_image_edit", {code, id: x.id, ...body}) : fw;
   const now = picturesOf(updated).find(y => y.id === x.id);
-  return {json: {status: Object.keys(body).length ? "changed" : "unchanged", picture: pictureRow(updated, now), firmware: {code, name: updated.name}},
-    text: `${x.id}: ${now.place === "gallery" ? "in the gallery" : "in the description"}, ${now.caption ? `"${now.caption}"` : "no caption"}`};
+  return {json: withAdvice({status: Object.keys(body).length ? "changed" : "unchanged", picture: pictureRow(updated, now), firmware: {code, name: updated.name}}, r),
+    text: `${x.id}: ${now.place === "gallery" ? "in the gallery" : "in the description"}, ${now.caption ? `"${now.caption}"` : "no caption"}` +
+      (r.warnings.length ? "\n" + adviceText(r).trimEnd() : "")};
 }
 
 export async function removePictures(ctx) {
@@ -732,6 +880,8 @@ export async function removePictures(ctx) {
     const x = have.find(y => y.id === id);
     if (x) { if (!doomed.includes(x)) doomed.push(x); } else gone.push(id);
   }
+  const left = (fw?.images ?? []).filter(x => !doomed.some(d => d.id === x.id)).length;
+  if (fw && fw.kind !== "launcher" && doomed.some(x => x.place === "gallery") && left < GALLERY_MIN) galleryLeft(ctx, r, left, code);
   for (const x of doomed) {
     r.step(`remove ${x.id} (${x.place}${x.caption ? `: "${x.caption}"` : ""})`);
     if (usesPicture(fw?.description, x.id)) {
@@ -880,24 +1030,30 @@ async function sendTextPictures(ctx, code, plan) {
 /**
  * 203.json's publish.images, the gallery as it should be: ["docs/a.png", {"file": "docs/b.png", "caption": "…"}]. Each
  * file the firmware has (the same SHA-256) is kept (a caption given is set; one in the description moves up); each other
- * one goes up; the gallery's others are removed; then the order. Answers the steps to take, or null (nothing to do).
+ * one goes up; the gallery's others are removed; then the order. Answers the steps with `any` (something to do) and
+ * `items` ([{sha, name}], each entry, for the gallery's rule), or null without a list. With `rule` (an app's publish by a
+ * person) a file named twice and a list longer than 5 are left to the gallery's rule (gallery_pictures).
  */
-function planGallery(ctx, r, list, fw, {base}) {
+function planGallery(ctx, r, list, fw, {base, rule = false}) {
   if (list === undefined) return null;
   if (!Array.isArray(list)) { r.problem("invalid", "publish.images is a list of pictures: [\"docs/a.png\", {\"file\": \"docs/b.png\", \"caption\": \"…\"}]", {field: "images", exit: EXIT.usage}); return null; }
-  if (list.length > GALLERY_MAX) r.problem("invalid", `publish.images names ${list.length} pictures: the gallery holds at most ${GALLERY_MAX}`, {field: "images", exit: EXIT.usage});
+  if (!rule && list.length > GALLERY_MAX) r.problem("invalid", `publish.images names ${list.length} pictures: the gallery holds at most ${GALLERY_MAX}`, {field: "images", exit: EXIT.usage});
   const have = picturesOf(fw);
-  const want = [];
+  const want = [], items = [];
   for (const [i, entry] of list.entries()) {
     const file = typeof entry === "string" ? entry : entry?.file;
     if (typeof file !== "string" || !file) { r.problem("invalid", `publish.images[${i}] is a path or {"file", "caption"}`, {field: "images", exit: EXIT.usage}); continue; }
     const caption = typeof entry === "object" && entry.caption !== undefined ? captionOf(r, entry.caption, "images") : undefined;
     const plan = planPicture(ctx, r, file, {base, flag: "images"});
+    items.push({sha: plan?.sha ?? null, name: plan?.rel ?? file});
     if (!plan) continue;
-    if (want.some(w => w.plan.sha === plan.sha)) { r.problem("invalid", `publish.images names ${plan.rel} twice`, {field: "images", exit: EXIT.usage}); continue; }
+    if (want.some(w => w.plan.sha === plan.sha)) {
+      if (!rule) r.problem("invalid", `publish.images names ${plan.rel} twice`, {field: "images", exit: EXIT.usage});
+      continue;
+    }
     want.push({plan, caption, found: have.find(x => x.sha256 === plan.sha) ?? null});
   }
-  const steps = {add: [], move: [], caption: [], remove: [], order: false};
+  const steps = {add: [], move: [], caption: [], remove: [], order: false, items};
   for (const w of want) {
     if (!w.found) { steps.add.push(w); r.step(`add ${w.plan.describe} to the gallery${w.caption ? ` ("${w.caption}")` : ""}`); continue; }
     if (w.found.place === "description") { steps.move.push(w); r.step(`move ${w.found.id} (${w.plan.rel}) from the description into the gallery`); }
@@ -914,8 +1070,8 @@ function planGallery(ctx, r, list, fw, {base}) {
   steps.order = steps.add.length > 0 || steps.move.length > 0 || before.join() !== after.join();
   if (steps.order && !steps.add.length && !steps.move.length) r.step("order the gallery as publish.images lists it");
   steps.want = want;
-  const any = steps.add.length || steps.move.length || steps.caption.length || steps.remove.length || steps.order;
-  return any ? steps : null;
+  steps.any = !!(steps.add.length || steps.move.length || steps.caption.length || steps.remove.length || steps.order);
+  return steps;
 }
 
 async function sendGallery(ctx, code, steps) {
@@ -1016,6 +1172,12 @@ export async function createFirmware(ctx, {fork} = {}) {
   // The description's local pictures go up once it exists; then the description again with their ids.
   const pictures = planTextPictures(ctx, r, body.description, {dir: textDir(ctx, o.description_file, ctx.cwd), fw: null});
   if (body.description !== undefined) body.description = pictures.text;
+  checkDescription(ctx, r, body.description, {where: o.description_file});
+  // Making it publishes nothing; its first 203c publish needs the gallery.
+  if (body.kind !== "launcher") {
+    ctx.note(words2(ctx, `its first 203c publish needs ${GALLERY_MIN}–${GALLERY_MOST} different screenshots in the gallery (203.json's publish.images, or firmware images add CODE …; help pictures)`,
+      `用 203c 发布第一个版本时，图片里要有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图（203.json 的 publish.images，或 firmware images add CODE …；help pictures）`));
+  }
   if (o.dry_run) return dryOut(ctx, r);
   if (r.problems.length) failWith(ctx, r);
   let fw = await ctx.op("firmware_create", body);
@@ -1060,6 +1222,7 @@ export async function editFirmware(ctx) {
   // The description's local pictures: the ones it has as image:<id>, the others go up first (COMMUNITY.md "Pictures").
   const pictures = fw ? planTextPictures(ctx, r, body.description, {dir: textDir(ctx, o.description_file, ctx.cwd), fw}) : {uploads: []};
   if (fw && body.description !== undefined) body.description = pictures.text;
+  if (fw) checkDescription(ctx, r, body.description, {before: fw.description, where: o.description_file});
   if (!Object.keys(body).length && !cover && !r.problems.length) {
     throw ctx.usage("Nothing to change: give the fields to change", {hint: "e.g. --summary, --description-file, --tags, --source-url, --cover, --dev",
       next: [ctx.run(["firmware", "edit", "--help"], {json: false})]});
@@ -1503,9 +1666,22 @@ export async function publish(ctx, {mode}) {
   // 203.json's publish.images is the gallery. A trusted-publishing credential changes neither.
   const textPictures = account && !trusted ? planTextPictures(ctx, r, page.description, {dir: textDir(ctx, pageSrc.description_file, pageBase), fw, root: manifest.dir}) : {uploads: []};
   if (account && !trusted && page.description !== undefined) page.description = textPictures.text;
-  const imagesGiven = from("images");
+  // The description (the guide): a new or changed one over 3000 characters is refused, over 1500 warned about.
+  if (account && !trusted) checkDescription(ctx, r, page.description, {before: fw ? fw.description : undefined, where: typeof pageSrc.description_file === "string" ? pageSrc.description_file : undefined});
+  const imagesGiven = o.image !== undefined ? {value: [].concat(o.image), base: ctx.cwd, flag: "image"} : from("images");
   if (trusted && imagesGiven.value !== undefined) ctx.note("the gallery is left as it is (a trusted-publishing credential publishes versions only)");
-  const gallery = account && !trusted ? planGallery(ctx, r, imagesGiven.value, fw, {base: imagesGiven.base}) : null;
+  const galleryPlan = account && !trusted ? planGallery(ctx, r, imagesGiven.value, fw, {base: imagesGiven.base, rule: kind !== "launcher"}) : null;
+  const gallery = galleryPlan?.any ? galleryPlan : null;
+  // The gallery it leaves (the user, 2026-11-20: 203c publishes with 3-5 different screenshots; the site only suggests
+  // it): publish.images when given, else the firmware's as it is. A person's publish of an app is refused without; a
+  // run that publishes nothing and changes no picture only warns. A trusted-publishing run cannot change pictures: a
+  // warning for its owner, never a failure (CI's releases go on).
+  if (account && !trusted && kind !== "launcher") {
+    const items = galleryPlan ? galleryPlan.items : (fw?.images ?? []).map(x => ({sha: x.sha256 ?? null, name: x.id}));
+    const nothingNew = !!(done || resume?.kind === "checking") && !gallery;
+    galleryCheck(ctx, r, items, {code: fwCode, fromManifest: !!galleryPlan, refuse: !nothingNew});
+  }
+  if (trusted && fw && kind !== "launcher") galleryAdvice(ctx, r, fw);
   let pageChanges = fw ? Object.fromEntries(Object.entries(page).filter(([k, v]) => !samePageValue(v, fw[k]))) : {};
   if (trusted && Object.keys(pageChanges).length) {
     ctx.note(`the page's ${Object.keys(pageChanges).join(", ")} ${Object.keys(pageChanges).length > 1 ? "differ" : "differs"} from ${path.basename(manifest.file ?? "the flags")}: left as they are ` +
@@ -2054,14 +2230,20 @@ function checklistOf(ctx, fw, newestStable) {
   // say what shows now with the command for its own (`better`).
   const coverNow = fw.cover ? null : fw.inherited_cover ? `it shows ${fw.inherited_cover.from?.name ?? "its original"}'s cover, marked Fork`
     : fw.screen ? "it shows the screen after boot" : null;
+  const gallery = galleryRule((fw.images ?? []).map(x => ({sha: x.sha256 ?? null, name: x.id})));
+  const described = descriptionLength(fw.description);
   return [
     {item: "a summary that says what it does (≤ 100 characters)", ok: !!fw.summary && !summaryRepeatsName(fw.summary, fw.name), fix: run("edit", code, "--summary", "<one line: what it does>")},
     {item: "a cover (a 16:9 picture; a stable version needs one)", ok: !!(fw.cover || fw.inherited_cover || fw.screen), before_stable: fw.kind !== "launcher",
       fix: run("cover", code, "cover.png"), ...(coverNow ? {now: coverNow, better: run("cover", code, "cover.png")} : {})},
-    // The gallery (COMMUNITY.md "Pictures"): shown large above the description; nothing shows without it.
-    {item: "a gallery: pictures of it running, shown large on its page", ok: (fw.images ?? []).length > 0, fix: run("images", "add", code, "docs/home.png", "--caption", "<what it shows>")},
-    {item: `a description of 80 characters or more (what it is, how to use it, the keys)${(fw.description ?? "").trim() && (fw.description ?? "").trim().length < 80 ? `: it has ${(fw.description ?? "").trim().length}` : ""}`,
-      ok: (fw.description ?? "").trim().length >= 80, fix: run("edit", code, "--description-file", "docs/page.md")},
+    // The gallery (COMMUNITY.md "Pictures"): shown large above the description; 203c publishes with 3-5 different ones.
+    {item: `a gallery of ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it, shown large above the description (203c publish needs them)${gallery.ok ? "" : `: it has ${gallery.count}${gallery.duplicates.length ? ", some the same" : ""}`}`,
+      ok: fw.kind === "launcher" ? (fw.images ?? []).length > 0 : gallery.ok, fix: run("images", "add", code, "docs/screens/1.png", "docs/screens/2.png", "docs/screens/3.png"),
+      ...(gallery.ok ? {} : {how: "203c board screen --out docs/screens/1.png (the firmware running on a Cardenza on USB)"})},
+    // The description (the guide, 203c help description): for people deciding to install, short.
+    {item: `a description for people deciding to install: what it is, 3–6 features, what it needs, how to start (aim for ${DESCRIPTION_TARGET} characters, at most ${DESCRIPTION_MAX})` +
+      (described && (described < 80 || described > DESCRIPTION_WARN) ? `: it has ${described}` : ""),
+      ok: described >= 80 && described <= DESCRIPTION_MAX, fix: run("edit", code, "--description-file", "docs/description.md")},
     {item: "a category tag (" + FIRMWARE_CATEGORIES.join(", ") + ")", ok: (fw.tags ?? []).some(t => FIRMWARE_CATEGORIES.includes(t)), fix: run("edit", code, "--tags", "groovebox")},
     {item: "a source link", ok: !!fw.source_url, fix: run("edit", code, "--source-url", "<https link to the source>")},
     {item: "a clone link (.git)", ok: !!fw.clone_url, fix: run("edit", code, "--clone-url", "<https link ending in .git>")},
@@ -2310,6 +2492,7 @@ export async function init(ctx) {
         const found = ["docs/cover.png", "docs/cover.jpg", "docs/cover.webp", "cover.png", "cover.jpg", "cover.webp"].find(f => fs.existsSync(path.join(ctx.cwd, f)));
         return found ? {cover: found} : {};
       })()),
+      // The page's description: its own short file for people deciding to install (the guide), not the README.
       ...(legacy.description_file ? {description_file: legacy.description_file} : {}),
       ...(legacy.project ? {project: legacy.project} : {}),
       ...(legacy.sim ? {sim: legacy.sim} : {}),
@@ -2318,6 +2501,20 @@ export async function init(ctx) {
   const problems = checkProject(project);
   if (problems.length) throw new CliError("invalid", problems[0].error, {exit: EXIT.usage, hint: problems[0].hint ?? "Give it with a flag (init --help)"});
   const todo = [];
+  // The description (the user, 2026-11-20): docs/description.md from the guide's template, filled in by you.
+  let description = null;
+  if (!project.publish.description_file) {
+    description = scaffoldDescription(ctx.cwd, ctx.client?.lang);
+    if (description.rel) project.publish.description_file = description.rel;
+  }
+  const descriptionFile = project.publish.description_file;
+  if (descriptionFile) {
+    const at = path.resolve(ctx.cwd, descriptionFile);
+    const text = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : "";
+    if (placeholderIn(text)) todo.push(`${descriptionFile}: the page's description, from the template: fill in every <…> (what it is, 3–6 features, what it needs, how to start; 203c help description)`);
+    else if (/^readme(\.md)?$/i.test(path.basename(descriptionFile))) todo.push(`"publish.description_file" is ${descriptionFile}: the page wants a short description for people deciding to install, not the README (docs/description.md; 203c help description)`);
+  }
+  if (project.publish.images === undefined) todo.push(`"publish.images": ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it (203c board screen --out docs/screens/1.png with it running on a Cardenza on USB); 203c publish needs them`);
   if (!project.summary) todo.push('"summary": one line (≤ 100 characters) saying what it does');
   if (!project.publish.bins) todo.push('"publish.bins": {"cardenza": "build/<project>.bin"} (build the firmware first)');
   if (!project.publish.notes_file) todo.push('a CHANGELOG.md with a "## <version>" entry per release ("publish.notes_file")');
@@ -2327,7 +2524,8 @@ export async function init(ctx) {
   if (txt) todo.push(`(the version is ${txt.file}'s: ${txt.value})`);
   writeProject(here, project);
   if (existing?.legacy && Object.keys(legacy).length) ctx.note(`moved ${path.basename(existing.file)} into 203.json; delete ${path.basename(existing.file)} when you have checked it`);
-  return {json: {written: here, project, todo, next: [ctx.run(["publish", "--dry-run"])]},
+  if (description?.written) ctx.note(`wrote ${description.rel}: the description's template (203c help description)`);
+  return {json: {written: here, project, ...(description?.written ? {description: path.join(ctx.cwd, description.rel)} : {}), todo, next: [ctx.run(["publish", "--dry-run"])]},
     text: `Wrote ${here}:\n${JSON.stringify(project, null, 2)}\n${todo.length ? "Still to do:\n" + todo.map(t => "  - " + t).join("\n") + "\n" : ""}Commit it with the source. Then check: ${ctx.run(["publish", "--dry-run"], {json: false})}`};
 }
 

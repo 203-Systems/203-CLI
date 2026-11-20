@@ -28,10 +28,13 @@ export const LIMITS = {
 };
 
 // Where the Launcher installs an app on each device (203-launcher boards/*/partitions.csv; the same
-// table as community/diagnosis.ts LAUNCHER_BUDGET).
+// table as community/diagnosis.ts LAUNCHER_BUDGET): from `reserved` to `apps_end`, the flash every such
+// device's Launcher lays out (its bootloader's header says how much). `flash` is the chip's. The Cardenza
+// has 16 MB, but a board flashed with Launcher 0.3.3 or earlier declares 8 MB until its bootloader is
+// written again over USB (203-launcher docs/FLASHING.md "Flash 大小"), so one app gets at most 0x690000.
 export const DEVICES = {
-  "cardenza": {name: "Cardenza", flash: 8 * MB, reserved: 0x170000},
-  "nullperator": {name: "NullPerator", flash: 16 * MB, reserved: 0x1a0000},
+  "cardenza": {name: "Cardenza", flash: 16 * MB, apps_end: 8 * MB, reserved: 0x170000},
+  "nullperator": {name: "NullPerator", flash: 16 * MB, apps_end: 16 * MB, reserved: 0x1a0000},
 };
 export const DEFAULT_TARGET = "cardenza";
 // Download-only devices (COMMUNITY.md "Devices"): their builds are UF2 files their own bootloader reads,
@@ -389,7 +392,7 @@ export function inspectBin(bytes, {target = DEFAULT_TARGET, firmwareKind = "app"
     const broken = bytes[1] >= 1 && bytes[1] <= 16 ? appImageProblem(bytes) : null;
     if (broken) problem("bin.corrupt", `${name} is not a valid image: ${broken}`, "Build again and give build/<project>.bin as idf.py wrote it");
     if (budget) {
-      const limit = budget.flash - budget.reserved;
+      const limit = budget.apps_end - budget.reserved;
       report.budget = {device: budget.name, limit, percent: Math.round((bytes.length / limit) * 100)};
       if (bytes.length > limit) {
         problem("bin.too_large_for_device", `${name} is ${size(bytes.length)}; the Launcher has ${size(limit)} for apps on the ${budget.name}`,

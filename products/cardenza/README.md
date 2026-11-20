@@ -126,7 +126,7 @@ What each part does and where it is in the HAL (header, functions, README sectio
 | | |
 |---|---|
 | Chip | ESP32-S3 (dual core, 240 MHz), 2 MB quad PSRAM on the flash bus |
-| Flash | 16 MB, quad I/O at 120 MHz ([`board/sdkconfig.defaults`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/sdkconfig.defaults)); the 203 Launcher keeps everything below 0x170000 ([`board/partitions.csv`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/partitions.csv)) |
+| Flash | 16 MB, quad I/O at 120 MHz ([`board/sdkconfig.defaults`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/sdkconfig.defaults)); the 203 Launcher keeps everything below 0x170000 ([`board/partitions.csv`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/partitions.csv)) and uses what its bootloader declares (8 MB on a board flashed with Launcher 0.3.3 or earlier, until its bootloader is written again over USB), so one app gets at most 0x690000 bytes |
 | Display | 240 × 135, RGB565, ST7789 on SPI, backlight on LEDC; a whole frame is 17 ms of SPI |
 | Keys | 4 rows × 14 columns = 56 keys (numbers 1..56 = `y * 14 + x + 1`), at most 4 held at once are read reliably; a single-colour LED under each key, 16 levels plus a global brightness |
 | Buttons | HOME, the side key, on GPIO0 (the HAL's Func button; held at reset it starts the ROM download mode) |

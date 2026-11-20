@@ -103,6 +103,17 @@ test("several official firmware: one slot after another, labels as the Launcher 
   assert.equal(nextAppLabel([{label: "ab0000"}], "AB"), "ab0001");
 });
 
+test("Cardenza: a Launcher built for its 16 MB (after 0.3.3) gives the whole 16 MB, the layout unchanged", async () => {
+  const launcher = await merged({flash: 0x4f});
+  assert.equal(readMergedLauncher(launcher, "cardenza").flashMb, 16);
+  const app = await image({size: 70000});
+  const plan = recoveryPlan({target: "cardenza", launcher: {bytes: launcher, item: {}}, uuid, apps: [{bytes: app, item: await itemOf(app)}]});
+  assert.equal(plan.flashSize, 16 * 1024 * 1024);
+  assert.deepEqual(plan.apps.map(x => [x.label, x.offset]), [["carden", 0x170000]]);
+  assert.equal(describePlan(plan)[0], "erase: the whole flash (16 MB)");
+  assert.equal(assembleFlash(plan).length, 16 * 1024 * 1024);
+});
+
 test("NullPerator: its own layout from its Launcher's table, 16 MB", async () => {
   const table = [...CARDENZA.slice(0, 2), {label: "app0", type: 0, subtype: 0x20, offset: 0x10000, size: 0x180000},
     {label: "coredump", type: 1, subtype: 3, offset: 0x190000, size: 0x10000}];

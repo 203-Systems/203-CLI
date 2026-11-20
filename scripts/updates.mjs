@@ -96,7 +96,8 @@ function git(args, cwd) {
   const run = spawnSync("git", args, {cwd, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"], env: {...process.env, GIT_TERMINAL_PROMPT: "0"}});
   return run.status === 0 ? (run.stdout ?? "").trim() : null;
 }
-const real = p => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+// (native: Windows' short names, C:\Users\RUNNER~1, come back long, as git writes them; macOS' /var is /private/var.)
+const real = p => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
 const inside = (dir, p) => { const r = path.relative(dir, p); return !r.startsWith("..") && !path.isAbsolute(r); };
 const quoted = p => /^[A-Za-z0-9_@%+=:,./-]+$/.test(p) ? p : `"${p}"`;
 
@@ -130,7 +131,7 @@ export function findHalSubmodule(from) {
     const dir = path.join(top, module.path);
     // Its own checkout (an empty folder would answer for the project's repository).
     const own = git(["rev-parse", "--show-toplevel"], dir);
-    if (!own || real(own) !== real(dir)) continue;
+    if (!own || own === top) continue;
     const commit = git(["rev-parse", "HEAD"], dir);
     if (!commit || !/^[0-9a-f]{40}$/.test(commit)) continue;
     return {top, path: module.path, dir, url: module.url ?? null, repo: githubRepo(module.url), commit};
@@ -241,10 +242,11 @@ export async function checkUpdates({from = process.cwd(), fresh = false, env = p
     // The path to type: from here when here is in the repository, else (a build's folder too: cwd null) from its top,
     // the .gitmodules path, with git -C to it when here is elsewhere.
     const slash = p => p.split(path.sep).join("/");
-    const fromTop = !cwd || !inside(real(hal.top), real(cwd));
-    const shown = fromTop ? hal.path : slash(path.relative(cwd, hal.dir)) || ".";
+    const here = cwd ? real(cwd) : null, top = real(hal.top);
+    const fromTop = !here || !inside(top, here);
+    const shown = fromTop ? hal.path : slash(path.relative(here, real(hal.dir))) || ".";
     const q = quoted(shown);
-    const gitC = !cwd || !fromTop ? "git" : `git -C ${quoted(slash(path.relative(cwd, hal.top)) || ".")}`;
+    const gitC = !here || !fromTop ? "git" : `git -C ${quoted(slash(path.relative(here, top)) || ".")}`;
     const onMain = h && ["identical", "ahead"].includes(h.status);
     // check_submodule.py looks at the submodule's own origin/main, which a shallow clone may lack: GitHub knows better.
     const localText = l && !(l.not_on_main && onMain) ? l.text : null;

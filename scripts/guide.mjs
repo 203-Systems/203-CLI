@@ -1,5 +1,5 @@
-// What 203c says when something goes wrong (each error: what was wrong, the valid values, the exact
-// next command), its exit codes, and its help topics (203c help <topic>). Part of the Agent Skill
+// What 203cli says when something goes wrong (each error: what was wrong, the valid values, the exact
+// next command), its exit codes, and its help topics (203cli help <topic>). Part of the Agent Skill
 // skill/203-community.
 
 import {NAME_RULE} from "./project.mjs";
@@ -18,7 +18,7 @@ export const EXIT_TEXT = [
   [6, "needs your decision: a warning stops here; run `next[0]` (the same command with --force or --yes) only if that is what the user wants"],
 ];
 
-// An error 203c reports: {error, code, field?, hint, next:[commands], exit}.
+// An error 203cli reports: {error, code, field?, hint, next:[commands], exit}.
 export class CliError extends Error {
   constructor(code, message, {exit = EXIT.refused, field, hint, next = [], status, data = {}} = {}) {
     super(message);
@@ -27,7 +27,7 @@ export class CliError extends Error {
 }
 export const usage = (message, more = {}) => new CliError("usage", message, {exit: EXIT.usage, ...more});
 
-// Every error code 203c can print, what it means and what to do (help errors, reference/cli.md, SKILL.md).
+// Every error code 203cli can print, what it means and what to do (help errors, reference/cli.md, SKILL.md).
 export const ERROR_CODES = [
   ["usage", 2, "the command is wrong", "run next[0], or `<command> --help`"],
   ["signin_required", 4, "not signed in (every command but login, logout, help, doctor, rules, flash and devices recover needs it), or the token was deleted / revoked / mistyped, or a run's trusted-publishing credential ended", "`login` (the browser; no browser: `login --with-token`, a personal token, or `login --no-browser`, then `login --wait`); in GitHub Actions `login --github-oidc --firmware CODE` (again: it is repeatable)"],
@@ -35,7 +35,7 @@ export const ERROR_CODES = [
   ["oidc_channel", 1, "trusted publishing: this run may not publish on that channel (`channel_allowed`; stable needs a tag vX.Y.Z, beta a tag vX.Y.Z-beta.N, else dev; and the publisher's channels)", "publish on an allowed channel, or run on such a tag"],
   ["oidc_invalid", 4, "login --github-oidc: the community did not take GitHub's token (`reason`: audience, expired, replayed, …)", "run login --github-oidc again; audience: --api must be the community's API base"],
   ["oidc_unavailable", 2, "login --github-oidc outside GitHub Actions, or a job without permissions: id-token: write", "give the job permissions: id-token: write (help ci)"],
-  ["publish_only", 1, "a trusted-publishing credential tried something else than publishing its firmware's versions (page edits, other firmware, account actions)", "do that with the owner's own sign-in (on the site, or 203c login on a computer)"],
+  ["publish_only", 1, "a trusted-publishing credential tried something else than publishing its firmware's versions (page edits, other firmware, account actions)", "do that with the owner's own sign-in (on the site, or 203cli login on a computer)"],
   ["invalid_token", 4, "login --with-token / --token: not a personal token (cct_ and 64 hex digits)", "copy the whole token, or the user makes a new one on the site (设置 › 个人令牌, /me/tokens)"],
   ["web_only", 1, "personal tokens, bind codes, devices and personal data are managed on the website only", "ask the user to open the page in `url`"],
   ["reauth_required", 4, "the website needs a recent sign-in for this", "the user signs in again on the site"],
@@ -67,7 +67,7 @@ export const ERROR_CODES = [
   ["sim_toolchain", 6, "Emscripten, CMake or Python is missing for the simulator version (in publish, on stable / beta: a decision)", "install what `hint` says, or --no-sim"],
   ["sim_build_failed", 6, "the firmware does not compile for the browser (`log_tail` has the errors)", "fix them, or --no-sim (publish); sim build shows them again"],
   ["sim_no_web_target", 1, "the CardenzaHAL found has no web target yet (no tools/cardenza_web.py)", "--hal DIR with a checkout that has it; publish goes on with the BIN alone"],
-  ["sim_not_project", 2, "no ESP-IDF project of the firmware where 203c looked", "--project DIR (publish) or sim build DIR"],
+  ["sim_not_project", 2, "no ESP-IDF project of the firmware where 203cli looked", "--project DIR (publish) or sim build DIR"],
   ["simulator_fails", 1, "the simulator version did not say it was ready within 15 s in the checker's browser", "fix it and sim upload again, or sim check VCODE --again"],
   ["official_only", 1, "sounds, projects and works are only for official firmware", "use the official firmware's code (`firmware list --official`)"],
   ["section_closed", 1, "that section (sounds, projects or works) is not open yet: admins only", "nothing to fix; share it when the section opens (`sections`)"],
@@ -78,6 +78,7 @@ export const ERROR_CODES = [
   ["password_wrong", 1, "a wrong password (`attempts_left`)", "ask the owner for the password"],
   ["too_large", 1, "a file over the limit", "make it smaller"],
   ["rate_limited", 3, "too many today (`retry_after` seconds)", "wait, then run it again"],
+  ["moved", 1, "the community moved (`api`: where it is now); 203cli follows a move by itself, so this comes only when it could not (an address that is not the community's)", "run it with --api set to `api` (next), and update 203cli: npm install -g 203cli"],
   ["expired", 1, "a code, ticket or sign-in ran out", "start again (next)"],
   ["deleted", 1, "it was deleted", "nothing to do with it"],
   ["not_for_target", 1, "that version has no BIN for that device", "choose another version or device"],
@@ -90,9 +91,9 @@ export const ERROR_CODES = [
   ["port_unavailable", 1, "flash: the port cannot be opened (no permission, another program has it, not a serial port)", "Linux: the dialout group; close serial monitors and the website's page; check `--port`"],
   ["port_failed", 3, "flash: the port failed while it was used (unplugged)", "plug it in again and run it again"],
   ["no_launcher", 1, "flash: no 203 Launcher answered on the port (another device's port, or the Launcher in USB Drive mode)", "leave USB Drive (its home screen) or give the right `--port`, then run it again"],
-  ["firmware_unreachable", 1, "flash / devices recover / board: the device runs a firmware and 203c cannot reach it (Linux: no permission for its MIDI or HID, or another program has its MIDI port; macOS: no python3 for CoreMIDI)", "Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in)"],
+  ["firmware_unreachable", 1, "flash / devices recover / board: the device runs a firmware and 203cli cannot reach it (Linux: no permission for its MIDI or HID, or another program has its MIDI port; macOS: no python3 for CoreMIDI)", "Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in)"],
   ["no_launcher_port", 3, "flash / devices recover: the firmware was asked to restart and no serial port came up", "plug the cable in again and run it again; a firmware that does not take the command: press HOME and choose Back to Launcher (no such menu: hold FN while plugging it in)"],
-  ["launcher_countdown", 3, "flash: the restarted Launcher started the firmware again before 203c reached it (twice)", "press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows"],
+  ["launcher_countdown", 3, "flash: the restarted Launcher started the firmware again before 203cli reached it (twice)", "press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows"],
   ["launcher_busy", 3, "flash: the Launcher is in a menu", "go back to its home screen, then run it again"],
   ["device_timeout", 3, "flash: the device stopped answering", "plug the cable in again and run it again"],
   ["launcher_old", 1, "flash: this Launcher cannot install over USB", "update the Launcher (its home screen: Update Launcher)"],
@@ -116,12 +117,12 @@ export const ERROR_CODES = [
   ["board_busy", 3, "board: the firmware's development channel has 8 requests queued", "wait a moment, run it again"],
   ["board_timeout", 3, "board: the device stopped answering, or part of an answer was lost more than once", "run it again; if it keeps happening, read its log (`log`)"],
   ["board_lost", 3, "board: the device went away (restarted, unplugged)", "plug it in, let the firmware start, run it again"],
-  ["board_protocol", 1, "board: the firmware's answer is not what this 203c reads", "update 203c (`npm install -g 203c`); else report it"],
+  ["board_protocol", 1, "board: the firmware's answer is not what this 203cli reads", "update 203cli (`npm install -g 203cli`); else report it"],
   ["dir_not_empty", 1, "new: the folder is there and not empty", "give another DIR"],
   ["git_missing", 1, "new, project diff: git is not installed", "install git"],
   ["not_a_repository", 1, "project diff local: this folder is not a git repository", "compare two versions or a fork instead, or git init"],
   ["no_source", 1, "project diff: that version or fork has no source archive (and no repository)", "versions published with publish_source: true carry one; pick another version"],
-  ["skill_incomplete", 1, "skill install: this 203c lacks the skill's files", "npm install -g 203c again"],
+  ["skill_incomplete", 1, "skill install: this 203cli lacks the skill's files", "npm install -g 203cli again"],
   ["skill_failed", 1, "skill install: the skills folder could not be written", "check the folder, or give another with --dir"],
   ["git_failed", 1, "new: git init failed", "read the message; check the folder"],
   ["hal_unavailable", 3, "new: CardenzaHAL could not be added (the network, GitHub)", "run it again"],
@@ -137,13 +138,13 @@ export const ERROR_CODES = [
   ["risk_not_accepted", 1, "a third-party launcher", "add --accept-risk if the user accepts it"],
   ["unreachable", 3, "the API cannot be reached (ENOTFOUND in a sandboxed agent: its allowlist may lack the community's hosts)", "check the network / --api; `doctor`; a sandbox: `help sandbox`"],
   ["network_blocked_sandbox", 1, "a network allowlist on the way blocked the community (an agent's sandbox: Claude Code on the web, Codex …; a 403 with x-deny-reason: host_not_allowed, or one that is not the API's; in a sandbox also ENOTFOUND or a proxy's certificate)", "only the user can allow it: cardenza.203.io and apps.203.io in the environment's network settings (`hint` says where; `help sandbox`), then run it again"],
-  ["network_blocked_cdn", 1, "the firewall in front of the site (Cloudflare) blocked the request (`ray`)", "nothing to fix in the project: other programs (curl, urllib, web fetches) are blocked, 203c normally passes; report it with the Ray ID or try another network"],
+  ["network_blocked_cdn", 1, "the firewall in front of the site (Cloudflare) blocked the request (`ray`)", "nothing to fix in the project: other programs (curl, urllib, web fetches) are blocked, 203cli normally passes; report it with the Ray ID or try another network"],
   ["unavailable", 3, "the API or a provider failed", "try again later"],
   ["upload_failed", 3, "an upload failed", "run the same command again: it resumes"],
 ];
 
 // ---------------------------------------------------------------------------------------------
-// Help topics: recipes with exact commands. {P} is how 203c was run (e.g. node scripts/203c.mjs).
+// Help topics: recipes with exact commands. {P} is how 203cli was run (e.g. node scripts/203cli.mjs).
 
 export const TOPICS = {
   start: {title: "Start here: what to run for what", text: `
@@ -152,7 +153,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   You want to …                                   Run
   make a new firmware for a Cardenza (start here)  {P} new "My firmware" --summary "…" --json   ({P} help new: build, try, publish)
   check that everything works (sign-in, API, quota) {P} doctor --json
-  is 203c, or this project's CardenzaHAL, outdated? {P} updates --json   (the commands of the work say so on stderr)
+  is 203cli or the project's CardenzaHAL outdated? {P} updates --json   (the commands of the work say so on stderr)
   sign in (needed for everything else)             {P} login --json   (opens the browser; remote: help signin)
   see your firmware and their codes                {P} firmware mine --json
   publish a firmware version (new or existing)     {P} publish --bin build/app.bin --name "My synth" --summary "…" --dry-run --json
@@ -186,7 +187,7 @@ Topics: {P} help <topic>   (new project publish sim ci manifest link fork source
 1. {P} new "My firmware" --summary "What it does" --json     a folder with CardenzaHAL (git submodule) and its template,
    named; it builds as it is. (Changing someone's firmware instead: {P} help fork.)
 2. cd my-firmware; write main/main.cpp with CardenzaHAL's public headers (its README: the hardware and its API).
-3. python3 components/CardenzaHAL/tools/cardenza.py build    the HAL's build tool: checks ESP-IDF 5.3, the HAL, 203c,
+3. python3 components/CardenzaHAL/tools/cardenza.py build    the HAL's build tool: checks ESP-IDF 5.3, the HAL, 203cli,
    then idf.py build (ESP-IDF is exported for it when the shell has not); build/<project>.bin. Its doctor says what is missing.
 4. {P} flash --bin build/<project>.bin --json                  onto the Cardenza on the USB cable through its 203 Launcher
    (which stays: never idf.py flash), no sign-in; {P} log --json reads what it prints (--until "ready" makes it a test).
@@ -226,10 +227,10 @@ A firmware cannot change hands: someone else makes their own from it ({P} fork C
   signin: {title: "Signing in", text: `
 1. {P} doctor --json                → "signed_in": true? Then you are done.
 2. {P} login --json                 → opens the user's browser on the site (/authorize): they sign in to the site if
-   it asks and approve "203c on <this computer>"; the browser comes back to 203c, which saves the token
+   it asks and approve "203cli on <this computer>"; the browser comes back to 203cli, which saves the token
    ({"status":"signed_in","via":"browser", …}). It waits up to 5 minutes (--timeout SECONDS): give the call that
    long. With --json it first writes {"status":"waiting","via":"browser","authorize_url":"…"} on stderr (the link,
-   should the browser not open). (OAuth's authorization code with PKCE and a redirect to 203c on 127.0.0.1.)
+   should the browser not open). (OAuth's authorization code with PKCE and a redirect to 203cli on 127.0.0.1.)
 Where no browser can be opened, a personal token: the user makes one on the site (设置 › 个人令牌, /me/tokens), then
    {P} login --with-token              → asks for it on the terminal (not shown), checks it and saves it
                                           ({"status":"signed_in","via":"token", …})
@@ -246,7 +247,7 @@ there or {P} logout revokes it. Every command but login, logout, help, doctor an
 without it).
 Never ask the user for passwords or cookies, or to paste a token into the chat (they paste it on their own terminal).
 In GitHub Actions: trusted publishing, no secret (help ci): {P} login --github-oidc --firmware CODE. The token is read from
---token, else COMMUNITY_TOKEN, else (GitHub Actions) the run's own from login --github-oidc, else ~/.config/203c/token
+--token, else COMMUNITY_TOKEN, else (GitHub Actions) the run's own from login --github-oidc, else ~/.config/203cli/token
 (mode 600). {P} whoami says which sign-in this is (kind cli or ci, scopes; publish: a run's trusted publishing).
 A token is a "cli" or "ci" credential: it publishes and acts for the user but never sees personal data or manages
 personal tokens or devices (that is the website's). A token deleted on the site gives exit 4: sign in again.`},
@@ -292,7 +293,7 @@ for the repositories a firmware's owner links, as PyPI's trusted publishing does
      - run: {P} publish --channel dev --version "$(tr -d '[:space:]' < version.txt)-dev.$GITHUB_RUN_NUMBER" --commit "$GITHUB_SHA" --json
    login asks for a token whose audience is the API's base (--api / COMMUNITY_API), exchanges it for a credential that
    publishes this firmware's versions only (its BINs, notices, notes, source archive, simulator version) for 15 minutes,
-   keeps it in $RUNNER_TEMP/203c (emptied after the job) and renews it by itself while publish waits for the checks.
+   keeps it in $RUNNER_TEMP/203cli (emptied after the job) and renews it by itself while publish waits for the checks.
    login --github-oidc may run again in the same job at any time (each run exchanges a new token); publish resumes.
 - The channel follows the run's ref: a tag vX.Y.Z may publish stable (and beta, dev), vX.Y.Z-beta.N beta (and dev),
   anything else (a branch, a pull request) dev only; beyond it: exit 1, oidc_channel.
@@ -338,7 +339,7 @@ in the common case; flags win over it; it writes "code" back after the first pub
   }
 - A "code" that is someone else's firmware (you cloned theirs): publish makes your fork of it first, rewrites "code"
   and "forked_from", and says so ("fork" in --json). A "forked_from" without "code": the new firmware is its fork.
-- No passwords or tokens in it (refused). Unknown keys are refused (x-… keys are yours). The earlier 203c.json is
+- No passwords or tokens in it (refused). Unknown keys are refused (x-… keys are yours). The earlier 203cli.json is
   still read; {P} init moves it over.`},
 
   channels: {title: "Channels", text: `
@@ -368,7 +369,7 @@ What people see first: the cover (16:9 picture) and the summary (≤ 100 charact
   - pictures shown large above the description, like a store page's: {P} firmware images add CODE shot.png (help pictures)
   - a description (Markdown) for people deciding to install: what it is, 3-6 features, what it needs, how to start
     (aim for 800 characters, at most 3000; the manual goes in its tutorial): docs/description.md, {P} help description
-  - 3-5 different screenshots in the gallery ({P} board screen; help pictures): 203c publish needs them
+  - 3-5 different screenshots in the gallery ({P} board screen; help pictures): 203cli publish needs them
   - how to use it (keys, menus, settings) as a tutorial, not in the description: {P} tutorial new, then tutorial publish (help tutorials)
   - one category tag: instrument, groovebox, tool, network or game (--tags groovebox,synth)
   - the source: --source-url https://github.com/… and --clone-url https://github.com/….git
@@ -464,7 +465,7 @@ Audio (.wav .mp3 .ogg .flac .m4a, ≤ 50 MB) or video (.mp4 .webm, ≤ 300 MB) m
   models: {title: "3D models", text: `
 {P} models upload case.stl --title "Desk stand" --license CC-BY-4.0 --target cardenza --dry-run --json
 Licences: CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, CC-BY-NC-SA-4.0, CC0-1.0, all-rights-reserved.
-An STL is its own preview (203c draws the thumbnail); STEP/3MF/OBJ need --preview mesh.stl --thumbnail pic.png.`},
+An STL is its own preview (203cli draws the thumbnail); STEP/3MF/OBJ need --preview mesh.stl --thumbnail pic.png.`},
 
   errors: {title: "Errors and exit codes", text: `
 With --json an error is one JSON line on stderr:
@@ -515,7 +516,7 @@ checker opens it in a headless browser and it must post {"cardenza_sim":"ready"}
   {P} sim check VCODE --json       boots / fails (why) / not checked yet; --again checks it again
 
 - The HAL: the project's own CardenzaHAL when it has the web target (web/ and tools/cardenza_web.py), else --hal DIR,
-  else a clone of ${"https://github.com/203-Systems/CardenzaHAL"} kept in ~/.cache/203c/CardenzaHAL.
+  else a clone of ${"https://github.com/203-Systems/CardenzaHAL"} kept in ~/.cache/203cli/CardenzaHAL.
 - Needs Python 3, CMake and Emscripten (emsdk): {P} doctor shows them.
 - The build's exit codes: 1 the firmware's own code does not compile for the browser (the errors are shown);
   3 it does not follow the HAL (it calls the chip's drivers: the calls, headers and source files are listed;
@@ -549,7 +550,7 @@ A device running a firmware (CardenzaHAL: no serial port) is restarted into its 
 raw MIDI, else its HID; macOS: CoreMIDI through python3), and the port it comes back on is used; a Launcher counting down
 to the firmware is kept in its menus. If that fails (firmware_unreachable, launcher_countdown): on the device, press HOME (the
 key left of the screen) and choose Back to Launcher in its system menu, then run it again; a firmware without that
-menu (released before it): hold FN while it starts (or while 203c restarts it) and the Launcher stays in its menus.
+menu (released before it): hold FN while it starts (or while 203cli restarts it) and the Launcher stays in its menus.
 
 Sent over Wi-Fi to a bound device (signing in and binding are for Wi-Fi):
 {P} devices list --json                                   → each device's id, online (and where: its Launcher or a firmware running), running
@@ -568,9 +569,9 @@ A device that no longer starts (恢复刷机, the website's /recover; no bound d
 {P} devices recover --port /dev/ttyACM0 --yes              written now with Python's esptool (pip install esptool)
 It erases the whole internal flash (installed firmware, Launcher settings, Wi-Fi, its sign-in); the SD card is not touched.
 The device in download mode: in its Launcher esptool resets it there; a running CardenzaHAL firmware (no port) is restarted
-into it by 203c; else (Cardenza) hold HOME while plugging the USB cable in.`},
+into it by 203cli; else (Cardenza) hold HOME while plugging the USB cable in.`},
 
-  board: {title: "A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203c board)", text: `
+  board: {title: "A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203cli board)", text: `
 A firmware on CardenzaHAL that starts USB answers these over the HAL's development channel (CardenzaHAL docs/usb-dev.md),
 without a line of its own and at no cost until asked. No sign-in. The firmware must be built with a current CardenzaHAL
 (hal_too_old otherwise: update the HAL submodule, build, {P} flash --bin build/<project>.bin). The device on the cable,
@@ -610,7 +611,7 @@ The tracker is internal (nobody is notified); tell users with {P} comments add r
 
   sandbox: {title: "Running in a sandboxed agent (Claude Code on the web, Codex cloud…): allowing the community's hosts", text: `
 A coding agent in a sandbox reaches only the hosts its environment allows. Claude Code's default environment allows
-package registries and GitHub (npm install -g 203c and {P} skill install work there; Codex cloud installs in its setup
+package registries and GitHub (npm install -g 203cli and {P} skill install work there; Codex cloud installs in its setup
 script); the 203 community is on no default list: the user allows ${COMMUNITY_HOSTS.join(" and ")}.
 {P} doctor --json checks both and says what blocks them. The errors:
   network_blocked_sandbox  the sandbox's allowlist blocked the host (a 403 with x-deny-reason: host_not_allowed; a 403
@@ -623,7 +624,7 @@ script); the 203 community is on no default list: the user allows ${COMMUNITY_HO
   admin: {title: "Admins", text: `
 {P} admin issues --json, {P} admin issue N --json, {P} admin issue-update N --status false_positive --reply "…"
 {P} admin override VCODE --note "…" (publish a false positive), {P} admin recheck VCODE
-{P} admin official CODE (the official tag on a firmware published here: its owner keeps publishing it with 203c), {P} admin reports, {P} admin hide|unhide|delete KIND REF --reason …`},
+{P} admin official CODE (the official tag on a firmware published here: its owner keeps publishing it with 203cli), {P} admin reports, {P} admin hide|unhide|delete KIND REF --reason …`},
 };
 
 export function topicText(name, prog, lang = defaultLang()) {
@@ -637,7 +638,7 @@ export function topicText(name, prog, lang = defaultLang()) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The API's refusals in 203c's words: hint and next commands. ctx: {cmd(changes), run(words…),
+// The API's refusals in 203cli's words: hint and next commands. ctx: {cmd(changes), run(words…),
 // tokenSource, args, flags, command}.
 
 export function explainApiError(error, ctx) {
@@ -665,7 +666,7 @@ export function explainApiError(error, ctx) {
   }
   if (code === "upload_failed") { out.exit = EXIT.later; out.hint = "Run the same command again: it resumes where it stopped."; out.next = [ctx.cmd({})]; return out; }
   if (status >= 500 || code === "unavailable") {
-    // HTTP 5xx: "unavailable" (the server's own codes such as internal, or none, are not 203c's "internal").
+    // HTTP 5xx: "unavailable" (the server's own codes such as internal, or none, are not 203cli's "internal").
     if (/^http_5|^internal$/.test(code ?? "")) out.code = "unavailable";
     out.exit = EXIT.later; out.hint = "The service failed for now; run the same command again in a minute."; out.next = [ctx.cmd({})]; return out;
   }
@@ -689,7 +690,7 @@ export function explainApiError(error, ctx) {
     case "forbidden":
       if (error.data?.reason === "publish_only") {
         out.code = "publish_only";
-        out.hint = "This is a run's trusted-publishing credential (GitHub Actions): it publishes its firmware's versions and nothing else. Page edits, other firmware and account actions need the owner's own sign-in (the site, or 203c login on a computer).";
+        out.hint = "This is a run's trusted-publishing credential (GitHub Actions): it publishes its firmware's versions and nothing else. Page edits, other firmware and account actions need the owner's own sign-in (the site, or 203cli login on a computer).";
       } else if (/only read|write scope|没有 write 权限/i.test(message)) {
         out.hint = "This token can only read. Sign in again and let the user tick write on the approval page (or make a token with write).";
         out.exit = EXIT.signin; out.next = [ctx.run(["login"])];
@@ -714,7 +715,7 @@ export function explainApiError(error, ctx) {
         out.hint = "Only admins can do this (and only with a token that has the admin scope).";
       } else if (/hub/i.test(message)) {
         out.code = "official_from_hub";
-        out.hint = "This official firmware's versions come from the Launcher hub (its CI publishes them there): 203c cannot publish them. Publish your own firmware (publish --name …).";
+        out.hint = "This official firmware's versions come from the Launcher hub (its CI publishes them there): 203cli cannot publish them. Publish your own firmware (publish --name …).";
         out.next = [ctx.run(["firmware", "mine"])];
       } else if (/owner/i.test(message) && fwCode) {
         out.code = "not_yours";
@@ -745,6 +746,14 @@ export function explainApiError(error, ctx) {
       out.hint = `Too many for now${error.data?.retry_after ? `: wait ${error.data.retry_after} seconds` : ""}, then run the same command again.`;
       out.next = [ctx.cmd({})];
       return out;
+    case "moved": {
+      // Followed by the client when it can (lib.mjs Client.follow); here only when the new address is not one of ours.
+      const api = typeof error.data?.api === "string" ? error.data.api : null;
+      out.hint = `The 203 community moved${api ? ` to ${api}` : ""}. 203cli goes there by itself when the address is the community's (https on 203.io); ` +
+        "this one it did not follow: check it, then run the same command with --api set to it. Update 203cli too: npm install -g 203cli";
+      if (api) out.next = [ctx.cmd({set: {api}})];
+      return out;
+    }
     case "too_large": out.hint = "The file is over the limit: make it smaller (help " + (ctx.topic ?? "errors") + ")."; return out;
     case "expired": out.hint = "It ran out: start again."; out.next = [ctx.cmd({})]; return out;
     case "deleted": out.hint = "It was deleted: nothing more to do with it (running the same command again answers the same)."; return out;
@@ -766,8 +775,8 @@ export function explainApiError(error, ctx) {
 /** ENOTFOUND outside a known sandbox: offline, or a sandbox that says nothing of itself. */
 export function maybeSandbox(lang = "en") {
   return lang === "zh"
-    ? `如果这是在 AI 的沙箱里（Claude Code 网页版、Codex 云端……），它的网络白名单里没有的域名也会这样解析不了：请用户放行 ${COMMUNITY_HOSTS.join("、")}（203c help sandbox 有每一步）。`
-    : `In a sandboxed agent (Claude Code on the web, Codex cloud…) a host its network allowlist lacks fails like this too: ask the user to allow ${COMMUNITY_HOSTS.join(" and ")} (203c help sandbox has the steps).`;
+    ? `如果这是在 AI 的沙箱里（Claude Code 网页版、Codex 云端……），它的网络白名单里没有的域名也会这样解析不了：请用户放行 ${COMMUNITY_HOSTS.join("、")}（203cli help sandbox 有每一步）。`
+    : `In a sandboxed agent (Claude Code on the web, Codex cloud…) a host its network allowlist lacks fails like this too: ask the user to allow ${COMMUNITY_HOSTS.join(" and ")} (203cli help sandbox has the steps).`;
 }
 
 function conflictHint(message, ctx, out) {
@@ -798,7 +807,7 @@ const FIELD_HINTS = {
   files: "The files list is wrong: see help sounds / help projects / help models.",
   engine: "Engines: dx7, juno, sampler, drums, or mixed.",
   cursor: "A cursor comes from the previous answer's next_cursor with the same filters.",
-  targets: "Devices: cardenza, nullperator (203c targets lists them).",
+  targets: "Devices: cardenza, nullperator (203cli targets lists them).",
 };
 
 function invalidHint(out, field, message, ctx) {

@@ -9,7 +9,7 @@
 //   project diff      two sources compared, file by file (--patch: the unified diff): this folder, a version of this
 //                     firmware (label or code), a fork (its newest source archive, else its repository)
 //   sync              all of it in one report for an agent: .203/community.md and .203/community.json in the project
-// The last look is kept per firmware: .203/state.json in the project (git-ignored), else ~/.config/203c/inbox/CODE.json.
+// The last look is kept per firmware: .203/state.json in the project (git-ignored), else ~/.config/203cli/inbox/CODE.json.
 // Only the API's existing read operations. Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import os from "node:os";
@@ -365,7 +365,7 @@ export async function projectDiff(ctx) {
   const [aRef, bRef] = [ctx.args.A ?? null, ctx.args.B ?? null];
   if (!aRef) throw ctx.usage("What to compare: a fork's code, a version (label or code), or two of them", {field: "A",
     hint: "project diff FORK (a fork against this folder), project diff 1.0.0 1.1.0 (two versions), project diff 1.1.0 local", next: [ctx.run(["project", "forks"])]});
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "203c-diff-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-diff-"));
   try {
     const a = await materialize(ctx, aRef, {code, project, dir: path.join(root, "a")});
     const b = await materialize(ctx, bRef ?? "local", {code, project, dir: path.join(root, "b")});
@@ -479,7 +479,7 @@ export function forksMarkdown(code, forks) {
 }
 
 function syncMarkdown(r) {
-  return [`<!-- 203c sync, ${r.checked}: what the 203 community has about this firmware. Read it before planning changes. -->`, "",
+  return [`<!-- 203cli sync, ${r.checked}: what the 203 community has about this firmware. Read it before planning changes. -->`, "",
     pageMarkdown(r.firmware, r.versions).trimEnd(), "",
     feedbackMarkdown({firmware: {code: r.firmware.code, name: r.firmware.name}, since: r.since, requests: r.requests, comments: r.comments, merges: r.merges,
       ...(r.incomplete ? {incomplete: r.incomplete} : {})}).replace(/^# .*\n/, "# What people say\n").trimEnd(), "",

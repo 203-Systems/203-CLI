@@ -3,7 +3,7 @@
 // picture of the screen), simplified for authors. The specification is reference/tutorial-format.md (served by
 // the community at /tutorial-format.md and /tutorials/format); COMMUNITY.md "Tutorials" is the contract.
 //
-// One plain ES module for every side: 203c checks a file with it before it publishes (`203c tutorial check`), the
+// One plain ES module for every side: 203cli checks a file with it before it publishes (`203cli tutorial check`), the
 // community's API refuses a document it does not pass, and the website's editor checks while one types and draws
 // the steps' words with its tokens (inline()). Keep it free of Node, Deno and DOM APIs. The community keeps
 // byte-identical copies (site/tutorial-format.js, supabase/functions/_shared/tutorial-format.js).
@@ -32,7 +32,7 @@ export const LIMITS = Object.freeze({
 });
 
 // The Cardenza's key caps, as CardenzaHAL's keyboard/legends.h names them (key number = row * 14 + column + 1), and
-// HOME, the side key left of the screen (not in the matrix). The same names as `203c board press`.
+// HOME, the side key left of the screen (not in the matrix). The same names as `203cli board press`.
 export const KEY_ROWS = Object.freeze([
   ["esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "del"],
   ["tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
@@ -289,10 +289,10 @@ const MESSAGES = {
   link: [p => `Links are https:// (${p.url})`, p => `链接只能是 https://（${p.url}）`],
   picture_path: [p => `A picture is a PNG, JPEG or WebP file of this project (a relative path like shots/menu.png), or image:<id> once uploaded: ${p.ref}`,
     p => `图片是项目里的 PNG、JPEG 或 WebP 文件（相对路径，比如 shots/menu.png），上传后写 image:<id>：${p.ref}`],
-  picture_remote: [() => "Pictures come from the community only: upload it (203c tutorial publish, or the editor's 图片 / Pictures)",
-    () => "图片只能来自社区：先上传（203c tutorial publish，或编辑器的「图片」）"],
-  picture_not_uploaded: [p => `${p.ref} is not uploaded yet: add it under Pictures (the file named ${p.name}), or publish with 203c`,
-    p => `${p.ref} 还没上传：在「图片」里加上这个文件（${p.name}），或用 203c 发布`],
+  picture_remote: [() => "Pictures come from the community only: upload it (203cli tutorial publish, or the editor's 图片 / Pictures)",
+    () => "图片只能来自社区：先上传（203cli tutorial publish，或编辑器的「图片」）"],
+  picture_not_uploaded: [p => `${p.ref} is not uploaded yet: add it under Pictures (the file named ${p.name}), or publish with 203cli`,
+    p => `${p.ref} 还没上传：在「图片」里加上这个文件（${p.name}），或用 203cli 发布`],
   picture_unknown: [p => `image:${p.id} is not one of your pictures for this firmware`, p => `image:${p.id} 不是你给这个固件上传的图片`],
   too_many_pictures: [p => `${p.count} different pictures; at most ${LIMITS.pictures}`, p => `${p.count} 张不同的图片，最多 ${LIMITS.pictures} 张`],
   firmware: [p => `"firmware" is ${p.code}, but this tutorial is for ${p.want}`, p => `"firmware" 写的是 ${p.code}，这个教程却是给 ${p.want} 的`],
@@ -338,7 +338,7 @@ const CODE = /^[2-9A-HJ-NP-Z]{6}$/;
 
 /**
  * Checks a tutorial: its text (JSON) or an object already parsed.
- *   pictures: "local" (203c: a picture may be a relative path of a file, or image:<id>), "uploaded" (the API: image:<id>
+ *   pictures: "local" (203cli: a picture may be a relative path of a file, or image:<id>), "uploaded" (the API: image:<id>
  *             only, each one of `uploaded` when that is given) or "any" (the editor: paths are said to need uploading;
  *             with `names`, a path whose file name is among them says so).
  *   uploaded: the ids (Set or array) of the author's pictures for the firmware.

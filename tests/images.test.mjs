@@ -33,7 +33,7 @@ before(async () => {
     const url = {pathname: req.url.split("?")[0]};
     const json = body ? JSON.parse(body.startsWith("{") ? body : "{}") : {};
     if (url.pathname === "/api/") return send(200, {version: 2, limits: {}});
-    if (url.pathname === "/api/me") return send(200, {id: "u1", name: "Tester", role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203c"}});
+    if (url.pathname === "/api/me") return send(200, {id: "u1", name: "Tester", role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203cli"}});
     if (url.pathname === `/api/firmware/${CODE}` && req.method === "GET") return send(200, fw);
     if (url.pathname === `/api/firmware/${CODE}/edit`) { Object.assign(fw, json); return send(200, fw); }
     if (url.pathname === `/api/firmware/${CODE}/images` && req.method === "POST") {
@@ -69,8 +69,8 @@ before(async () => {
     }
     return false;
   });
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "203c-home-"));
-  work = fs.mkdtempSync(path.join(os.tmpdir(), "203c-images-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-home-"));
+  work = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-images-"));
   fs.mkdirSync(path.join(work, "docs"));
   fs.writeFileSync(path.join(work, "docs/home.png"), png(240, 135, "home"));
   fs.writeFileSync(path.join(work, "docs/seq.png"), png(480, 270, "seq"));

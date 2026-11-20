@@ -1,7 +1,7 @@
-// 203c flash (线刷: a firmware over a USB cable through the device's 203 Launcher), signed out (the user, 2026-11-18:
+// 203cli flash (线刷: a firmware over a USB cable through the device's 203 Launcher), signed out (the user, 2026-11-18:
 // no account for the cable): against a stand-in API (the code, the firmware, the counted download with the community's
 // signature trailer) and the demo Launcher of scripts/launcher-usb.mjs (the website's own file: the community serves it) behind a
-// real pseudo-terminal, so 203c opens, sets up and talks to a tty as it does to /dev/ttyACM0. Python makes the pty (Node
+// real pseudo-terminal, so 203cli opens, sets up and talks to a tty as it does to /dev/ttyACM0. Python makes the pty (Node
 // has no API for one); without python3, or on Windows, the cable tests are skipped. The pty's path is always given with
 // --port: these tests never look for a real device.
 // Run: node --test tests/flash.test.mjs
@@ -17,7 +17,7 @@ import {ROOT, NO_UPDATES} from "./fixtures.mjs";
 import {image} from "./fixtures.mjs";
 import {demoPort} from "../scripts/launcher-usb.mjs";
 
-const CLI = path.join(ROOT, "scripts/203c.mjs");
+const CLI = path.join(ROOT, "scripts/203cli.mjs");
 const sha = b => crypto.createHash("sha256").update(b).digest("hex");
 const PTY = process.platform !== "win32" && spawnSync("python3", ["-I", "-c", "import pty, tty"]).status === 0;
 let server, api, dir, app, trailer, requests = [];
@@ -34,7 +34,7 @@ function trailerOf(statement) {
 }
 
 before(async () => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "203c-flash-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-flash-"));
   app = Buffer.from(await image({project: "TestSynth", version: "1.2.0", size: 9000}));
   trailer = trailerOf({type: "203.build", kind: "app", target: "cardenza", name: "Test Synth", version: "1.2.0", code: "VER234"});
   const firmware = {code: "ABC234", name: "Test Synth", kind: "app", builds: [
@@ -150,7 +150,7 @@ test("flash --bin: a local application image; --channel picks a firmware's line"
     assert.equal(r.json.source, "file");
     assert.equal(r.json.name, "TestSynth", "named after the image's project");
     assert.deepEqual([port.state.apps.at(-1).name, port.state.apps.at(-1).community], ["TestSynth", false]);
-    // The same build again: the Launcher replaces its installed copy, and 203c says so.
+    // The same build again: the Launcher replaces its installed copy, and 203cli says so.
     const again = await cli(["flash", "--bin", "local.bin", "--port", slave]);
     assert.equal(again.code, 0, again.stderr);
     assert.match(again.stdout, /Replaced TestSynth 1\.2\.0 → 1\.2\.0\./);
@@ -341,7 +341,7 @@ test("flash with a firmware that cannot be reached: what to do, and nothing else
 });
 
 // ---------------------------------------------------------------------------------------------
-// 203c log: a running firmware's console over the HAL's system channel (raw MIDI: SysEx F0 23 43 01 F7 on, the text as
+// 203cli log: a running firmware's console over the HAL's system channel (raw MIDI: SysEx F0 23 43 01 F7 on, the text as
 // F0 24 43 … F7, F0 23 43 00 F7 off at the end; HID: report 0xCB), and a serial port's text; --until as a test.
 
 const sysexText = text => [0xf0, 0x24, 0x43, ...Buffer.from(text, "latin1"), 0xf7];

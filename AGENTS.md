@@ -1,13 +1,21 @@
 # 203-CLI: rules for changing it
 
-This repository is public and is the one source of `203c` and the 203-community Agent Skill. People install it from
-npm, the package `203c` (`npm install -g 203c`, then `203c skill install`), published by `.github/workflows/release.yml`
+This repository is public and is the one source of `203cli` and the 203-community Agent Skill. People install it from
+npm, the package `203cli` (`npm install -g 203cli`, then `203cli skill install`), published by `.github/workflows/release.yml`
 when a tag `vX.Y.Z` equal to `package.json`'s version is pushed (npm trusted publishing: no token; the files in
-`package.json` `files`). Advertise only that. The 203 community also packs a pinned commit as the skill its old
+`package.json` `files`). Advertise only that. The 203 community also packs a pinned commit as the skill its
 `install.sh` installs (kept working for scripts that have it, CI among them): it reaches those when the community pins
 the new commit.
 
-## What 203c promises (keep it)
+203cli was called `203c` up to 3.5.0 (renamed 2026-11-20, the user: 203cli is the only CLI, and whoever used 203c is told).
+Every old way in still ends at 203cli, after a notice on stderr (`scripts/rename.mjs` has the words): the old script path
+`scripts/203c.mjs` (a shim: what CardenzaHAL's community-publish action at older commits and older install.sh commands run),
+and the last npm package `203c` in `legacy/203c` (it depends on 203cli and runs it as `203c`, C203_RUN_AS; released once,
+by a tag `203c-vX.Y.Z`, after 203cli is on npm; its words are compared with rename.mjs's by the tests). Keep both; never
+give the 203cli package a `203c` command (it would clash with the 203c package's). `tools/legacy-install-check.mjs` installs
+both packed packages from a stand-in registry and runs `203c` from every shell (CI, three systems).
+
+## What 203cli promises (keep it)
 
 - Zero dependencies, no install scripts, Node 18 or later, macOS, Linux and Windows (on Windows everything but the USB
   cable, which the website does there); CI tests all three. No build step.
@@ -21,7 +29,7 @@ the new commit.
 ## Files
 
 - `scripts/commands.mjs` is the command table: `--help`, `--help --json` and `reference/cli.md` come from it.
-  After changing a command, a flag or an error code: `npm run reference` (`node scripts/203c.mjs help --reference >
+  After changing a command, a flag or an error code: `npm run reference` (`node scripts/203cli.mjs help --reference >
   reference/cli.md`); the tests fail while it is stale. Raise `CLI_VERSION` (`scripts/lib.mjs`) and `package.json`'s
   `version` together.
 - `scripts/launcher-usb.mjs` and `scripts/recover-plan.mjs` are also the community website's own modules (it serves
@@ -39,5 +47,5 @@ the new commit.
 
 - `npm test` (Node 20 or later): the CLI against stand-in APIs and a demo Launcher on a pseudo-terminal (python3), the
   local checks, the documents, and a scan for secrets, private addresses and e-mail addresses.
-- The community runs 203c against its whole API in its own tests when it pins a commit; a change that needs a new
+- The community runs 203cli against its whole API in its own tests when it pins a commit; a change that needs a new
   API goes in after the community has it.

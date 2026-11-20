@@ -1,6 +1,6 @@
-// A stand-in firmware for 203c board's tests: the device side of CardenzaHAL's development channel (docs/usb-dev.md), written
+// A stand-in firmware for 203cli board's tests: the device side of CardenzaHAL's development channel (docs/usb-dev.md), written
 // from the spec apart from scripts/board-usb.mjs (its own 7-bit packing, framing, queue), so a mistake shared by both sides
-// does not hide. It answers in-process through link() (the same link interface the real backends give 203c), or behind a
+// does not hide. It answers in-process through link() (the same link interface the real backends give 203cli), or behind a
 // pseudo-terminal (`sink` and receive(), tests/board.test.mjs). An SD card in memory, a screen, keys, a core dump.
 // It also checks what it is sent: a request longer than the HAL can collect lands in `violations`.
 
@@ -90,7 +90,7 @@ export class FakeBoard {
     this.files.set(name, Uint8Array.from(data));
   }
 
-  /** The link 203c's Board takes: bytes in send(), out through start()'s callback. */
+  /** The link 203cli's Board takes: bytes in send(), out through start()'s callback. */
   link() {
     const fake = this;
     return {kind: this.kind, via: "fake", where: "fake",

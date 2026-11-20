@@ -40,7 +40,7 @@ test("SKILL.md names the skill, says when to use it and sends to each product's 
     assert.ok(description.includes(word), word);
   }
   for (const must of ["Always add `--json`", "doctor", "--dry-run", "Never guess a code", "next[0]", "| exit | meaning | do |", "fork CODE DIR",
-    "203.json", "203c rules", "reference/parity.md", "## Products: what to read first"]) {
+    "203.json", "203cli rules", "reference/parity.md", "## Products: what to read first"]) {
     assert.ok(text.includes(must), must);
   }
   for (const product of PRODUCTS) assert.ok(text.includes(`products/${product}/README.md`), product);
@@ -49,7 +49,7 @@ test("SKILL.md names the skill, says when to use it and sends to each product's 
 test("every product has its page, with the same parts", () => {
   for (const product of PRODUCTS) {
     const page = read(`products/${product}/README.md`);
-    for (const part of ["## Publish", "## Hardware reference", "## Links", "203c publish", "--dry-run"]) assert.ok(page.includes(part), `${product}: ${part}`);
+    for (const part of ["## Publish", "## Hardware reference", "## Links", "203cli publish", "--dry-run"]) assert.ok(page.includes(part), `${product}: ${part}`);
     assert.match(page, /\| \*\*`[a-z0-9]+`\*\*|Community device id: \*\*`[a-z0-9]+`\*\*/, `${product}: its community device id`);
   }
   const index = read("products/README.md");
@@ -70,13 +70,13 @@ test("relative links in the Markdown resolve", () => {
   }
 });
 
-test("package.json's files are what is shipped, and install.sh installs them with a 203c command", {skip: process.platform === "win32" && "install.sh is a POSIX shell script (Windows: npm)"}, async () => {
+test("package.json's files are what is shipped, and install.sh installs them with a 203cli command", {skip: process.platform === "win32" && "install.sh is a POSIX shell script (Windows: npm)"}, async () => {
   const pkg = JSON.parse(read("package.json"));
   assert.deepEqual(pkg.files, ["SKILL.md", "LICENSE", "scripts/", "reference/", "products/"]);
-  assert.equal(pkg.bin["203c"], "scripts/203c.mjs");
+  assert.equal(pkg.bin["203cli"], "scripts/203cli.mjs");
   for (const item of pkg.files) assert.ok(fs.existsSync(path.join(ROOT, item)), item);
   assert.match(read("install.sh"), /for item in SKILL\.md LICENSE scripts reference products; do/);
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "203c-install-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-install-"));
   const skills = path.join(home, "skills"), bin = path.join(home, "bin");
   const done = await new Promise(resolve => {
     const child = spawn("sh", [path.join(ROOT, "install.sh")], {env: {...process.env, CLAUDE_SKILLS_DIR: skills, COMMUNITY_BIN_DIR: bin}});
@@ -87,8 +87,8 @@ test("package.json's files are what is shipped, and install.sh installs them wit
   assert.equal(done.status, 0, done.stderr);
   assert.ok(fs.existsSync(path.join(skills, "203-community/products/cardenza/README.md")));
   assert.ok(!fs.existsSync(path.join(skills, "203-community/tests")), "tests stay in the repository");
-  assert.match(fs.readFileSync(path.join(bin, "203c"), "utf8"), /^#!\/bin\/sh\nexec node ".*203-community\/scripts\/203c\.mjs" "\$@"\n$/);
-  assert.equal(spawnSync(path.join(bin, "203c"), ["--version"], {encoding: "utf8"}).stdout.trim(), pkg.version);
+  assert.match(fs.readFileSync(path.join(bin, "203cli"), "utf8"), /^#!\/bin\/sh\nexec node ".*203-community\/scripts\/203cli\.mjs" "\$@"\n$/);
+  assert.equal(spawnSync(path.join(bin, "203cli"), ["--version"], {encoding: "utf8"}).stdout.trim(), pkg.version);
   fs.rmSync(home, {recursive: true, force: true});
 });
 
@@ -110,7 +110,7 @@ test("no secrets, private addresses or e-mail addresses", () => {
       const found = pattern.exec(text);
       assert.equal(found, null, `${file}: ${what} (${found?.[0]})`);
     }
-    // Only public hosts: every web address, and every 203.io name, is one of these (loopback for 203c's own
+    // Only public hosts: every web address, and every 203.io name, is one of these (loopback for 203cli's own
     // sign-in and local servers; *.test in tests).
     for (const [, host] of text.matchAll(/\bhttps?:\/\/([A-Za-z0-9.-]+)/g)) {
       assert.ok(PUBLIC_HOSTS.has(host.toLowerCase()) || /\.test$/.test(host), `${file}: ${host} is not a known public host (add it to PUBLIC_HOSTS if it is one)`);
@@ -119,6 +119,6 @@ test("no secrets, private addresses or e-mail addresses", () => {
   }
 });
 
-const PUBLIC_HOSTS = new Set(["203.io", "cardenza.203.io", "apps.203.io", "community.203.io", "matrix.203.io", "np-wiki.203.io", "dev.203.io",
+const PUBLIC_HOSTS = new Set(["203.io", "cardenza.203.io", "apps.203.io", "community.203.io", "stage.203.io", "matrix.203.io", "np-wiki.203.io", "dev.203.io",
   "github.com", "raw.githubusercontent.com", "docs.espressif.com", "dl.espressif.com", "emscripten.org", "nodejs.org",
   "matrix-os-keymap-editor.vercel.app", "www.npmjs.com", "registry.npmjs.org", "registry.npmmirror.com", "api.github.com", "claude.ai", "code.claude.com", "www.bilibili.com", "127.0.0.1", "localhost"]);

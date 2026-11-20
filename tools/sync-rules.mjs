@@ -1,5 +1,5 @@
 // reference/firmware-project.md is CardenzaHAL's docs/FIRMWARE-PROJECT.md, the one source of the firmware project
-// rules (203c rules prints this copy, offline). This copies it in when the HAL's file changes:
+// rules (203cli rules prints this copy, offline). This copies it in when the HAL's file changes:
 //   node tools/sync-rules.mjs                 from GitHub (CardenzaHAL's main)
 //   node tools/sync-rules.mjs --hal DIR       from a CardenzaHAL checkout (its working tree)
 //   node tools/sync-rules.mjs --check         exit 1 when the copy differs from GitHub's (CI runs it)

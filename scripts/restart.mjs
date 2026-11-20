@@ -1,9 +1,9 @@
-// A device on the cable that runs a firmware instead of its 203 Launcher, from 203c (the user, 2026-11-18: "自动让设备重启回
+// A device on the cable that runs a firmware instead of its 203 Launcher, from 203cli (the user, 2026-11-18: "自动让设备重启回
 // Launcher 再刷"): `flash` restarts it into its Launcher (and `devices recover --port` into the ROM's download mode) the way
 // the website does over Web MIDI (site/firmware-usb.js), then takes the serial port that appears. What a firmware on
 // CardenzaHAL is on USB and the bytes it takes: launcher-usb.mjs, "A firmware running" (vendor 0x0203, a product named
 // Cardenza, the system command as SysEx F0 23 <command> F7 or HID report 0xCB; never sent to anything else: a Mystrix would go
-// to its own update mode). Node has no MIDI or HID API and 203c no dependencies, so:
+// to its own update mode). Node has no MIDI or HID API and 203cli no dependencies, so:
 //   Linux  the USB device found in sysfs (/sys/bus/usb/devices: idVendor 0203, product with Cardenza); its MIDI as ALSA raw
 //          MIDI (/dev/snd/midiC<card>D<n>, the sound card under that USB device), written and read as a file; else its HID
 //          (/dev/hidrawN under it), report 0xCB. Raw MIDI is the seat user's (or the audio group's); hidraw is usually root's.
@@ -130,7 +130,7 @@ for name in ("MIDIClientCreate", "MIDIOutputPortCreate", "MIDIInputPortCreate", 
 def cfstring(text):
     return cf.CFStringCreateWithCString(None, text.encode(), 0x08000100)
 client, out, inp = u32(), u32(), u32()
-label = cfstring("203c")
+label = cfstring("203cli")
 status = cm.MIDIClientCreate(label, None, None, ctypes.byref(client))
 if status:
     fail("MIDIClientCreate: %d" % status)

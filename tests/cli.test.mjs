@@ -1,6 +1,6 @@
 // The command line itself, with no community behind it: help as text and as JSON, reference/cli.md current, the
 // rules, usage errors that name the right command or flag, the sign-in rules, and doctor / whoami / init against a
-// stand-in API (GET /, GET /me, GET /me/quotas). The community runs 203c against its whole API in its own tests.
+// stand-in API (GET /, GET /me, GET /me/quotas). The community runs 203cli against its whole API in its own tests.
 // Run: node --test tests/cli.test.mjs
 import {test, before, after} from "node:test";
 import assert from "node:assert/strict";
@@ -20,14 +20,14 @@ before(async () => {
     if (req.url === "/api/") return send(200, {version: 2, limits: {}});
     if (req.url === "/api/me") {
       return req.headers.authorization === "Bearer " + TOKEN
-        ? send(200, {id: "u1", name: "Tester", role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203c on test"}})
+        ? send(200, {id: "u1", name: "Tester", role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203cli on test"}})
         : send(401, {error: "Sign in first", code: "signin_required"});
     }
     if (req.url === "/api/me/quotas") return send(200, {items: [{what: "versions_dev", used: 1, limit: 300, left: 299, per: "day"}]});
     return false;
   });
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "203c-home-"));
-  work = fs.mkdtempSync(path.join(os.tmpdir(), "203c-work-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-home-"));
+  work = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-work-"));
 });
 after(async () => { await stand.close(); fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(work, {recursive: true, force: true}); });
 
@@ -56,7 +56,7 @@ test("help: topics, every command's --help with examples, JSON help, and referen
   for (const topic of ["start", "publish", "ci", "manifest", "fork", "checks", "page", "sounds", "devices", "rules"]) {
     const help = await cli(["help", topic]);
     assert.equal(help.code, 0, topic);
-    assert.match(help.stdout, /node \S+203c\.mjs /, topic);
+    assert.match(help.stdout, /node \S+203cli\.mjs /, topic);
   }
   assert.match((await cli(["help", "errors"])).stdout, /section_closed +exit 1/);
   const commandHelp = await cli(["publish", "--help"]);
@@ -70,7 +70,7 @@ test("help: topics, every command's --help with examples, JSON help, and referen
   assert.ok(publish.flags.some(flag => flag.name === "--dry-run"));
   const reference = spawnSync(process.execPath, [CLI, "help", "--reference"], {encoding: "utf8"}).stdout;
   assert.equal(fs.readFileSync(path.join(ROOT, "reference/cli.md"), "utf8"), reference,
-    "reference/cli.md is stale: node scripts/203c.mjs help --reference > reference/cli.md");
+    "reference/cli.md is stale: node scripts/203cli.mjs help --reference > reference/cli.md");
   for (const [code] of ERROR_CODES) assert.ok(reference.includes("`" + code + "`"), code);
 });
 
@@ -85,7 +85,7 @@ test("unknown commands and flags suggest the right one; values are checked with 
   assert.match(flag.hint, /Did you mean --channel\?/);
   assert.match(flag.next[0], /--channel dev/);
   const command = refused(await cli(["relase", "--bin", "x.bin", "--json"]), 2, "usage");
-  assert.match(command.next[0], /203c\.mjs publish --api \S+ --bin x\.bin --json$/);
+  assert.match(command.next[0], /203cli\.mjs publish --api \S+ --bin x\.bin --json$/);
   assert.match(refused(await cli(["firmware", "creat", "--json"]), 2).next[0], /firmware create --api \S+ --json$/);
   const channel = refused(await cli(["versions", "list", "K7M2QX", "--channel", "nightly", "--json"], {token: TOKEN}), 2, "usage");
   assert.equal(channel.field, "channel");

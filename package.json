@@ -1,8 +1,9 @@
 {
-  "name": "203c",
-  "version": "3.5.0",
-  "description": "203c, the 203 Systems firmware community's CLI (Cardenza 鸣片, NullPerator, Mystrix): start a firmware project, install it on a device over USB, read its log, publish it; with the Agent Skill and every device's development guide",
+  "name": "203cli",
+  "version": "3.5.1",
+  "description": "203cli (formerly 203c), the 203 Systems firmware community's CLI (Cardenza 鸣片, NullPerator, Mystrix): start a firmware project, install it on a device over USB, read its log, publish it; with the Agent Skill and every device's development guide",
   "keywords": [
+    "203cli",
     "203c",
     "203-systems",
     "cardenza",
@@ -25,7 +26,7 @@
     "url": "https://github.com/203-Systems/203-CLI/issues"
   },
   "bin": {
-    "203c": "scripts/203c.mjs"
+    "203cli": "scripts/203cli.mjs"
   },
   "files": [
     "SKILL.md",
@@ -42,7 +43,7 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "reference": "node scripts/203c.mjs help --reference > reference/cli.md",
+    "reference": "node scripts/203cli.mjs help --reference > reference/cli.md",
     "rules": "node tools/sync-rules.mjs",
     "pack:check": "npm pack --dry-run"
   }

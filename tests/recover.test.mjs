@@ -1,4 +1,4 @@
-// 203c devices recover (the website's recovery flash from a computer) against a small stand-in API that
+// 203cli devices recover (the website's recovery flash from a computer) against a small stand-in API that
 // answers GET /recovery and the downloads with real-shaped images, and a stand-in for Python's esptool that
 // records what it was asked to write: the plan only (--dry-run), the files and the command (--out), the
 // device written (--port, only with --yes), a download that is not the described file.
@@ -14,12 +14,12 @@ import path from "node:path";
 import {ROOT, NO_UPDATES} from "./fixtures.mjs";
 import {image, merged} from "./fixtures.mjs";
 
-const CLI = path.join(ROOT, "scripts/203c.mjs");
+const CLI = path.join(ROOT, "scripts/203cli.mjs");
 const sha = b => crypto.createHash("sha256").update(b).digest("hex");
 let server, api, dir, launcher, app, corrupt = false, downloads = [];
 
 before(async () => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "203c-recover-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-recover-"));
   launcher = Buffer.from(await merged());
   app = Buffer.from(await image({project: "CardenzaSynthFirmware", version: "0.2.0", size: 70000}));
   const item = (code, fw, name, bytes, extra = {}) => ({code, firmware_code: fw, name, version: "0.2.0", build: 1, target: "cardenza", channel: "stable",

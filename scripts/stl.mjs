@@ -32,7 +32,7 @@ export function parseStl(bytes) {
   return triangles;
 }
 
-export function binaryStl(triangles, header = "203c") {
+export function binaryStl(triangles, header = "203cli") {
   const bytes = new Uint8Array(84 + 50 * triangles.length);
   const view = new DataView(bytes.buffer);
   bytes.set(new TextEncoder().encode(header.slice(0, 80)));

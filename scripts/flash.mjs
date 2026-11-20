@@ -1,4 +1,4 @@
-// 203c flash: install a firmware on a device over a USB cable through its 203 Launcher (线刷), as the website's
+// 203cli flash: install a firmware on a device over a USB cable through its 203 Launcher (线刷), as the website's
 // 用 USB 线安装 does. No account, no binding and nothing to switch on (the user, 2026-11-18: "没有登录的情况下，可以使用
 // 线刷模式。登录了之后，就可以使用WiFi控制、烧录等等"): the Launcher's console runs from power-on.
 //   flash CODE        a firmware (its newest build for the device on --channel) or a version, by its code: the BIN
@@ -13,7 +13,7 @@
 // The port: --port, else the one USB serial port there is (/dev/ttyACM* on Linux, /dev/cu.usbmodem* on macOS). A device
 // running a firmware on CardenzaHAL has none: it is restarted into its Launcher first (restart.mjs: its MIDI or HID; the
 // user, 2026-11-18) and the port it comes back on is taken, held against the countdown of a HAL that restarts plainly
-// (hold()); lost to that countdown, it is restarted once more. Node has no serial port API and 203c no dependencies: the
+// (hold()); lost to that countdown, it is restarted once more. Node has no serial port API and 203cli no dependencies: the
 // tty is put in raw mode with stty and read and written as a file, so macOS and Linux only (Windows: the website).
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
@@ -58,7 +58,7 @@ export function openSerial(file) {
   try { out = fs.openSync(file, O_RDWR | O_NOCTTY | O_NONBLOCK); } catch (error) {
     throw new CliError("port_unavailable", `The port ${file} cannot be opened: ${error.code || error.message}`, {exit: EXIT.refused, field: "port",
       hint: error.code === "EACCES" ? "No permission: on Linux add yourself to the dialout group (sudo usermod -aG dialout $USER, then log in again)"
-        : error.code === "EBUSY" ? "Another program has it open (a serial monitor, idf.py monitor, the website): close it" : "Plug the device in and check the port (203c flash --port …)"});
+        : error.code === "EBUSY" ? "Another program has it open (a serial monitor, idf.py monitor, the website): close it" : "Plug the device in and check the port (203cli flash --port …)"});
   }
   if (!tty.isatty(out)) { fs.closeSync(out); throw new CliError("port_unavailable", `${file} is not a serial port`, {exit: EXIT.refused, field: "port"}); }
   const raw = spawnSync("stty", ["raw", "-echo", "clocal"], {stdio: [out, "ignore", "pipe"], encoding: "utf8"});
@@ -136,7 +136,7 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
   if (!found) return null;
   const into = command === HAL_COMMAND.download ? "the ROM's download mode" : "its Launcher";
   if (!found.candidates.length) {
-    throw new CliError("firmware_unreachable", `${found.name} is running a firmware, and 203c finds neither its MIDI nor its HID`, {exit: EXIT.refused,
+    throw new CliError("firmware_unreachable", `${found.name} is running a firmware, and 203cli finds neither its MIDI nor its HID`, {exit: EXIT.refused,
       hint: `Put it in its Launcher yourself: ${BY_HAND}; then run it again`});
   }
   const before = listPorts();
@@ -146,7 +146,7 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
     const tried = (error.tried || []).map(w => `${w.via}${w.path ? " " + w.path : ""}: ${w.error}`).join("; ");
     const denied = (error.tried || []).some(w => /EACCES|EPERM/.test(String(w.error)));
     throw new CliError("firmware_unreachable", `${found.name} is running a firmware and cannot be asked to restart (${tried || "no way to reach it"})`, {exit: EXIT.refused,
-      hint: process.platform === "darwin" ? `203c needs python3 for CoreMIDI (xcode-select --install); or put it in its Launcher yourself: ${BY_HAND}`
+      hint: process.platform === "darwin" ? `203cli needs python3 for CoreMIDI (xcode-select --install); or put it in its Launcher yourself: ${BY_HAND}`
         : denied ? `No permission for its MIDI or HID: add yourself to the audio group (sudo usermod -aG audio $USER, then log in again); or put it in its Launcher yourself: ${BY_HAND}`
           : `Close programs that hold its MIDI (a DAW); or put it in its Launcher yourself: ${BY_HAND}`,
       data: {tried: error.tried || []}});
@@ -233,7 +233,7 @@ export async function flashDevice(ctx) {
   if (!o.dry_run) {
     // Windows: Node has no serial port API (no native modules here), a COM port included: the website does it.
     if (!supported) {
-      throw new CliError("unsupported_platform", "203c flash talks to the serial port on macOS and Linux", {exit: EXIT.refused,
+      throw new CliError("unsupported_platform", "203cli flash talks to the serial port on macOS and Linux", {exit: EXIT.refused,
         hint: o.bin ? `On Windows the website does it in Chrome or Edge: ${siteOf(ctx.api)}/firmware › Flash a local file (烧录本地固件), and choose ${o.bin}`
           : "On Windows use " + WEBSITE, data: {url: siteOf(ctx.api) + (o.bin ? "/firmware" : "/" + code)}});
     }
@@ -276,7 +276,7 @@ export async function flashDevice(ctx) {
           for (const end = Date.now() + 12000; !again && Date.now() < end;) { again = findFirmware(); if (!again) await sleep(200); }
           if (!again) throw error;   // no firmware came back: what the port or the Launcher said
           if (attempt > 0) {
-            throw new CliError("launcher_countdown", `${restarted.name} restarted into its Launcher, which started the firmware again before 203c reached it`, {exit: EXIT.later, next: [ctx.cmd()],
+            throw new CliError("launcher_countdown", `${restarted.name} restarted into its Launcher, which started the firmware again before 203cli reached it`, {exit: EXIT.later, next: [ctx.cmd()],
               hint: "Put it in its Launcher yourself: press HOME (the key left of the screen) and choose Back to Launcher, then run it again. A firmware without that menu: hold FN, run it again, and let go of FN once the Launcher's menu shows (FN held while it restarts keeps the Launcher in its menus)"});
           }
           restarted = await restartToPort(ctx, {want: o.port ? String(o.port) : null, found: again});
@@ -324,7 +324,7 @@ export async function flashDevice(ctx) {
     if (o.dry_run) {
       return {json: {dry_run: true, target, port, ...(firmware ? {running: firmware.name, restart: true} : {}), ...info, next: [ctx.cmd({remove: ["dry-run"]})]},
         text: `Would install ${what} for ${target} as "${info.name}" (${info.size} bytes) over USB${port ? " on " + port : ""}. ` +
-          (firmware ? `${firmware.name} is running a firmware: 203c restarts it into its Launcher first. ` : "") +
+          (firmware ? `${firmware.name} is running a firmware: 203cli restarts it into its Launcher first. ` : "") +
           "No account needed: the device only has to be on (in its Launcher or running a firmware) and on a USB cable."};
     }
 

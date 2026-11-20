@@ -1,7 +1,7 @@
 // A firmware's description and gallery as the community wants them (the user, 2026-11-20: "简介必须按照产品简介一样，简洁
 // 高效" and "使用CLI应该强制上传3~5张不同的"): the guide (reference/description-guide.md, also the website's
 // /guide/description), its template, the description's length as the community counts it, and the gallery's rule for a
-// publish with 203c. Pure functions: publish.mjs, scaffold.mjs and guide.mjs use them. Part of the Agent Skill
+// publish with 203cli. Pure functions: publish.mjs, scaffold.mjs and guide.mjs use them. Part of the Agent Skill
 // skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
@@ -11,7 +11,7 @@ export const GUIDE_URL = "https://cardenza.203.io/community/guide/description";
 export const GUIDE_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "reference", "description-guide.md");
 // Characters, pictures not counted: aim for 800; over 1500 a warning; over 3000 the community refuses a new or changed one.
 export const DESCRIPTION_TARGET = 800, DESCRIPTION_WARN = 1500, DESCRIPTION_MAX = 3000;
-// The gallery a publish with 203c leaves (the site only suggests it): 3-5 pictures, all different.
+// The gallery a publish with 203cli leaves (the site only suggests it): 3-5 pictures, all different.
 export const GALLERY_MIN = 3, GALLERY_MOST = 5;
 
 // A picture placed by the description (![words](image:<id>)): not counted.

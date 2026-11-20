@@ -1,7 +1,7 @@
 // A recovery flash (恢复刷机): what goes into a device's internal flash to bring it back to the official
 // state, the 203 Launcher and the device's official firmware at their newest stable versions, laid out
 // exactly as the Launcher itself leaves it after installing that firmware from its catalog. Pure (no DOM,
-// no network): the site (pages/recover.js), 203c (`devices recover`, its copy recover-plan.mjs) and the
+// no network): the site (pages/recover.js), 203cli (`devices recover`, its copy recover-plan.mjs) and the
 // tests use it. Sources (203-launcher 0.2.0, read 2026-11-16):
 // - src/partition_table_model.cpp: the table at 0x8000 (entries, the MD5 entry), its checks
 //   (launcherPartitionValidate), where an app goes (launcherPartitionCreateOtaApp: the first free range,
@@ -454,7 +454,7 @@ export function assembleFlash(plan, size = plan.flashSize) {
   return out;
 }
 
-/** One line per write and per partition, for logs and 203c. */
+/** One line per write and per partition, for logs and 203cli. */
 export function describePlan(plan) {
   return [
     `erase: the whole flash (${plan.flashSize / 1048576} MB)`,

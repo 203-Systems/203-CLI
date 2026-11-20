@@ -1,4 +1,4 @@
-// 203c new: a firmware project to start from, the way the rules lay one out (CardenzaHAL docs/FIRMWARE-PROJECT.md "Start a
+// 203cli new: a firmware project to start from, the way the rules lay one out (CardenzaHAL docs/FIRMWARE-PROJECT.md "Start a
 // project"), in one step: a git repository, CardenzaHAL as the submodule components/CardenzaHAL, the HAL's
 // examples/template copied next to it and named (CMake's project(), 203.json, the release workflow), a README that says
 // how to build, try and publish it. It builds as it is (the template does), for the board and the browser. Nothing is
@@ -61,19 +61,19 @@ ${block([["git submodule update --init --recursive", "after cloning: the HAL"], 
 ## Try it on a Cardenza
 
 \`\`\`sh
-${block([[`203c flash --bin build/${id}.bin`, "over the USB cable, through the 203 Launcher (which stays)"], ["203c log", "what it prints"]])}
+${block([[`203cli flash --bin build/${id}.bin`, "over the USB cable, through the 203 Launcher (which stays)"], ["203cli log", "what it prints"]])}
 \`\`\`
 
 ## Publish
 
 \`\`\`sh
-${block([["203c login", "once on a computer: the browser asks you to approve"], ["203c publish --dry-run", "what the community will check"],
-    ["203c publish", "the first version; then CI: .github/workflows/firmware.yml"], ["203c inbox", "what people asked for and said"]])}
+${block([["203cli login", "once on a computer: the browser asks you to approve"], ["203cli publish --dry-run", "what the community will check"],
+    ["203cli publish", "the first version; then CI: .github/workflows/firmware.yml"], ["203cli inbox", "what people asked for and said"]])}
 \`\`\`
 
 The page people see: \`docs/description.md\` is its description, short and for people deciding to install, not this
-README ([the guide](${GUIDE_URL}), \`203c help description\`), and ${GALLERY_MIN}–${GALLERY_MOST} screenshots of it in 203.json's \`publish.images\` are
-its pictures (\`203c board screen --out docs/screens/1.png\` with it running on a Cardenza on USB).
+README ([the guide](${GUIDE_URL}), \`203cli help description\`), and ${GALLERY_MIN}–${GALLERY_MOST} screenshots of it in 203.json's \`publish.images\` are
+its pictures (\`203cli board screen --out docs/screens/1.png\` with it running on a Cardenza on USB).
 
 The rules every firmware on CardenzaHAL follows: [FIRMWARE-PROJECT.md](${RULES}).
 `;
@@ -86,7 +86,7 @@ export async function newProject(ctx) {
   const device = String(o.device || "cardenza").toLowerCase();
   if (device !== "cardenza") {
     throw new CliError("no_template", `There is no project template for ${device} yet (only cardenza)`, {exit: EXIT.refused,
-      hint: "Read the device's guide: products/<device>/README.md in 203-CLI (203c rules for the Cardenza)"});
+      hint: "Read the device's guide: products/<device>/README.md in 203-CLI (203cli rules for the Cardenza)"});
   }
   const id = o.project ? String(o.project) : projectId(name);
   if (!/^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(id)) throw ctx.usage(`--project ${id}: letters, digits and _, starting with a letter`, {field: "project"});
@@ -135,7 +135,7 @@ export async function newProject(ctx) {
     writeProject(path.join(dir, PROJECT_FILE), project);
     const tool = fs.existsSync(path.join(hal, "tools", "cardenza.py"));
     fs.writeFileSync(path.join(dir, "README.md"), readme({name, summary, id, tool}));
-    fs.writeFileSync(path.join(dir, "CHANGELOG.md"), "# Changelog\n\n`203c publish` takes a version's release notes from its `## <version>` entry here.\n\n## 0.1.0\n\n- First version.\n");
+    fs.writeFileSync(path.join(dir, "CHANGELOG.md"), "# Changelog\n\n`203cli publish` takes a version's release notes from its `## <version>` entry here.\n\n## 0.1.0\n\n- First version.\n");
     git(["add", "-A"], dir);
     const halCommit = git(["-C", hal, "rev-parse", "--short", "HEAD"], dir).stdout || null;
     const rel = path.relative(ctx.cwd, dir) || ".";
@@ -144,11 +144,11 @@ export async function newProject(ctx) {
       ...(summary ? [] : ["203.json \"summary\": what it does, 1-100 characters (the first publish needs it)"]),
       "a LICENSE file, and its SPDX id in 203.json \"license\"",
       "main/main.cpp: the firmware (the template shows the keys; read the HAL's README for the API)",
-      `${project.publish.description_file ?? "docs/description.md"}: the page's description, from the template: fill in every <…> (203c help description)`,
-      `${GALLERY_MIN}–${GALLERY_MOST} screenshots of it in 203.json "publish.images" (203c board screen --out docs/screens/1.png with it running; the first publish needs them)`,
+      `${project.publish.description_file ?? "docs/description.md"}: the page's description, from the template: fill in every <…> (203cli help description)`,
+      `${GALLERY_MIN}–${GALLERY_MOST} screenshots of it in 203.json "publish.images" (203cli board screen --out docs/screens/1.png with it running; the first publish needs them)`,
       "git commit (everything is staged), then a repository online and its link in 203.json \"source\"",
     ];
-    const next = [`cd ${rel}`, build, `203c flash --bin build/${id}.bin`, "203c log", "203c publish --dry-run"];
+    const next = [`cd ${rel}`, build, `203cli flash --bin build/${id}.bin`, "203cli log", "203cli publish --dry-run"];
     return {json: {status: "created", dir, name, project: id, device, hal: {repo, commit: halCommit}, bin: `build/${id}.bin`, todo, next},
       text: `Made ${name} in ${dir} (CMake project ${id}, CardenzaHAL ${halCommit ?? ""}).\nStill to do:\n${todo.map(t => "  - " + t).join("\n")}\nNext:\n${next.map(n => "  " + n).join("\n")}`};
   } catch (error) {

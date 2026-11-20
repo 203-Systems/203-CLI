@@ -1,14 +1,14 @@
-# What the site does, and the 203c command for it
+# What the site does, and the 203cli command for it
 
-Everything a person does on the site, 203c does (the user, 2026-11-14: "the CLI is the tool AI uses"). Each page
+Everything a person does on the site, 203cli does (the user, 2026-11-14: "the CLI is the tool AI uses"). Each page
 of the site (`site/pages/*.js`) and its functions, with the command. **Web only** marks what is done on the
 website by design: making or removing credentials (sign-ins, bind codes, devices), personal data and closing the
-account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the installed command (else
-`node <the skill's folder>/scripts/203c.mjs`), run from the firmware project's folder.
+account; a token never does those (COMMUNITY.md "Credentials"). `203cli` is the installed command (else
+`node <the skill's folder>/scripts/203cli.mjs`), run from the firmware project's folder.
 
 ## Sections and finding things (home.js, section.js)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | Firmware section: one device, tag tree, Official, Featured, Show forks, sort, search | `firmware list --target cardenza --tag … --official --forks --sort hot --q WORDS --json` (`--cursor` for the next page) |
 | The tag tree of a section, its counts | `sections --json`, `sections show firmware --json` |
@@ -18,7 +18,7 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 
 ## A firmware's page (firmware.js)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | The page (header, about, builds, lineage, clone source, source archive, licence) | `firmware show CODE --json` |
 | A version's page (`/<VCODE>`) | `versions show VCODE --json`; by its label: `versions label CODE 1.4.0 --json` |
@@ -46,7 +46,7 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 
 ## Tutorials (tutorials.js: a firmware's 教程 tab, a tutorial's page, the editor)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | The 教程 / Tutorials tab (`/<CODE>/tutorials`: the official ones first, then others' with their author) | `tutorial list CODE --json` |
 | Every firmware with tutorials (`/tutorials`) | `tutorial list --all --target cardenza --json` |
@@ -61,7 +61,7 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 
 ## Making and changing a firmware (firmware-forms.js)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | /new: an original | `init`, then `publish --dry-run` / `publish` (or `firmware create --name … --summary …`) |
 | /new: a mod (its original picked first) | `fork CODE DIR` (clones, writes 203.json with `forked_from`); `publish` from inside |
@@ -83,7 +83,7 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 
 ## Sharing (works.js, models.js, packs.js, posts.js, comments)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | Upload a work / model / sound pack / project | `works upload FILE`, `models upload FILE…`, `sounds upload FILE…`, `projects upload FILE…` (`--dry-run`) |
 | Show, edit, delete, download | `works|models|sounds|projects show|edit|delete|download ID` |
@@ -94,7 +94,7 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 
 ## The account (me.js, user.js, misc.js)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | Profile: name, avatar (preset), bio | `me edit --name … --avatar a07 --bio …` |
 | Drawn avatar | web only (the drawing board); `api POST /me` with `avatar_pixels` works too |
@@ -105,8 +105,8 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 | A person's page | `user ID [WHAT]` |
 | What is left of today's limits | `quotas --json` (the site shows it nowhere yet) |
 | This sign-in (kind, scopes) | `whoami --json` (`credential`) |
-| 个人令牌 Personal tokens: list, delete, new | **web only** (/me/tokens); `logout` revokes 203c's own |
-| Sign 203c in | `login` (opens /authorize in the browser; `--with-token`: a personal token made on /me/tokens; `--no-browser`: a code for /activate) |
+| 个人令牌 Personal tokens: list, delete, new | **web only** (/me/tokens); `logout` revokes 203cli's own |
+| Sign 203cli in | `login` (opens /authorize in the browser; `--with-token`: a personal token made on /me/tokens; `--no-browser`: a code for /activate) |
 | Approve a sign-in (/authorize, /activate) | **web only** (the site's own sign-in says who approves) |
 | 我的设备 (the profile's tab; /me/devices leads there): the list, online or off | `devices list --json` |
 | 我的设备: 升级启动器 (a device's Launcher behind the newest: from → to, the version's notes) | `devices list --json` (`launcher_update`), `devices update-launcher DEVICE --json` |
@@ -120,13 +120,13 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 
 ## Developers (requests.js, the tracker)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | The internal tracker of your firmware's requests | `dev list`, `dev read CODE N`, `dev update CODE N --status … --note …` |
 
 ## Admins (admin.js, item-menu.js)
 
-| Site | 203c |
+| Site | 203cli |
 |---|---|
 | Overview, people, ban, unban, close an account | `admin overview`, `admin users`, `admin ban ID`, `admin unban ID`, `admin delete-user ID --yes` |
 | Content: hide, unhide, delete, feature; hidden list | `admin hide|unhide|delete KIND REF`, `admin feature KIND REF`, `api GET /admin/hidden` |

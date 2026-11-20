@@ -1,4 +1,4 @@
-// 203c's guided workflows: doctor, the one-shot idempotent publish (firmware made if needed, cover,
+// 203cli's guided workflows: doctor, the one-shot idempotent publish (firmware made if needed, cover,
 // draft resumed, BINs uploaded, the checks awaited), firmware create / edit / cover with the page's
 // quality checks, the page checklist, uploads with --dry-run, init (203.json), fork provenance, source
 // archives and the project rules. Everything is
@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {ApiError, BLOCKED_CODES, CLI_VERSION, COMMUNITY_HOSTS, DEFAULT_API, agentSandbox, failed, isDnsFailure, offline, probeHost, uploadCover, uploadPicture, uploadSource,
+import {ApiError, BLOCKED_CODES, CLI_VERSION, COMMUNITY_HOSTS, DEFAULT_API, rememberedApi, agentSandbox, failed, isDnsFailure, offline, probeHost, uploadCover, uploadPicture, uploadSource,
   tokenFile} from "./lib.mjs";
 import {PROJECT_FILE, LEGACY_FILE, NAME_RULE, nameOk, checkProject, cloneUrlOf, cmakeProjectName, findProjectFile, gitTagVersion, licenseOf, manifestOf, remotePage,
   versionTxt, writeProject} from "./project.mjs";
@@ -17,6 +17,7 @@ import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
 import {CliError, EXIT, maybeSandbox} from "./guide.mjs";
 import {skillState} from "./skill.mjs";
 import {checkUpdates, optedOut} from "./updates.mjs";
+import {findCommand} from "./rename.mjs";
 import {DESCRIPTION_MAX, DESCRIPTION_TARGET, DESCRIPTION_WARN, GALLERY_MIN, GALLERY_MOST, GUIDE_URL, descriptionLength, galleryRule, placeholderIn,
   scaffoldDescription} from "./description.mjs";
 import {EMSDK_HINT, describeSim, explainBuild, findHal, findProject, halScript, readSimDir, runBuild, sameBuild, simLine, simState, toolchain,
@@ -179,20 +180,31 @@ export async function doctor(ctx) {
   const checks = [];
   const check = (name, ok, detail, extra = {}) => checks.push({name, ok, detail, ...extra});
   const node = Number(process.versions.node.split(".")[0]);
-  check("node", node >= 18, `Node ${process.versions.node}${node >= 18 ? "" : " (203c needs Node 18 or newer)"}`);
-  const cli = {name: "cli", ok: true, detail: `203c ${CLI_VERSION}`};
+  check("node", node >= 18, `Node ${process.versions.node}${node >= 18 ? "" : " (203cli needs Node 18 or newer)"}`);
+  const cli = {name: "cli", ok: true, detail: `203cli ${CLI_VERSION}`};
   checks.push(cli);
-  // A newer 203c, this project's CardenzaHAL behind its main (updates.mjs): asked now, whatever the day's answer (only the
+  // A newer 203cli, this project's CardenzaHAL behind its main (updates.mjs): asked now, whatever the day's answer (only the
   // user's own switch stops it, not CI), through the client (its sandbox's network), waited for at the end.
   const updatesOff = optedOut(ctx.client.env ?? process.env);
   const updating = updatesOff ? null : checkUpdates({from: ctx.cwd ?? process.cwd(), cwd: ctx.cwd ?? process.cwd(), fresh: true,
     env: ctx.client.env ?? process.env, fetch: ctx.client.fetch}).catch(() => null);
-  // The Agent Skill beside it (npm installs the command only: 203c skill install puts the skill where agents read it).
+  // 203c, 203cli's old name, still on PATH (rename.mjs): what to do about it. 203cli is the only CLI now.
+  const old = findCommand("203c", ctx.client.env ?? process.env);
+  if (old) {
+    const own = findCommand("203cli", ctx.client.env ?? process.env);
+    const quoted = /^[A-Za-z0-9_@%+=:,./-]+$/.test(old.file) ? old.file : `'${old.file}'`;
+    check("old_name", false, `203c, the old name of 203cli, is still installed: ${old.file}`, {optional: true});
+    r.warn("old_name_installed", `203c is renamed 203cli, and 203c is still installed (${old.file}): it gets no more updates or support`,
+      {hint: (own ? "" : "Install 203cli first (then run 203cli instead of 203c, in scripts too). ") +
+        (old.npm ? "Then uninstall 203c." : "Then delete that file: an older install.sh wrote it."),
+      next: [...(own ? [] : ["npm install -g 203cli", "203cli skill install"]), old.npm ? "npm uninstall -g 203c" : `rm ${quoted}`]});
+  }
+  // The Agent Skill beside it (npm installs the command only: 203cli skill install puts the skill where agents read it).
   const skill = skillState();
   check("skill", skill.ok, skill.detail, {optional: true});
-  if (!skill.ok) r.warn("skill_missing", `The Agent Skill is ${/not installed/.test(skill.detail) ? "not installed" : "older than this 203c"}: coding agents read the rules from it`,
+  if (!skill.ok) r.warn("skill_missing", `The Agent Skill is ${/not installed/.test(skill.detail) ? "not installed" : "older than this 203cli"}: coding agents read the rules from it`,
     {next: [ctx.run(["skill", "install"])]});
-  // A sandboxed agent (Claude Code on the web, Codex …): its network allowlist decides what 203c reaches.
+  // A sandboxed agent (Claude Code on the web, Codex …): its network allowlist decides what 203cli reaches.
   const sandbox = agentSandbox(ctx.client.env);
   if (sandbox) check("sandbox", true, `${{claude_code: "a Claude Code cloud session (CLAUDE_CODE_REMOTE)", codex: "Codex's sandbox, network off (CODEX_SANDBOX_NETWORK_DISABLED)"}[sandbox]}: ` +
     `its network allowlist must allow ${COMMUNITY_HOSTS.join(" and ")} (help sandbox)`, {optional: true});
@@ -208,7 +220,7 @@ export async function doctor(ctx) {
         hint: `Check the network; --api URL or COMMUNITY_API sets the address (default ${DEFAULT_API})` + (dns ? ". " + maybeSandbox(ctx.client.lang) : ""), next: [ctx.cmd({})]});
     }
   }
-  if (info) check("api", info.version === 2, `${ctx.api}: API version ${info.version}${info.version === 2 ? "" : " (203c speaks version 2: update the skill)"}`);
+  if (info) check("api", info.version === 2, `${ctx.api}: API version ${info.version}${info.version === 2 ? "" : " (203cli speaks version 2: update the skill)"}`);
   // Both of the community's hosts (the live copy and its twin), when the API is one of them: a sandbox's allowlist needs both.
   const apiHost = new URL(ctx.api).hostname;
   if (COMMUNITY_HOSTS.includes(apiHost)) {
@@ -218,7 +230,7 @@ export async function doctor(ctx) {
       check("host", probe.ok, `${host}: ${probe.ok ? "reachable" : error && BLOCKED_CODES.has(error.code) ? `blocked (${error.code}, ${error.data?.reason})`
         : `no answer (${error?.message ?? "?"})`}`, {host, ...(error ? {code: error.code} : {})});
       if (probe.ok || host === apiHost) continue;
-      // The twin alone: 203c works through the API's host, the user allows this one too.
+      // The twin alone: 203cli works through the API's host, the user allows this one too.
       const same = apiFailure && apiFailure.code === error.code;
       r.warn(error.code, error.message, {hint: same ? "the same as above" : error.hint ?? "", host});
     }
@@ -244,7 +256,7 @@ export async function doctor(ctx) {
       const c = account.credential;
       check("account", true, `${account.name} (${account.id})${account.role === "admin" ? ", admin" : ""}; signed in as ${c ? `${c.kind} "${c.name}"` : "a token"}; scopes: ${(account.scopes ?? []).join(", ")}`);
       if (ctx.trusted) {
-        check("publish", true, `trusted publishing: ${ctx.trusted.firmware}'s versions on ${ctx.trusted.channel_allowed.join(", ")}, until ${ctx.trusted.expires_at} (renewed by 203c in this run)`);
+        check("publish", true, `trusted publishing: ${ctx.trusted.firmware}'s versions on ${ctx.trusted.channel_allowed.join(", ")}, until ${ctx.trusted.expires_at} (renewed by 203cli in this run)`);
       } else try {
         // GET /me/quotas (exact); the two version limits keep the names doctor answered before.
         const names = {versions_stable_beta: "stable_beta_versions", versions_dev: "dev_versions"};
@@ -261,7 +273,7 @@ export async function doctor(ctx) {
   const updates = updating ? await updating : null;
   if (updatesOff) check("updates", true, `not checked: ${updatesOff} is set`, {optional: true});
   else if (updates) {
-    if (updates.cli.outdated) Object.assign(cli, {ok: false, optional: true, detail: `203c ${CLI_VERSION} (${updates.cli.latest} is out)`});
+    if (updates.cli.outdated) Object.assign(cli, {ok: false, optional: true, detail: `203cli ${CLI_VERSION} (${updates.cli.latest} is out)`});
     else if (!updates.cli.latest) cli.detail += " (npm did not answer: not checked for a newer one)";
     const hal = updates.hal;
     if (hal) {
@@ -323,7 +335,7 @@ async function usedToday(ctx, limits) {
 
 // ---------------------------------------------------------------------------------------------
 // The project file: 203.json (COMMUNITY.md "The project file 203.json"; project.mjs), or the earlier
-// 203c.json. {data (publish's keys), project (203.json as written), dir, file, legacy}.
+// 203cli.json. {data (publish's keys), project (203.json as written), dir, file, legacy}.
 
 const MANIFEST_KEYS = ["firmware", "name", "summary", "description", "description_file", "tags", "source_url", "clone_url", "cover", "images", "channel", "version",
   "notes", "notes_file", "bins", "bin", "notices", "commit", "private", "launcher", "project", "sim", "license", "$schema", "comment"];
@@ -347,7 +359,7 @@ function loadManifest(ctx) {
       hint: "Fix the JSON (no comments, no trailing commas): help manifest", next: [ctx.run(["help", "manifest"], {json: false})]});
   }
   if (found.legacy) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new CliError("invalid", "203c.json is a JSON object", {exit: EXIT.usage, field: "manifest"});
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new CliError("invalid", "203cli.json is a JSON object", {exit: EXIT.usage, field: "manifest"});
     if ("password" in raw || "token" in raw) {
       throw new CliError("invalid", `${name} holds a ${"password" in raw ? "password" : "token"}: never keep secrets in it`, {exit: EXIT.usage, field: "manifest",
         hint: "Remove it from the file; give --password on the command line (or COMMUNITY_TOKEN for the token)"});
@@ -639,12 +651,12 @@ function checkDescription(ctx, r, text, {before, where} = {}) {
   if (token) {
     r.problem("placeholder", words2(ctx, `The description still holds the template's ${token}: write it in your own words`,
       `简介里还留着模板的提示 ${token}：换成自己的话`), {field: "description", exit: EXIT.usage,
-      hint: words2(ctx, `Fill in every <…> of ${file} (203c help description: the guide, with an example)`, `把 ${file} 里的每个 <…> 换成自己的内容（203c help description：写法和例子）`),
+      hint: words2(ctx, `Fill in every <…> of ${file} (203cli help description: the guide, with an example)`, `把 ${file} 里的每个 <…> 换成自己的内容（203cli help description：写法和例子）`),
       next: [ctx.run(["help", "description"], {json: false})]});
   }
   const length = descriptionLength(text);
-  const where2 = words2(ctx, `Key tables and every mode's keys go in its tutorial, building it in the README, what changed in the release notes. The guide: ${GUIDE_URL} (203c help description)`,
-    `键位表和每个模式的按键放到教程里，编译方法放到 README，每个版本的变化放到发布说明。写法：${GUIDE_URL}（203c help description）`);
+  const where2 = words2(ctx, `Key tables and every mode's keys go in its tutorial, building it in the README, what changed in the release notes. The guide: ${GUIDE_URL} (203cli help description)`,
+    `键位表和每个模式的按键放到教程里，编译方法放到 README，每个版本的变化放到发布说明。写法：${GUIDE_URL}（203cli help description）`);
   if (length > DESCRIPTION_MAX) {
     r.problem("description_too_long", words2(ctx, `The description is ${length} characters (pictures not counted): at most ${DESCRIPTION_MAX}. It is a product page for people deciding to install, not a manual`,
       `简介有 ${length} 个字符（插图不算），最多 ${DESCRIPTION_MAX}。简介是给想安装的人看的产品介绍，不是说明书`), {field: "description", data: {length, max: DESCRIPTION_MAX, guide: GUIDE_URL},
@@ -658,19 +670,19 @@ function checkDescription(ctx, r, text, {before, where} = {}) {
   }
 }
 
-// How to make a gallery: screenshots of the firmware running, from the development channel (203c board screen).
+// How to make a gallery: screenshots of the firmware running, from the development channel (203cli board screen).
 function screenshotsHint(ctx, code) {
   const add = code ? ` firmware images add ${code} docs/screens/1.png docs/screens/2.png docs/screens/3.png` : "";
-  return words2(ctx, "Run it on a Cardenza on the USB cable and take a screenshot of each main screen: 203c board screen --out docs/screens/1.png (then 2.png, 3.png; " +
+  return words2(ctx, "Run it on a Cardenza on the USB cable and take a screenshot of each main screen: 203cli board screen --out docs/screens/1.png (then 2.png, 3.png; " +
     "the firmware starts CardenzaHAL's USB: CardenzaHAL::USB::Init()). List them in 203.json's \"publish\": {\"images\": [\"docs/screens/1.png\", …]} (or --image for each) and run this again" +
-    (add ? `, or add them now: 203c${add}` : "") + ". A device without a screen: photos of it running.",
-  "在 USB 线连着的 Cardenza 上运行它，每个主要画面截一张：203c board screen --out docs/screens/1.png（再 2.png、3.png；固件要启动 CardenzaHAL 的 USB：" +
-    "CardenzaHAL::USB::Init()）。写进 203.json 的 \"publish\": {\"images\": [\"docs/screens/1.png\", …]}（或者每张一个 --image），再运行一次" + (add ? `；或者现在就加上：203c${add}` : "") +
+    (add ? `, or add them now: 203cli${add}` : "") + ". A device without a screen: photos of it running.",
+  "在 USB 线连着的 Cardenza 上运行它，每个主要画面截一张：203cli board screen --out docs/screens/1.png（再 2.png、3.png；固件要启动 CardenzaHAL 的 USB：" +
+    "CardenzaHAL::USB::Init()）。写进 203.json 的 \"publish\": {\"images\": [\"docs/screens/1.png\", …]}（或者每张一个 --image），再运行一次" + (add ? `；或者现在就加上：203cli${add}` : "") +
     "。没有屏幕的设备：拍几张它运行时的照片。");
 }
 
 /**
- * The gallery a publish with 203c leaves: 3-5 different pictures (the user, 2026-11-20: "使用CLI应该强制上传3~5张不同的"; the site
+ * The gallery a publish with 203cli leaves: 3-5 different pictures (the user, 2026-11-20: "使用CLI应该强制上传3~5张不同的"; the site
  * only suggests it). `items`: [{sha, name}] (203.json's publish.images when given, else the firmware's gallery). Refused
  * (gallery_pictures) when `refuse`, else a warning (gallery_short). Answers the rule.
  */
@@ -680,29 +692,29 @@ function galleryCheck(ctx, r, items, {code, fromManifest, refuse}) {
   const {count, duplicates} = rule;
   const listIds = code ? [ctx.run(["firmware", "images", "list", code])] : [];
   if (!refuse) {
-    r.warn("gallery_short", rule.problem === "same" ? words2(ctx, `The gallery shows the same picture twice (${duplicates.join(", ")}): the next 203c publish of a version needs 3–5 different ones`,
-      `图片里有重复的（${duplicates.join("、")}）：下次用 203c 发布新版本需要 3–5 张不同的`)
-      : words2(ctx, `The gallery has ${plural(count, "picture")}: the next 203c publish of a version needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
-        `图片有 ${count} 张：下次用 203c 发布新版本需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`), {field: "images", data: {count, min: GALLERY_MIN, max: GALLERY_MOST},
+    r.warn("gallery_short", rule.problem === "same" ? words2(ctx, `The gallery shows the same picture twice (${duplicates.join(", ")}): the next 203cli publish of a version needs 3–5 different ones`,
+      `图片里有重复的（${duplicates.join("、")}）：下次用 203cli 发布新版本需要 3–5 张不同的`)
+      : words2(ctx, `The gallery has ${plural(count, "picture")}: the next 203cli publish of a version needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
+        `图片有 ${count} 张：下次用 203cli 发布新版本需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`), {field: "images", data: {count, min: GALLERY_MIN, max: GALLERY_MOST},
       hint: rule.problem === "few" ? screenshotsHint(ctx, code) : words2(ctx, "Keep 3–5 different ones (203.json's publish.images)", "留下 3–5 张不同的（203.json 的 publish.images）"), next: listIds});
     return rule;
   }
   const message = rule.problem === "few"
-    ? words2(ctx, `The gallery would have ${plural(count, "picture")}: 203c publishes a firmware with ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it (shown large above its description: what people look at first)`,
-      `图片只有 ${count} 张：用 203c 发布，固件要有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图（显示在简介上面的大图，大家最先看的就是它们）`)
+    ? words2(ctx, `The gallery would have ${plural(count, "picture")}: 203cli publishes a firmware with ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it (shown large above its description: what people look at first)`,
+      `图片只有 ${count} 张：用 203cli 发布，固件要有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图（显示在简介上面的大图，大家最先看的就是它们）`)
     : rule.problem === "many"
-      ? words2(ctx, `The gallery would have ${count} pictures: 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}; keep the best and leave out the rest`,
-        `图片有 ${count} 张：用 203c 发布最多 ${GALLERY_MOST} 张，留下最好的 ${GALLERY_MIN}–${GALLERY_MOST} 张，其余去掉`)
+      ? words2(ctx, `The gallery would have ${count} pictures: 203cli publishes with ${GALLERY_MIN}–${GALLERY_MOST}; keep the best and leave out the rest`,
+        `图片有 ${count} 张：用 203cli 发布最多 ${GALLERY_MOST} 张，留下最好的 ${GALLERY_MIN}–${GALLERY_MOST} 张，其余去掉`)
       : words2(ctx, `The gallery would show the same picture twice (${duplicates.join(", ")}): ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
         `图片里有重复的（${duplicates.join("、")}）：要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`);
   const hint = rule.problem === "few" ? screenshotsHint(ctx, code)
     : rule.problem === "many"
       ? fromManifest ? words2(ctx, "Keep 3–5 in 203.json's publish.images or --image (publish removes the others from the gallery)", "203.json 的 publish.images 或 --image 里留 3–5 张（发布时会把其余的从图片里去掉）")
-        : words2(ctx, `List the 3–5 to keep in 203.json's publish.images (publish removes the others), or remove some: 203c firmware images remove ${code} ID… --yes (the ids: 203c firmware images list ${code})`,
-          `在 203.json 的 publish.images 里写要留的 3–5 张（发布时会去掉其余的），或者删掉几张：203c firmware images remove ${code} ID… --yes（ID 见 203c firmware images list ${code}）`)
+        : words2(ctx, `List the 3–5 to keep in 203.json's publish.images (publish removes the others), or remove some: 203cli firmware images remove ${code} ID… --yes (the ids: 203cli firmware images list ${code})`,
+          `在 203.json 的 publish.images 里写要留的 3–5 张（发布时会去掉其余的），或者删掉几张：203cli firmware images remove ${code} ID… --yes（ID 见 203cli firmware images list ${code}）`)
       : fromManifest ? words2(ctx, "Name each file once (publish.images, --image), each a different screenshot", "每个文件只写一次（publish.images、--image），每张都是不同的截图")
-        : words2(ctx, `Remove the copy: 203c firmware images remove ${code} ID --yes (the ids: 203c firmware images list ${code})`,
-          `删掉重复的那张：203c firmware images remove ${code} ID --yes（ID 见 203c firmware images list ${code}）`);
+        : words2(ctx, `Remove the copy: 203cli firmware images remove ${code} ID --yes (the ids: 203cli firmware images list ${code})`,
+          `删掉重复的那张：203cli firmware images remove ${code} ID --yes（ID 见 203cli firmware images list ${code}）`);
   const next = rule.problem === "few" ? [ctx.run(["board", "screen", "--out", "docs/screens/1.png"]),
     code ? ctx.run(["firmware", "images", "add", code, "docs/screens/1.png", "docs/screens/2.png", "docs/screens/3.png"]) : null] : listIds;
   r.problem("gallery_pictures", message, {field: "images", data: {count, distinct: rule.distinct, min: GALLERY_MIN, max: GALLERY_MOST, duplicates}, hint, next});
@@ -718,28 +730,28 @@ function galleryAdvice(ctx, r, fw) {
     ? words2(ctx, `${name}'s gallery has ${plural(rule.count, "picture")}: a firmware's page shows ${GALLERY_MIN}–${GALLERY_MOST} different screenshots above its description, and a trusted-publishing run cannot add them`,
       `${name} 的图片只有 ${rule.count} 张：固件页的简介上面应有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图，自动发布不能添加图片`)
     : rule.problem === "many"
-      ? words2(ctx, `${name}'s gallery has ${rule.count} pictures: 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}, and a trusted-publishing run cannot change them`,
-        `${name} 的图片有 ${rule.count} 张：用 203c 发布最多 ${GALLERY_MOST} 张，自动发布不能改图片`)
+      ? words2(ctx, `${name}'s gallery has ${rule.count} pictures: 203cli publishes with ${GALLERY_MIN}–${GALLERY_MOST}, and a trusted-publishing run cannot change them`,
+        `${name} 的图片有 ${rule.count} 张：用 203cli 发布最多 ${GALLERY_MOST} 张，自动发布不能改图片`)
       : words2(ctx, `${name}'s gallery shows the same picture twice: ${GALLERY_MIN}–${GALLERY_MOST} different ones, and a trusted-publishing run cannot change them`,
         `${name} 的图片里有重复的：要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的，自动发布不能改图片`);
-  const hint = words2(ctx, `Its owner fixes it once (this release goes on): on the site, the firmware's edit page › Pictures, or signed in as the owner: 203c firmware images add ${code} a.png b.png c.png ` +
-    "(or 203.json's publish.images, then 203c publish). Screenshots: 203c board screen --out docs/screens/1.png with it running on a Cardenza on USB.",
-  `由固件的所有者补一次（这次发布照常进行）：在网站上，固件的编辑页 › 图片；或者用自己的登录：203c firmware images add ${code} a.png b.png c.png（或写进 203.json 的 publish.images，` +
-    "再 203c publish）。截图：固件在 USB 线连着的 Cardenza 上运行时，203c board screen --out docs/screens/1.png。");
+  const hint = words2(ctx, `Its owner fixes it once (this release goes on): on the site, the firmware's edit page › Pictures, or signed in as the owner: 203cli firmware images add ${code} a.png b.png c.png ` +
+    "(or 203.json's publish.images, then 203cli publish). Screenshots: 203cli board screen --out docs/screens/1.png with it running on a Cardenza on USB.",
+  `由固件的所有者补一次（这次发布照常进行）：在网站上，固件的编辑页 › 图片；或者用自己的登录：203cli firmware images add ${code} a.png b.png c.png（或写进 203.json 的 publish.images，` +
+    "再 203cli publish）。截图：固件在 USB 线连着的 Cardenza 上运行时，203cli board screen --out docs/screens/1.png。");
   r.warn("gallery_short", message, {field: "images", data: {count: rule.count, min: GALLERY_MIN, max: GALLERY_MOST}, hint});
   // GitHub Actions shows it on the run's page (a workflow command; stderr, so that --json's stdout stays one JSON answer).
   if (process.env.GITHUB_ACTIONS === "true") {
     const escape = text => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
-    process.stderr.write(`::warning title=${escape("203c: the gallery").replace(/:/g, "%3A").replace(/,/g, "%2C")}::${escape(message + ". " + hint)}\n`);
+    process.stderr.write(`::warning title=${escape("203cli: the gallery").replace(/:/g, "%3A").replace(/,/g, "%2C")}::${escape(message + ". " + hint)}\n`);
   }
 }
 
 /** Pictures taken out of the gallery leave fewer than 3: allowed, with a word on what the next publish needs. */
 function galleryLeft(ctx, r, left, code) {
-  r.warn("gallery_short", words2(ctx, `The gallery will have ${plural(left, "picture")}: the next 203c publish needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
-    `去掉后图片剩 ${left} 张：下次用 203c 发布需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`), {field: "images", data: {count: left, min: GALLERY_MIN, max: GALLERY_MOST},
-    hint: words2(ctx, `Add others: 203c firmware images add ${code} a.png b.png … (screenshots: 203c board screen --out docs/screens/1.png)`,
-      `再加几张：203c firmware images add ${code} a.png b.png …（截图：203c board screen --out docs/screens/1.png）`)});
+  r.warn("gallery_short", words2(ctx, `The gallery will have ${plural(left, "picture")}: the next 203cli publish needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
+    `去掉后图片剩 ${left} 张：下次用 203cli 发布需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`), {field: "images", data: {count: left, min: GALLERY_MIN, max: GALLERY_MOST},
+    hint: words2(ctx, `Add others: 203cli firmware images add ${code} a.png b.png … (screenshots: 203cli board screen --out docs/screens/1.png)`,
+      `再加几张：203cli firmware images add ${code} a.png b.png …（截图：203cli board screen --out docs/screens/1.png）`)});
 }
 
 const pictureRow = (fw, x) => ({id: x.id, place: x.place, caption: x.caption ?? "", width: x.width ?? null, height: x.height ?? null, sha256: x.sha256 ?? null,
@@ -781,13 +793,13 @@ export async function addPictures(ctx) {
   }
   const count = have.filter(x => x.place === place).length;
   const most = place === "gallery" ? GALLERY_MAX : TEXT_PICTURES_MAX;
-  // A gallery of more than 5 cannot be published with 203c (a launcher's may hold the community's 9).
+  // A gallery of more than 5 cannot be published with 203cli (a launcher's may hold the community's 9).
   if (fw && place === "gallery" && fw.kind !== "launcher" && plans.length && count + plans.length > GALLERY_MOST) {
-    r.problem("gallery_pictures", words2(ctx, `The gallery has ${plural(count, "picture")}: ${plans.length} more would be ${count + plans.length}, and 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}`,
-      `图片已有 ${count} 张，再加 ${plans.length} 张就是 ${count + plans.length} 张：用 203c 发布最多 ${GALLERY_MOST} 张`), {field: "images",
+    r.problem("gallery_pictures", words2(ctx, `The gallery has ${plural(count, "picture")}: ${plans.length} more would be ${count + plans.length}, and 203cli publishes with ${GALLERY_MIN}–${GALLERY_MOST}`,
+      `图片已有 ${count} 张，再加 ${plans.length} 张就是 ${count + plans.length} 张：用 203cli 发布最多 ${GALLERY_MOST} 张`), {field: "images",
       data: {count: count + plans.length, min: GALLERY_MIN, max: GALLERY_MOST, duplicates: []},
-      hint: words2(ctx, `Remove the ones you like least first (203c firmware images remove ${code} ID --yes; the ids: 203c firmware images list ${code}), or add fewer`,
-        `先删掉不太好的几张（203c firmware images remove ${code} ID --yes；ID 见 203c firmware images list ${code}），或者少加几张`),
+      hint: words2(ctx, `Remove the ones you like least first (203cli firmware images remove ${code} ID --yes; the ids: 203cli firmware images list ${code}), or add fewer`,
+        `先删掉不太好的几张（203cli firmware images remove ${code} ID --yes；ID 见 203cli firmware images list ${code}），或者少加几张`),
       next: [ctx.run(["firmware", "images", "list", code])]});
   } else if (fw && count + plans.length > most) {
     r.problem("conflict", `${place === "gallery" ? "The gallery" : "The description"} has ${count} pictures: ${plans.length} more would be over ${most}`, {field: place === "gallery" ? "images" : "description_images",
@@ -797,8 +809,8 @@ export async function addPictures(ctx) {
   for (const x of skipped) ctx.note(`${x.file} is already there (${x.id}, ${x.place})`);
   const after = count + plans.length;
   if (fw && place === "gallery" && fw.kind !== "launcher" && after < GALLERY_MIN && !r.problems.length) {
-    ctx.note(words2(ctx, `the gallery will have ${plural(after, "picture")}: 203c publish needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
-      `图片会有 ${after} 张：用 203c 发布需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`));
+    ctx.note(words2(ctx, `the gallery will have ${plural(after, "picture")}: 203cli publish needs ${GALLERY_MIN}–${GALLERY_MOST} different ones`,
+      `图片会有 ${after} 张：用 203cli 发布需要 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的`));
   }
   if (o.dry_run) return dryOut(ctx, r);
   if (r.problems.length) failWith(ctx, r);
@@ -841,11 +853,11 @@ export async function editPicture(ctx) {
     body.place = o.place;
     const inGallery = (fw.images ?? []).length;
     if (o.place === "gallery" && fw.kind !== "launcher" && inGallery >= GALLERY_MOST) {
-      r.problem("gallery_pictures", words2(ctx, `The gallery has ${inGallery} pictures: one more would be ${inGallery + 1}, and 203c publishes with ${GALLERY_MIN}–${GALLERY_MOST}`,
-        `图片已有 ${inGallery} 张，再加一张就是 ${inGallery + 1} 张：用 203c 发布最多 ${GALLERY_MOST} 张`), {field: "images",
+      r.problem("gallery_pictures", words2(ctx, `The gallery has ${inGallery} pictures: one more would be ${inGallery + 1}, and 203cli publishes with ${GALLERY_MIN}–${GALLERY_MOST}`,
+        `图片已有 ${inGallery} 张，再加一张就是 ${inGallery + 1} 张：用 203cli 发布最多 ${GALLERY_MOST} 张`), {field: "images",
         data: {count: inGallery + 1, min: GALLERY_MIN, max: GALLERY_MOST, duplicates: []},
-        hint: words2(ctx, `Remove one first (203c firmware images remove ${code} ID --yes), or move one out: 203c firmware images edit ${code} ID --place description`,
-          `先删掉一张（203c firmware images remove ${code} ID --yes），或者把一张移到简介里：203c firmware images edit ${code} ID --place description`),
+        hint: words2(ctx, `Remove one first (203cli firmware images remove ${code} ID --yes), or move one out: 203cli firmware images edit ${code} ID --place description`,
+          `先删掉一张（203cli firmware images remove ${code} ID --yes），或者把一张移到简介里：203cli firmware images edit ${code} ID --place description`),
         next: [ctx.run(["firmware", "images", "list", code])]});
     } else if (o.place === "gallery" && inGallery >= GALLERY_MAX) {
       r.problem("conflict", `The gallery has ${GALLERY_MAX} pictures, the most`, {field: "images", hint: "Remove one first", next: [ctx.run(["firmware", "images", "list", code])]});
@@ -1008,7 +1020,7 @@ function planTextPictures(ctx, r, text, {dir, fw, root = ctx.cwd, flag = "descri
   }
   if (remote) {
     r.warn("remote_pictures", `The description names ${remote} picture${remote > 1 ? "s" : ""} on other sites: the page shows ${remote > 1 ? "them" : "it"} as a link (it loads pictures from the community only)`,
-      {hint: "Save them in the project (e.g. docs/) and name the files: 203c uploads them"});
+      {hint: "Save them in the project (e.g. docs/) and name the files: 203cli uploads them"});
   }
   return {text: out, uploads, remote};
 }
@@ -1109,11 +1121,11 @@ async function firmwareFor(ctx, r, code, {need = "release"} = {}) {
         r.problem("publish_only", trusted.firmware === fw.code && need !== "release"
           ? `This sign-in (trusted publishing from GitHub Actions) publishes ${fw.code}'s versions only: it does not change the firmware`
           : `This sign-in (trusted publishing from GitHub Actions) publishes ${trusted.firmware} only, not ${fw.code}`, {exit: EXIT.refused,
-          hint: "Page edits, covers, channels, other firmware and account actions need the owner's own sign-in (the site, or 203c login on a computer)"});
+          hint: "Page edits, covers, channels, other firmware and account actions need the owner's own sign-in (the site, or 203cli login on a computer)"});
         return fw;
       }
       if (!fw.owner) {
-        r.problem("official_from_hub", `${fw.name} (${code}) is an official firmware from the Launcher hub: ${need === "release" ? "its versions are published by its CI through the hub, not by 203c" : "only admins change it"}`,
+        r.problem("official_from_hub", `${fw.name} (${code}) is an official firmware from the Launcher hub: ${need === "release" ? "its versions are published by its CI through the hub, not by 203cli" : "only admins change it"}`,
           {exit: EXIT.refused, hint: "Publish your own firmware instead (publish --name …), or ask an admin", next: [ctx.run(["firmware", "mine"])]});
       } else {
         r.problem("not_yours", `${fw.name} (${code}) belongs to ${fw.owner.name}, not to you`, {exit: EXIT.refused,
@@ -1173,10 +1185,10 @@ export async function createFirmware(ctx, {fork} = {}) {
   const pictures = planTextPictures(ctx, r, body.description, {dir: textDir(ctx, o.description_file, ctx.cwd), fw: null});
   if (body.description !== undefined) body.description = pictures.text;
   checkDescription(ctx, r, body.description, {where: o.description_file});
-  // Making it publishes nothing; its first 203c publish needs the gallery.
+  // Making it publishes nothing; its first 203cli publish needs the gallery.
   if (body.kind !== "launcher") {
-    ctx.note(words2(ctx, `its first 203c publish needs ${GALLERY_MIN}–${GALLERY_MOST} different screenshots in the gallery (203.json's publish.images, or firmware images add CODE …; help pictures)`,
-      `用 203c 发布第一个版本时，图片里要有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图（203.json 的 publish.images，或 firmware images add CODE …；help pictures）`));
+    ctx.note(words2(ctx, `its first 203cli publish needs ${GALLERY_MIN}–${GALLERY_MOST} different screenshots in the gallery (203.json's publish.images, or firmware images add CODE …; help pictures)`,
+      `用 203cli 发布第一个版本时，图片里要有 ${GALLERY_MIN}–${GALLERY_MOST} 张不同的截图（203.json 的 publish.images，或 firmware images add CODE …；help pictures）`));
   }
   if (o.dry_run) return dryOut(ctx, r);
   if (r.problems.length) failWith(ctx, r);
@@ -1246,7 +1258,7 @@ export async function editFirmware(ctx) {
 const pageText = value => typeof value === "string" ? value.replace(/\r\n/g, "\n").replace(/^[ \n\t]+|[ \n\t]+$/g, "") : value ?? "";
 const samePageValue = (mine, theirs) => JSON.stringify(pageText(mine)) === JSON.stringify(pageText(theirs));
 
-// API answers keep their shape; 203c's advice comes as "advice" beside them.
+// API answers keep their shape; 203cli's advice comes as "advice" beside them.
 const withAdvice = (value, r) => r.warnings.length ? {...value, advice: r.warnings.map(clean)} : value;
 const adviceText = r => r.warnings.length ? "To make the page better:\n" + r.warnings.map(w => `  ! ${w.message}${w.hint ? ": " + w.hint : ""}${w.next?.[0] ? "\n    → " + w.next[0] : ""}`).join("\n") + "\n" : "";
 
@@ -1332,13 +1344,13 @@ export async function publish(ctx, {mode}) {
   }
 
   // Who is publishing, and to which firmware: --firmware, else the firmware this clone is bound to
-  // (clone / fork set git config 203c.firmware), else 203c.json's.
+  // (clone / fork set git config 203cli.firmware), else 203cli.json's.
   const account = await me(ctx, r);
   const trusted = ctx.trusted ?? null;
   let fw = null, creating = false, fwCode = null;
-  const bound = mode === "publish" && o.firmware === undefined && o.name === undefined ? gitConfig(ctx.cwd, "203c.firmware") : null;
-  if (bound && m.firmware && normalizeCode(m.firmware).code !== bound) ctx.note(`${path.basename(manifest.file)} says ${m.firmware}; this clone is bound to ${bound} (git config 203c.firmware), which wins`);
-  else if (bound) ctx.note(`publishing to ${bound}, the firmware this clone is bound to (git config 203c.firmware)`);
+  const bound = mode === "publish" && o.firmware === undefined && o.name === undefined ? gitConfig(ctx.cwd, "203cli.firmware") : null;
+  if (bound && m.firmware && normalizeCode(m.firmware).code !== bound) ctx.note(`${path.basename(manifest.file)} says ${m.firmware}; this clone is bound to ${bound} (git config 203cli.firmware), which wins`);
+  else if (bound) ctx.note(`publishing to ${bound}, the firmware this clone is bound to (git config 203cli.firmware)`);
   const firmwareGiven = mode === "versions" ? ctx.args.CODE : bound ?? from("firmware").value;
   const nameGiven = from("name").value;
   // Fork provenance (COMMUNITY.md "Fork provenance"): a project file (or a clone) that names someone
@@ -1672,7 +1684,7 @@ export async function publish(ctx, {mode}) {
   if (trusted && imagesGiven.value !== undefined) ctx.note("the gallery is left as it is (a trusted-publishing credential publishes versions only)");
   const galleryPlan = account && !trusted ? planGallery(ctx, r, imagesGiven.value, fw, {base: imagesGiven.base, rule: kind !== "launcher"}) : null;
   const gallery = galleryPlan?.any ? galleryPlan : null;
-  // The gallery it leaves (the user, 2026-11-20: 203c publishes with 3-5 different screenshots; the site only suggests
+  // The gallery it leaves (the user, 2026-11-20: 203cli publishes with 3-5 different screenshots; the site only suggests
   // it): publish.images when given, else the firmware's as it is. A person's publish of an app is refused without; a
   // run that publishes nothing and changes no picture only warns. A trusted-publishing run cannot change pictures: a
   // warning for its owner, never a failure (CI's releases go on).
@@ -1806,7 +1818,7 @@ export async function publish(ctx, {mode}) {
     saveManifest(ctx, manifest, {code: fw.code, ...(fork ? {forked_from: {code: fork.from.code, version: fork.version}} : {}),
       ...(fork?.made && project && project.name !== fork.name ? {name: fork.name} : creating && !fork && project && page.name && project.name !== page.name ? {name: page.name} : {}),
       author: account.name, fork: !!fork?.made});
-    if (bound && bound !== fw.code) { git(["config", "203c.firmware", fw.code], {cwd: ctx.cwd}); ctx.note(`this clone now publishes to ${fw.code} (git config 203c.firmware)`); }
+    if (bound && bound !== fw.code) { git(["config", "203cli.firmware", fw.code], {cwd: ctx.cwd}); ctx.note(`this clone now publishes to ${fw.code} (git config 203cli.firmware)`); }
   }
   if (!creating) {
     if (textPictures.uploads.length && pageChanges.description !== undefined) pageChanges.description = await sendTextPictures(ctx, fwCode, textPictures);
@@ -2144,7 +2156,7 @@ async function simAnswer(ctx, vcode, {uploaded = false, files = undefined, wait 
   return {json, text: text + (state.status === "boots" && hal ? `\n  built with CardenzaHAL ${hal}${state.toolchain?.emscripten ? ", Emscripten " + state.toolchain.emscripten : ""}` : "")};
 }
 
-// A version as 203c answers it: what an agent needs, not the whole check log.
+// A version as 203cli answers it: what an agent needs, not the whole check log.
 function compactVersion(v) {
   return {code: v.code, version: v.version, channel: v.channel, status: v.status, build: v.build, published: v.published, notes: v.notes,
     source_commit: v.source_commit, warnings: v.warnings, check: v.check ? {status: v.check.status, failed: (v.check.steps ?? []).filter(s => s.status === "fail")} : null,
@@ -2237,11 +2249,11 @@ function checklistOf(ctx, fw, newestStable) {
     {item: "a summary that says what it does (≤ 100 characters)", ok: !!fw.summary && !summaryRepeatsName(fw.summary, fw.name), fix: run("edit", code, "--summary", "<one line: what it does>")},
     {item: "a cover (a 16:9 picture; a stable version needs one)", ok: !!(fw.cover || fw.inherited_cover || fw.screen), before_stable: fw.kind !== "launcher",
       fix: run("cover", code, "cover.png"), ...(coverNow ? {now: coverNow, better: run("cover", code, "cover.png")} : {})},
-    // The gallery (COMMUNITY.md "Pictures"): shown large above the description; 203c publishes with 3-5 different ones.
-    {item: `a gallery of ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it, shown large above the description (203c publish needs them)${gallery.ok ? "" : `: it has ${gallery.count}${gallery.duplicates.length ? ", some the same" : ""}`}`,
+    // The gallery (COMMUNITY.md "Pictures"): shown large above the description; 203cli publishes with 3-5 different ones.
+    {item: `a gallery of ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it, shown large above the description (203cli publish needs them)${gallery.ok ? "" : `: it has ${gallery.count}${gallery.duplicates.length ? ", some the same" : ""}`}`,
       ok: fw.kind === "launcher" ? (fw.images ?? []).length > 0 : gallery.ok, fix: run("images", "add", code, "docs/screens/1.png", "docs/screens/2.png", "docs/screens/3.png"),
-      ...(gallery.ok ? {} : {how: "203c board screen --out docs/screens/1.png (the firmware running on a Cardenza on USB)"})},
-    // The description (the guide, 203c help description): for people deciding to install, short.
+      ...(gallery.ok ? {} : {how: "203cli board screen --out docs/screens/1.png (the firmware running on a Cardenza on USB)"})},
+    // The description (the guide, 203cli help description): for people deciding to install, short.
     {item: `a description for people deciding to install: what it is, 3–6 features, what it needs, how to start (aim for ${DESCRIPTION_TARGET} characters, at most ${DESCRIPTION_MAX})` +
       (described && (described < 80 || described > DESCRIPTION_WARN) ? `: it has ${described}` : ""),
       ok: described >= 80 && described <= DESCRIPTION_MAX, fix: run("edit", code, "--description-file", "docs/description.md")},
@@ -2396,7 +2408,7 @@ export async function dryRunUpload(ctx, kind, {then = false} = {}) {
     if (o.thumbnail) {
       const local = readLocal(ctx, r, o.thumbnail, {what: "The thumbnail", flag: "thumbnail", max: LIMITS.model.thumbnail});
       if (local && !(local.bytes[0] === 0x89 && local.bytes[1] === 0x50)) r.problem("wrong_file", "--thumbnail is a PNG picture", {field: "thumbnail"});
-    } else if (!hasStl && (o.preview ?? "").toLowerCase().endsWith(".glb")) r.problem("usage", "203c draws thumbnails only from an STL: give --thumbnail picture.png", {exit: EXIT.usage, field: "thumbnail"});
+    } else if (!hasStl && (o.preview ?? "").toLowerCase().endsWith(".glb")) r.problem("usage", "203cli draws thumbnails only from an STL: give --thumbnail picture.png", {exit: EXIT.usage, field: "thumbnail"});
     if (o.target) {
       const known = await targetsKnown(ctx);
       if (known.includes(String(o.target).toLowerCase())) o.target = String(o.target).toLowerCase();
@@ -2447,7 +2459,7 @@ export async function init(ctx) {
   if (fs.existsSync(here) && !o.force) {
     throw new CliError("needs_force", "203.json is already here", {exit: EXIT.confirm, hint: "Edit it, or add --force to write it again", next: [ctx.cmd({add: {force: true}})]});
   }
-  // The earlier 203c.json is moved over (its keys into 203.json's).
+  // The earlier 203cli.json is moved over (its keys into 203.json's).
   const legacy = existing?.legacy && path.dirname(existing.file) === ctx.cwd ? JSON.parse(fs.readFileSync(existing.file, "utf8")) : {};
   const account = await ctx.client.get("/me").catch(() => null);
   const found = findAppImages([path.join(ctx.cwd, "build"), ctx.cwd]);
@@ -2512,10 +2524,10 @@ export async function init(ctx) {
   if (descriptionFile) {
     const at = path.resolve(ctx.cwd, descriptionFile);
     const text = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : "";
-    if (placeholderIn(text)) todo.push(`${descriptionFile}: the page's description, from the template: fill in every <…> (what it is, 3–6 features, what it needs, how to start; 203c help description)`);
-    else if (/^readme(\.md)?$/i.test(path.basename(descriptionFile))) todo.push(`"publish.description_file" is ${descriptionFile}: the page wants a short description for people deciding to install, not the README (docs/description.md; 203c help description)`);
+    if (placeholderIn(text)) todo.push(`${descriptionFile}: the page's description, from the template: fill in every <…> (what it is, 3–6 features, what it needs, how to start; 203cli help description)`);
+    else if (/^readme(\.md)?$/i.test(path.basename(descriptionFile))) todo.push(`"publish.description_file" is ${descriptionFile}: the page wants a short description for people deciding to install, not the README (docs/description.md; 203cli help description)`);
   }
-  if (project.publish.images === undefined) todo.push(`"publish.images": ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it (203c board screen --out docs/screens/1.png with it running on a Cardenza on USB); 203c publish needs them`);
+  if (project.publish.images === undefined) todo.push(`"publish.images": ${GALLERY_MIN}–${GALLERY_MOST} different screenshots of it (203cli board screen --out docs/screens/1.png with it running on a Cardenza on USB); 203cli publish needs them`);
   if (!project.summary) todo.push('"summary": one line (≤ 100 characters) saying what it does');
   if (!project.publish.bins) todo.push('"publish.bins": {"cardenza": "build/<project>.bin"} (build the firmware first)');
   if (!project.publish.notes_file) todo.push('a CHANGELOG.md with a "## <version>" entry per release ("publish.notes_file")');
@@ -2525,19 +2537,19 @@ export async function init(ctx) {
   if (txt) todo.push(`(the version is ${txt.file}'s: ${txt.value})`);
   writeProject(here, project);
   if (existing?.legacy && Object.keys(legacy).length) ctx.note(`moved ${path.basename(existing.file)} into 203.json; delete ${path.basename(existing.file)} when you have checked it`);
-  if (description?.written) ctx.note(`wrote ${description.rel}: the description's template (203c help description)`);
+  if (description?.written) ctx.note(`wrote ${description.rel}: the description's template (203cli help description)`);
   return {json: {written: here, project, ...(description?.written ? {description: path.join(ctx.cwd, description.rel)} : {}), todo, next: [ctx.run(["publish", "--dry-run"])]},
     text: `Wrote ${here}:\n${JSON.stringify(project, null, 2)}\n${todo.length ? "Still to do:\n" + todo.map(t => "  - " + t).join("\n") + "\n" : ""}Commit it with the source. Then check: ${ctx.run(["publish", "--dry-run"], {json: false})}`};
 }
 
 // ---------------------------------------------------------------------------------------------
 // fork / clone: a firmware's source to change, bound to your fork so that publish from inside it
-// goes there (git config 203c.firmware in the clone).
+// goes there (git config 203cli.firmware in the clone).
 
-const SCRIPT = fileURLToPath(new URL("./203c.mjs", import.meta.url));
+const SCRIPT = fileURLToPath(new URL("./203cli.mjs", import.meta.url));
 // A command that works from any folder (the next step is often run inside the clone).
-const anywhere = (ctx, words) => [...(ctx.prog === "203c" ? ["203c"] : ["node", SCRIPT.includes(" ") ? `'${SCRIPT}'` : SCRIPT]), ...words,
-  ...(ctx.api !== (process.env.COMMUNITY_API || DEFAULT_API).replace(/\/+$/, "") ? ["--api", ctx.api] : []), ...(ctx.json ? ["--json"] : [])].join(" ");
+const anywhere = (ctx, words) => [...(ctx.prog === "203cli" ? ["203cli"] : ["node", SCRIPT.includes(" ") ? `'${SCRIPT}'` : SCRIPT]), ...words,
+  ...(ctx.api !== rememberedApi(process.env.COMMUNITY_API || DEFAULT_API) ? ["--api", ctx.api] : []), ...(ctx.json ? ["--json"] : [])].join(" ");
 
 function git(args, {cwd, quiet = true} = {}) {
   try {
@@ -2602,9 +2614,9 @@ export async function forkFirmware(ctx) {
     fork = await ctx.client.post("/firmware", {name, summary, visibility: "public", ...priv, forked_from: code});
   }
   // Inside a clone bound to the parent: now bound to the fork.
-  if (gitConfig(ctx.cwd, "203c.firmware") === code) {
-    git(["config", "203c.firmware", fork.code], {cwd: ctx.cwd});
-    ctx.note(`this clone now publishes to your fork ${fork.code} (git config 203c.firmware)`);
+  if (gitConfig(ctx.cwd, "203cli.firmware") === code) {
+    git(["config", "203cli.firmware", fork.code], {cwd: ctx.cwd});
+    ctx.note(`this clone now publishes to your fork ${fork.code} (git config 203cli.firmware)`);
   }
   let cloned = null;
   const into = ctx.args.DIR ?? o.clone;
@@ -2664,8 +2676,8 @@ const defaultDir = url => path.basename(String(url).replace(/\/+$/, "")).replace
 async function cloneInto(ctx, fw, dirGiven, source) {
   const dir = path.resolve(ctx.cwd, dirGiven ?? defaultDir(source.url));
   if (fs.existsSync(dir) && fs.readdirSync(dir).length) {
-    if (gitConfig(dir, "203c.firmware")) {
-      git(["config", "203c.firmware", fw.code], {cwd: dir});
+    if (gitConfig(dir, "203cli.firmware")) {
+      git(["config", "203cli.firmware", fw.code], {cwd: dir});
       ctx.note(`${dir} is already a clone: bound to ${fw.code} now`);
       return {dir, url: source.url, reused: true};
     }
@@ -2680,7 +2692,7 @@ async function cloneInto(ctx, fw, dirGiven, source) {
       hint: gone ? "The repository does not exist or is private (git asked for a sign-in): tell the firmware's owner its clone link does not work; with access, sign git in and run it again"
         : "Check the network, then run the same command again", next: gone ? [] : [ctx.cmd({})]});
   }
-  git(["config", "203c.firmware", fw.code], {cwd: dir});
+  git(["config", "203cli.firmware", fw.code], {cwd: dir});
   return {dir, url: source.url};
 }
 
@@ -2853,6 +2865,6 @@ export async function rules(ctx) {
     if (!text) ctx.note(`could not fetch ${from}${why}: the copy in the skill`);
   }
   if (!text) { from = RULES_FILE; try { text = fs.readFileSync(RULES_FILE, "utf8"); } catch { text = null; } }
-  if (!text) throw new CliError("not_found", "The rules are not in this copy of the skill", {hint: "Reinstall the skill, or: 203c rules --online"});
+  if (!text) throw new CliError("not_found", "The rules are not in this copy of the skill", {hint: "Reinstall the skill, or: 203cli rules --online"});
   return {json: {from, text}, text};
 }

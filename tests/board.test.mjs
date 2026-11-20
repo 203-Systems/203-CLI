@@ -1,7 +1,7 @@
-// 203c board: a running firmware's development channel over USB (CardenzaHAL docs/usb-dev.md). The bytes (7-bit packing,
+// 203cli board: a running firmware's development channel over USB (CardenzaHAL docs/usb-dev.md). The bytes (7-bit packing,
 // SysEx and HID framing, answers put back together, gaps, errors, ARG, CANCEL), the screen as a PNG, the keys' names, and
 // every command end to end against a stand-in firmware (tests/board-fake.mjs): in-process through the link interface the
-// real backends give, and on Linux behind pseudo-terminals as ALSA raw MIDI and hidraw in a stand-in sysfs, run as 203c
+// real backends give, and on Linux behind pseudo-terminals as ALSA raw MIDI and hidraw in a stand-in sysfs, run as 203cli
 // itself. Nothing here looks for a real device.
 // Run: node --test tests/board.test.mjs
 import {test, before, after} from "node:test";
@@ -20,17 +20,17 @@ import {keyNumber, keyName, parseCombo, pressSteps, parseSteps, keyRequests, dec
   filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, partitionsText, memoryText} from "../scripts/board.mjs";
 import {CliError, EXIT} from "../scripts/guide.mjs";
 
-const CLI = path.join(ROOT, "scripts/203c.mjs");
+const CLI = path.join(ROOT, "scripts/203cli.mjs");
 const PTY = process.platform === "linux" && spawnSync("python3", ["-I", "-c", "import pty, tty"]).status === 0;
 let dir;
-before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "203c-board-")); });
+before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-board-")); });
 after(() => fs.rmSync(dir, {recursive: true, force: true}));
 
 const usage = (message, extra = {}) => new CliError("usage", message, {exit: EXIT.usage, ...extra});
-/** A command's context as 203c.mjs makes it, with the stand-in firmware as the only way to the device. */
+/** A command's context as 203cli.mjs makes it, with the stand-in firmware as the only way to the device. */
 function ctxFor(fake, {args = {}, flags = {}, json = false} = {}) {
   const said = [];
-  return {args, flags, json, cwd: dir, said, usage, cmd: () => "203c board", say: t => said.push(t), note: t => said.push(t), progress: () => {},
+  return {args, flags, json, cwd: dir, said, usage, cmd: () => "203cli board", say: t => said.push(t), note: t => said.push(t), progress: () => {},
     boardLinks: [{via: "fake", where: "fake", name: "203 Systems Cardenza", open: () => fake.link()}]};
 }
 
@@ -464,7 +464,7 @@ for line in sys.stdin:
 });
 
 // ---------------------------------------------------------------------------------------------
-// 203c board itself, on Linux: the stand-in firmware behind pseudo-terminals as ALSA raw MIDI and hidraw in a stand-in sysfs.
+// 203cli board itself, on Linux: the stand-in firmware behind pseudo-terminals as ALSA raw MIDI and hidraw in a stand-in sysfs.
 
 // The other side of a pty: what is written to it goes to stdout, stdin is written to it (whole, however long).
 const BRIDGE = `
@@ -540,7 +540,7 @@ function cli(args, env = {}) {
   });
 }
 
-test("203c board over raw MIDI, signed out: info, screen, press, files put and get", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
+test("203cli board over raw MIDI, signed out: info, screen, press, files put and get", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
   const fake = new FakeBoard({files: {"CardenzaSynth/Logs/log.txt": Buffer.from("I (5) boot\n")}});
   const pty = await ptyFor(fake);
   try {
@@ -575,7 +575,7 @@ test("203c board over raw MIDI, signed out: info, screen, press, files put and g
   } finally { pty.close(); }
 });
 
-test("203c board over hidraw when raw MIDI cannot be opened; a HAL too old says so", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
+test("203cli board over hidraw when raw MIDI cannot be opened; a HAL too old says so", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
   const fake = new FakeBoard({kind: "hid", rle: false});
   const pty = await ptyFor(fake);
   try {
@@ -620,7 +620,7 @@ test("only a serial port: the 203 Launcher is told apart from a firmware that do
       } else {
         assert.equal(r.error.code, "board_no_usb");
         assert.match(r.error.error, /CardenzaHAL::USB::Init\(\);` after `CardenzaHAL::Init\(\)` in app_main/);
-        assert.match(r.error.hint, /203c log still reads its console/);
+        assert.match(r.error.hint, /203cli log still reads its console/);
       }
     } finally { pty.close(); }
   }

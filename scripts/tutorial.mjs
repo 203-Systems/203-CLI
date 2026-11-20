@@ -1,4 +1,4 @@
-// 203c tutorial: a firmware's tutorials (教程, COMMUNITY.md "Tutorials"), written in the one tutorial format
+// 203cli tutorial: a firmware's tutorials (教程, COMMUNITY.md "Tutorials"), written in the one tutorial format
 // (reference/tutorial-format.md, checked by tutorial-format.mjs, the module the community's API and editor run too):
 // start a file, check it with every error at its line and column, publish it (its local pictures uploaded once, by
 // SHA-256, and sent as image:<id>; the file itself stays as written), add a link to a tutorial elsewhere, list, show,

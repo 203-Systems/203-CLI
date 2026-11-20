@@ -31,7 +31,7 @@
 // 0x303A:0x1001), the Launcher's console. A HAL that restarts plainly (every firmware released before 2026-11-18) lets the
 // Launcher count down to its last app: hold() keeps it on its home screen. Only a name with "Cardenza" is ever sent a command:
 // a Mystrix (Matrix OS, the same vendor ID and bytes) would go to its own update mode. The browser side is firmware-usb.js;
-// 203c's is the skill's restart.mjs.
+// 203cli's is the skill's restart.mjs.
 export const HAL_VENDOR = 0x0203;
 export const HAL_REPORT = 0xcb;
 export const HAL_COMMAND = {launcher: 0x40, reboot: 0x41, download: 0x42, identify: 0x44};

@@ -1,23 +1,27 @@
 ---
 name: 203-community
-description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203c, and make firmware for 203 devices the recommended way (a guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203c rules, 203.json). Use it to start a Cardenza firmware from CardenzaHAL's template (new), try it on the user's device over USB (flash through the Launcher, log, board), publish versions from a laptop or CI (trusted publishing) with simulator versions and source archives, create or fork firmware and clone their source, bind a project to its firmware or move it (link), set the cover and page, read what the community has about the project's firmware for planning (sync: page, versions, requests, comments, forks; project diff) and keep the tracker, see why the checks sent a version back and appeal it, share sound packs, projects, works and 3D models, send firmware over Wi-Fi, search and comment, and, for admins, moderate.
+description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203cli (formerly 203c), and make firmware for 203 devices the recommended way (a guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203cli rules, 203.json). Use it to start a Cardenza firmware from CardenzaHAL's template (new), try it on the user's device over USB (flash through the Launcher, log, board), publish versions from a laptop or CI (trusted publishing) with simulator versions and source archives, create or fork firmware and clone their source, bind a project to its firmware or move it (link), set the cover and page, read what the community has about the project's firmware for planning (sync: page, versions, requests, comments, forks; project diff) and keep the tracker, see why the checks sent a version back and appeal it, share sound packs, projects, works and 3D models, send firmware over Wi-Fi, search and comment, and, for admins, moderate.
 ---
 
 # 203 community
 
-Everything goes through one command, `203c` (Node 18+, nothing else to install):
+Everything goes through one command, `203cli` (Node 18+, nothing else to install):
 
 ```sh
-203c <command> … --json
+203cli <command> … --json
 ```
 
-Install (macOS, Linux, Windows; Node.js 18+): `npm install -g 203c`, then `203c skill install` puts this skill where
-the agents read it (run it again after an update; `203c doctor` says when it is older than the command). Where `203c`
-is not found, run `node <this skill's folder>/scripts/203c.mjs` instead (e.g.
-`node ~/.claude/skills/203-community/scripts/203c.mjs`): the same CLI. **Run it from the firmware project's folder**
+Install (macOS, Linux, Windows; Node.js 18+): `npm install -g 203cli`, then `203cli skill install` puts this skill where
+the agents read it (run it again after an update; `203cli doctor` says when it is older than the command). Where `203cli`
+is not found, run `node <this skill's folder>/scripts/203cli.mjs` instead (e.g.
+`node ~/.claude/skills/203-community/scripts/203cli.mjs`): the same CLI. **Run it from the firmware project's folder**
 (where `203.json` and `build/` are): paths are relative to the current folder, and `publish` reads `./203.json`.
-The commands 203c prints in `next` are ready to run as they are (with the full path when `203c` is not on PATH).
-Making a firmware? Read the device's page first (below); for the Cardenza, `203c rules` prints the firmware project
+The commands 203cli prints in `next` are ready to run as they are (with the full path when `203cli` is not on PATH).
+203cli was called `203c` (npm package and command, up to 3.5.0): where a script, a workflow, a README or the user says
+`203c`, it means 203cli, with the same commands, flags, JSON and exit codes. Use `203cli`; the old `203c` command and
+`scripts/203c.mjs` still run 203cli after a notice (on stderr), so suggest the switch: `npm install -g 203cli && 203cli skill
+install`, then `npm uninstall -g 203c`.
+Making a firmware? Read the device's page first (below); for the Cardenza, `203cli rules` prints the firmware project
 rules (CardenzaHAL's `docs/FIRMWARE-PROJECT.md`: dependencies, files, HAL rules, builds, checks, publishing).
 
 ## Products: what to read first
@@ -28,7 +32,7 @@ skill's folder (also at https://github.com/203-Systems/203-CLI):
 
 | Device | Read | Build on | Publish |
 |---|---|---|---|
-| Cardenza (鸣片) | `products/cardenza/README.md`, then `203c rules` | CardenzaHAL, ESP-IDF 5.3.5 | `publish` (device `cardenza`, the default) |
+| Cardenza (鸣片) | `products/cardenza/README.md`, then `203cli rules` | CardenzaHAL, ESP-IDF 5.3.5 | `publish` (device `cardenza`, the default) |
 | NullPerator (零序) | `products/nullperator/README.md` | the NullPerator firmware tree, ESP-IDF 5.3.5 (developer preview) | `publish --bin nullperator=….bin` |
 | Mystrix, Mystrix Pro, Mystrix 2 (魔矩) | `products/mystrix/README.md` | Matrix OS, ESP-IDF 5.3.x | `publish --bin mystrix=….uf2 --bin mystrix2=….uf2` (download only) |
 
@@ -39,7 +43,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 
 1. **Always add `--json`.** The answer is JSON on stdout; an error is one JSON line on stderr (its last line; `login`
    may print one `{"status":"waiting",…}` line before it while it waits). `--help --json` describes any command as JSON.
-2. **Run `doctor` first** (`203c doctor --json`): it says whether you are signed in and what to do if not.
+2. **Run `doctor` first** (`203cli doctor --json`): it says whether you are signed in and what to do if not.
    Every command but `login`, `logout`, `help`, `doctor`, `rules`, `updates` and `ops` needs the sign-in (exit 4 without it), except what
    goes over a USB cable: `flash`, `log`, `board` and `devices recover` work signed out (signing in is for Wi-Fi: sending to a bound device), and `new`.
    On a person's own terminal a command that needs the sign-in starts it by itself (the browser, once on a computer).
@@ -47,7 +51,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 4. **Never guess a code.** Codes are 6 characters (e.g. `K7M2QX`). Get them from `firmware mine --json`, `firmware list --official --json` or `search WORDS --json`.
 5. **On an error, read `code`, `hint` and `next`.** `next[0]` is the exact command to run next. If it contains `<…>`, replace that part with the real value (the CLI refuses placeholders). Exit 6 means a decision: add `--force` / `--yes` only if the user wants it.
 6. Never ask the user for passwords, cookies or tokens (a personal token goes into `login --with-token` on their own terminal, never into the chat). Do not invent summaries, release notes or appeal reasons: write them from what you know, or ask.
-7. **Working on a firmware that is published (203.json has a `code`)? Run `203c sync --json` first and read
+7. **Working on a firmware that is published (203.json has a `code`)? Run `203cli sync --json` first and read
    `.203/community.md`**: its page, every version's notes, what users asked for and said (requests, comments, replies),
    merge requests and forks. Plan from it; answer people with `comments add` when the work is done.
 8. Paths are relative to the current folder. Give the application image `build/<project>.bin` (not `bootloader.bin`, not a merged image, not the `.elf`); the CLI names the right file when you give a wrong one.
@@ -58,10 +62,10 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 |---|---|
 | make a new firmware for a Cardenza (from nothing) | `new "NAME" --summary "…" --json`, then workflow 0 |
 | check that everything works | `doctor --json` |
-| is 203c, or this project's CardenzaHAL, out of date? | `updates --json` (below: "Update notices") |
+| is 203cli, or this project's CardenzaHAL, out of date? | `updates --json` (below: "Update notices") |
 | sign in | `login --json` (opens the browser; the user approves on the site; it waits up to 5 minutes) — no browser: the user runs `login --with-token` (a personal token from the site) — remote: `login --no-browser --json` → give the user `verify_url` and `user_code` → `login --wait --json` |
 | see your firmware and their codes | `firmware mine --json` |
-| install a firmware on a device over a USB cable (线刷; no sign-in, no bound device; macOS / Linux) | `flash CODE --dry-run --json`, then `flash CODE --json` (the device on and on a cable, in its Launcher or running a firmware: 203c restarts a running firmware into its Launcher first; `--bin build/app.bin` for a local build, `--port PORT` when there are several) |
+| install a firmware on a device over a USB cable (线刷; no sign-in, no bound device; macOS / Linux) | `flash CODE --dry-run --json`, then `flash CODE --json` (the device on and on a cable, in its Launcher or running a firmware: 203cli restarts a running firmware into its Launcher first; `--bin build/app.bin` for a local build, `--port PORT` when there are several) |
 | read a device's log over the USB cable (no sign-in; macOS / Linux) | `log --json` (20 s; a running firmware's console, else the serial port); a test: `log --until "ready" --seconds 30 --json` (exit 0 at the line; 1 `device_crashed` at a panic, `log_timeout`) |
 | look inside the firmware running on the user's Cardenza (no sign-in): what it is, memory and tasks, its screen, keys, last crash, SD card | `board info --json`, `board memory --json`, `board screen --out shot.png --json` (then look at the PNG), `board press down ok --json` (cap names; arrows are `; . , /`), `board coredump --elf build/<project>.elf --json`, `board files ls --json` (`help board`). It needs a firmware built with a current CardenzaHAL that calls `CardenzaHAL::USB::Init()`: `hal_too_old` and `board_no_usb` say what to change |
 | everything the community has about this project's firmware, for planning (203.json here) | `sync --json`, then read `.203/community.md` (the page, versions and notes, requests and comments with replies, merges, forks; new ones marked) |
@@ -98,12 +102,12 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 
 Topics: `help start|new|project|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|description|cover|pictures|tutorials|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
 Every command with its flags: `reference/cli.md`; every endpoint: `reference/api.md`; what the site does and the
-command for each: `reference/parity.md`; the firmware project rules: `reference/firmware-project.md` (`203c rules`); the
+command for each: `reference/parity.md`; the firmware project rules: `reference/firmware-project.md` (`203cli rules`); the
 tutorial format: `reference/tutorial-format.md`.
 
 **Official firmware.** An official firmware that has an owner (`owner` in `firmware show`) is that person's firmware:
-they publish its versions with 203c like any of theirs (yours if it is yours: `firmware mine` lists it). Only an
-official firmware **from the Launcher hub** (`owner` null) takes no versions from 203c (`official_from_hub`).
+they publish its versions with 203cli like any of theirs (yours if it is yours: `firmware mine` lists it). Only an
+official firmware **from the Launcher hub** (`owner` null) takes no versions from 203cli (`official_from_hub`).
 
 **203.json.** A firmware project keeps `203.json` at its root (name, code, version or version.txt, author,
 summary, tags, devices, source, license, forked_from, publish_source, publish: channel/bins/notes_file/cover).
@@ -115,42 +119,42 @@ so (`fork` in `--json`): tell the user, and commit 203.json.
 
 ### 0. A new Cardenza firmware, from nothing to a release
 
-"Make a metronome for the Cardenza" and the like. Read `products/cardenza/README.md` and `203c rules` first.
+"Make a metronome for the Cardenza" and the like. Read `products/cardenza/README.md` and `203cli rules` first.
 
 ```sh
-203c new "Pocket Metronome" --summary "A metronome: tap tempo, accents, a click" --json   # the project, CardenzaHAL inside
+203cli new "Pocket Metronome" --summary "A metronome: tap tempo, accents, a click" --json  # the project, CardenzaHAL inside
 cd pocket-metronome                                     # write main/main.cpp with the HAL's public headers
-python3 components/CardenzaHAL/tools/cardenza.py doctor # what this computer lacks (ESP-IDF 5.3.5, Emscripten, 203c, sign-in)
+python3 components/CardenzaHAL/tools/cardenza.py doctor # what this computer lacks (ESP-IDF 5.3.5, Emscripten, 203cli, sign-in)
 python3 components/CardenzaHAL/tools/cardenza.py build  # the preferred build: checks, then idf.py build; --web: the browser version too
-203c flash --bin build/pocket_metronome.bin --json      # onto the user's Cardenza over USB, through its Launcher (never idf.py flash)
-203c log --until "ready" --seconds 30 --json            # did it start? (its log; device_crashed: decode the backtrace with the ELF)
-203c board screen --out shot.png --json                 # what it shows (look at the PNG); board press …, board memory: help board
-203c login --json                                       # once on a computer (the user approves in the browser)
-203c publish --dry-run --json   then   203c publish --json   # ask the user first; commit 203.json (its code)
-203c link --json                                        # this GitHub repository publishes from CI (trusted publishing)
-203c sync --json                                        # later, before each change: .203/community.md (requests, comments, forks)
+203cli flash --bin build/pocket_metronome.bin --json    # onto the user's Cardenza over USB, through its Launcher (never idf.py flash)
+203cli log --until "ready" --seconds 30 --json          # did it start? (its log; device_crashed: decode the backtrace with the ELF)
+203cli board screen --out shot.png --json               # what it shows (look at the PNG); board press …, board memory: help board
+203cli login --json                                     # once on a computer (the user approves in the browser)
+203cli publish --dry-run --json  then   203cli publish --json   # ask the user first; commit 203.json (its code)
+203cli link --json                                      # this GitHub repository publishes from CI (trusted publishing)
+203cli sync --json                                      # later, before each change: .203/community.md (requests, comments, forks)
 ```
 
 ### 1. Sign in
 
 ```sh
-203c doctor --json
+203cli doctor --json
 # "signed_in": true → done. Otherwise:
-203c login --json
+203cli login --json
 ```
 
 On the user's own computer `login` opens their browser on the site's sign-in page (`/authorize`): tell the user
-"Approve 203c in the browser that just opened (sign in to the site first if it asks)". It waits up to 5 minutes
+"Approve 203cli in the browser that just opened (sign in to the site first if it asks)". It waits up to 5 minutes
 (`--timeout SECONDS`), so give the call that long (or run it in the background); with `--json` it writes
 `{"status":"waiting","via":"browser","authorize_url":"…"}` on stderr first (the link, if the browser did not open). It
-answers `{"status":"signed_in","via":"browser","user":{…},"scopes":["read","write"],"saved":"~/.config/203c/token"}`.
-(It is OAuth's authorization code with PKCE and a redirect to 203c on 127.0.0.1: nothing to copy.)
+answers `{"status":"signed_in","via":"browser","user":{…},"scopes":["read","write"],"saved":"~/.config/203cli/token"}`.
+(It is OAuth's authorization code with PKCE and a redirect to 203cli on 127.0.0.1: nothing to copy.)
 
 Where no browser can be opened, a personal token: the user makes one on the site (设置 › 个人令牌, `/me/tokens`)
 and runs this in their own terminal on this computer (it asks for the token without showing it, checks it, saves it):
 
 ```sh
-203c login --with-token
+203cli login --with-token
 # Paste a personal token (设置 › 个人令牌 on the site):
 # Signed in as …; scopes read, write.
 ```
@@ -162,24 +166,24 @@ An agent running remotely (over SSH, the user at no terminal of this computer) s
 (`--no-browser`; also chosen by itself when no browser can be opened):
 
 ```sh
-203c login --no-browser --json
+203cli login --no-browser --json
 # {"status":"pending","via":"code","verify_url":"https://cardenza.203.io/community/activate?code=ABCD-EFGH","user_code":"ABCD-EFGH",…}
 ```
 
 Tell the user: "Open <verify_url> and approve the code <user_code>." Then (it waits up to 10 minutes; `--timeout`):
 
 ```sh
-203c login --wait --json
-# {"status":"signed_in","via":"code","user":{"id":"…","name":"…"},"scopes":["read","write"],"saved":"~/.config/203c/token"}
+203cli login --wait --json
+# {"status":"signed_in","via":"code","user":{"id":"…","name":"…"},"scopes":["read","write"],"saved":"~/.config/203cli/token"}
 ```
 
 Every way saves a personal token, listed on the site under 设置 › 个人令牌 (Personal tokens). It has no end: sign in
 once, and it works until it is deleted there or `logout` revokes it.
 
 In GitHub Actions there is no token to store: **trusted publishing** (`help ci`). The firmware's owner links the
-repository once (the firmware's page › 开发 › 自动发布, or `203c firmware publishers add CODE --repository OWNER/NAME
---workflow firmware.yml`); the job has `permissions: id-token: write` and runs `203c login --github-oidc --firmware CODE`,
-then `203c publish` as usual. That credential publishes the firmware's versions only (15 minutes, renewed by 203c,
+repository once (the firmware's page › 开发 › 自动发布, or `203cli firmware publishers add CODE --repository OWNER/NAME
+--workflow firmware.yml`); the job has `permissions: id-token: write` and runs `203cli login --github-oidc --firmware CODE`,
+then `203cli publish` as usual. That credential publishes the firmware's versions only (15 minutes, renewed by 203cli,
 kept for the run; the channel follows the ref: tag `vX.Y.Z` stable, `vX.Y.Z-beta.N` beta, else dev), never changes
 its page (publish leaves 203.json's page fields as they are, with a note), and `login --github-oidc` may run again
 in the same job. Another CI: a personal token made on the site in `COMMUNITY_TOKEN`.
@@ -190,7 +194,7 @@ answer `web_only` with the page to open: 我的设备, the user's profile tab, w
 ### 2. Publish a firmware version
 
 ```sh
-203c publish --bin build/my-synth.bin --name "My synth" \
+203cli publish --bin build/my-synth.bin --name "My synth" \
   --summary "Four-track groovebox: drums, Juno, DX7 and a sampler" \
   --notes-file CHANGELOG.md --cover docs/cover.png --tags groovebox,synth \
   --source-url https://github.com/me/my-synth --dry-run --json
@@ -239,30 +243,30 @@ Tell the user the firmware code (the Launcher installs it), the version code, th
 ### 3. Make the page good
 
 ```sh
-203c firmware checklist K7M2QX --json
+203cli firmware checklist K7M2QX --json
 # {"complete":false,"items":[{"item":"a cover (a 16:9 picture; a stable version needs one)","ok":false,"before_stable":true,"fix":"… firmware cover K7M2QX cover.png --json"}, …]}
 # (a fork without a picture shows its original's, marked Fork: ok, with "now" and "better", the command for its own)
-203c firmware cover K7M2QX docs/cover.png --dry-run --json      # PNG/JPEG/WebP, 16:9, ≤ 2 MB
-203c firmware cover K7M2QX docs/cover.png --json
-203c board screen --out docs/screens/1.png --json                                    # the firmware running on the user's Cardenza
-203c firmware images add K7M2QX docs/screens/1.png --caption "The home screen" --json   # 3–5 different ones, shown large above the description
-203c firmware edit K7M2QX --description-file docs/description.md --tags groovebox,synth \
+203cli firmware cover K7M2QX docs/cover.png --dry-run --json    # PNG/JPEG/WebP, 16:9, ≤ 2 MB
+203cli firmware cover K7M2QX docs/cover.png --json
+203cli board screen --out docs/screens/1.png --json                                  # the firmware running on the user's Cardenza
+203cli firmware images add K7M2QX docs/screens/1.png --caption "The home screen" --json  # 3–5 different ones, shown large above the description
+203cli firmware edit K7M2QX --description-file docs/description.md --tags groovebox,synth \
   --source-url https://github.com/me/my-synth --clone-url https://github.com/me/my-synth.git --json
 # docs/description.md: the guide's template filled in (help description: what it is, 3–6 features, needs, get started;
 # aim for 800 characters). It may name local pictures, ![The grid](grid.png): they go up as the description's (once)
 # The description says in a few lines what it is; how to use it (keys, menus, settings) is a tutorial (the 教程 tab):
-203c tutorial new --json                      # docs/tutorial.json: lessons of short steps, keys, screenshots
-203c tutorial check --json                    # the community's own checks: every error with its line and column
-203c tutorial publish --dry-run --json        # then without --dry-run (its pictures go up once; your file stays as written)
+203cli tutorial new --json                    # docs/tutorial.json: lessons of short steps, keys, screenshots
+203cli tutorial check --json                  # the community's own checks: every error with its line and column
+203cli tutorial publish --dry-run --json      # then without --dry-run (its pictures go up once; your file stays as written)
 ```
 
 ### 4. Share a sound pack, a project or a work (official firmware only)
 
 ```sh
-203c firmware list --official --json        # the official firmware's code, e.g. CardenzaSynth
-203c sounds upload pads.ccpreset pad-c3.wav --firmware CODE --title "Warm pads" --tags pad --preview demo.mp3 --dry-run --json
-203c projects upload NIGHT.ccproj kick.wav --firmware CODE --title "Night drive" --preview night.mp3 --dry-run --json
-203c works upload song.wav --firmware CODE --title "Rain" --tags lofi --dry-run --json
+203cli firmware list --official --json      # the official firmware's code, e.g. CardenzaSynth
+203cli sounds upload pads.ccpreset pad-c3.wav --firmware CODE --title "Warm pads" --tags pad --preview demo.mp3 --dry-run --json
+203cli projects upload NIGHT.ccproj kick.wav --firmware CODE --title "Night drive" --preview night.mp3 --dry-run --json
+203cli works upload song.wav --firmware CODE --title "Rain" --tags lofi --dry-run --json
 ```
 
 Then the same without `--dry-run`. Community firmware are refused (`official_only`). A section that is not
@@ -271,7 +275,7 @@ open yet answers `section_closed`: only admins share there for now; nothing to f
 ### 5. A version the checks sent back (exit 5)
 
 ```sh
-203c versions check VCODE --json     # check.steps: which step failed; check.log: the boot log
+203cli versions check VCODE --json   # check.steps: which step failed; check.log: the boot log
 ```
 
 - A real failure (a panic, a boot loop, too large): fix it, build, publish the next version label (`next` has the command).
@@ -285,10 +289,10 @@ plays a version only when its simulator version boots (the checker's headless br
 `{"cardenza_sim":"ready"}` within 15 s).
 
 ```sh
-203c doctor --json            # checks python, emscripten, cmake (needed to build it)
-203c sim build --json         # only build it: {"out":".../build-web/site","hal":{…},"files":[…]}
-203c sim upload VCODE build-web/site --json   # a version already published (only when it differs)
-203c sim check VCODE --json   # boots (play_url) / fails (report.detail) / not checked yet
+203cli doctor --json          # checks python, emscripten, cmake (needed to build it)
+203cli sim build --json       # only build it: {"out":".../build-web/site","hal":{…},"files":[…]}
+203cli sim upload VCODE build-web/site --json  # a version already published (only when it differs)
+203cli sim check VCODE --json  # boots (play_url) / fails (report.detail) / not checked yet
 ```
 
 - publish builds it by itself; `--no-sim` leaves it out, `--sim-dir DIR` uploads one built before, `--hal DIR`
@@ -332,7 +336,7 @@ With `--json` an error is one JSON line on stderr (the last line):
 | `admin_scope_required` | an admin's sign-in without the admin scope: `login --admin --json` (exit 4) |
 | `rate_limited` | wait `retry_after` seconds |
 | `network_blocked_sandbox` | your sandbox's network allowlist blocks the community: only the user can allow `cardenza.203.io` and `apps.203.io` (below); tell them `hint`'s steps, then run `next[0]` |
-| `network_blocked_cdn` | the site's firewall (Cloudflare) blocked the request, not your sandbox: tell the user (its `ray`); do it with 203c, not curl or a web fetch |
+| `network_blocked_cdn` | the site's firewall (Cloudflare) blocked the request, not your sandbox: tell the user (its `ray`); do it with 203cli, not curl or a web fetch |
 | `invalid` (+ `field`) | fix that field as `hint` says |
 
 All codes: `help errors` (trusted publishing: `oidc_untrusted`, `oidc_channel`, `oidc_invalid`, `oidc_unavailable`,
@@ -348,30 +352,30 @@ The commands of the work (`sim`, `flash`, `log`, `board`, `new`, `fork`, `clone`
 `source`, `sync`) end with a line on stderr when something is out of date, and the firmware's build prints the same
 as a CMake warning (CardenzaHAL's `cmake/require_203c.cmake`); `doctor` lists them, `updates --json` asks now:
 
-- `203c: 203c X is out (you have Y): npm install -g 203c && 203c skill install`: run both, then go on (the
+- `203cli: 203cli X is out (you have Y): npm install -g 203cli && 203cli skill install`: run both, then go on (the
   skill is a copy of the command: update it with it). `doctor` says it as `cli_outdated`.
-- `203c: CardenzaHAL in this project (components/CardenzaHAL) is N commits behind its main: git submodule update
+- `203cli: CardenzaHAL in this project (components/CardenzaHAL) is N commits behind its main: git submodule update
   --remote components/CardenzaHAL, …`: update it as a change of its own: the command, build and test (on the device if
   one is attached), then commit the new pointer alone (`git add components/CardenzaHAL`). Mid-task, finish the task
   first, or tell the user. `hal_behind`.
 - `… is not a clean copy of upstream main: …` (the HAL's `check_submodule.py`): restore it as the line says; a HAL
-  change goes upstream (`203c rules`: Using the HAL). `hal_not_clean`, `hal_off_main`.
+  change goes upstream (`203cli rules`: Using the HAL). `hal_not_clean`, `hal_off_main`.
 
-Never in the way: npm and GitHub are asked at most once a day (`~/.config/203c/updates.json`), for at most 1.5 s,
+Never in the way: npm and GitHub are asked at most once a day (`~/.config/203cli/updates.json`), for at most 1.5 s,
 silently when they do not answer; nothing goes to stdout or into an exit code. Off in CI (`CI`, `GITHUB_ACTIONS`) and
 with `NO_UPDATE_NOTIFIER=1` or `C203_NO_UPDATE_CHECK=1` (doctor too). `updates --quiet` prints only the notices.
 
 ## Running in a sandboxed agent (Claude Code on the web, Codex cloud…)
 
 A cloud sandbox reaches only the hosts its environment allows. npm and GitHub are on Claude Code's default list
-(`npm install -g 203c`, `203c skill install` work); the 203 community is on none. `doctor --json` checks both of its
+(`npm install -g 203cli`, `203cli skill install` work); the 203 community is on none. `doctor --json` checks both of its
 hosts. On `network_blocked_sandbox` (exit 1), stop and ask the user: only they can allow **`cardenza.203.io`** and
 **`apps.203.io`**, per environment (a file in the repository cannot). Claude Code on the web: claude.ai/code → the
 environment selector under the message box → Cloud → the environment's settings icon → Network access: Limited, keep
 Allow package managers, add both to Allowed domains → Save changes (a shared Team/Enterprise environment: an Owner, in
 admin settings › Cloud environments); Codex cloud and other sandboxes: their own per-environment allowlist. An open
-session follows within a minute: then run `next[0]`. Meanwhile what needs no network works: building, `203c rules`,
-`203c skill install`, and over USB `flash --bin`, `log`, `board`. All of it: `help sandbox`.
+session follows within a minute: then run `next[0]`. Meanwhile what needs no network works: building, `203cli rules`,
+`203cli skill install`, and over USB `flash --bin`, `log`, `board`. All of it: `help sandbox`.
 
 ## Also
 

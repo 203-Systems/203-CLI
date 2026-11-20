@@ -1,7 +1,7 @@
 // A project and its firmware on the community, from the project's folder (203.json):
 //   inbox  what the community said since the last look: requests (votes, status, new comments), comments on the firmware,
 //          merge requests, versions the checks sent back, unread notifications about it; as Markdown an agent reads
-//          (--out FILE) and JSON. The last look is remembered per firmware (~/.config/203c/inbox/CODE.json).
+//          (--out FILE) and JSON. The last look is remembered per firmware (~/.config/203cli/inbox/CODE.json).
 //   link   binds the project to its firmware, or moves the binding (a repository moved, renamed, transferred, a new clone):
 //          203.json's code and source, the page's source and clone links, and this repository as the trusted publisher
 //          its CI publishes with (--move: the other repositories' publishers removed).

@@ -1,4 +1,4 @@
-// Local checks for 203c (the Agent Skill's CLI), made before anything is sent, the way the server and
+// Local checks for 203cli (the Agent Skill's CLI), made before anything is sent, the way the server and
 // its checker will make them: ESP32-S3 images (supabase/functions/_shared/firmware.ts validateImage,
 // community/diagnosis.ts), codes, version labels, channels, the first bytes of covers, works, sound
 // packs, projects and models (community/storage.ts), the limits (GET / limits; the defaults below),
@@ -599,7 +599,7 @@ export function inspectWork(bytes, file) {
   const report = {file, size: bytes.length, mime: mediaType(bytes), problems: [], warnings: []};
   if (!WORK_TYPES[ext]) {
     report.problems.push({code: "work.type", message: `${name}: a work is audio (.wav .mp3 .ogg .flac .m4a) or video (.mp4 .webm)`,
-      hint: ext === ".ccproj" ? "A .ccproj is a project: 203c projects upload" : ext === ".ccpreset" ? "A .ccpreset is a sound bank: 203c sounds upload" : "Export the audio or video and upload that"});
+      hint: ext === ".ccproj" ? "A .ccproj is a project: 203cli projects upload" : ext === ".ccpreset" ? "A .ccpreset is a sound bank: 203cli sounds upload" : "Export the audio or video and upload that"});
   } else if (!report.mime) {
     report.problems.push({code: "work.content", message: `${name} does not look like ${ext.slice(1).toUpperCase()} inside`, hint: "Export it again; the server checks the first bytes"});
   } else if (report.mime.split("/")[0] !== WORK_TYPES[ext].split("/")[0] || (report.mime !== WORK_TYPES[ext] && !(ext === ".mp4" && report.mime === "audio/mp4"))) {

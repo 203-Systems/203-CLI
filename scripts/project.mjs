@@ -2,13 +2,13 @@
 // root saying what it is called, its version, who makes it, what it was made from. Found, read, checked,
 // written back (the code after the first publish, a fork's provenance), and made by init from what the
 // project already says (CMake project(), version.txt or a git tag, the git remote, LICENSE).
-// The earlier 203c.json is still read when there is no 203.json. Part of the Agent Skill.
+// The earlier 203cli.json is still read when there is no 203.json. Part of the Agent Skill.
 import fs from "node:fs";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
 
 export const PROJECT_FILE = "203.json";
-export const LEGACY_FILE = "203c.json";
+export const LEGACY_FILE = "203cli.json";
 export const KEYS = ["format", "name", "code", "version", "author", "summary", "tags", "devices", "source", "license", "forked_from",
   "publish_source", "publish", "description_file"];
 export const PUBLISH_KEYS = ["channel", "bins", "bin", "notes_file", "cover", "description_file", "images", "notices", "sim", "project", "private", "launcher"];
@@ -30,7 +30,7 @@ function git(args, cwd) {
   return run.status === 0 ? (run.stdout ?? "").trim() : null;
 }
 
-// The project's root: where 203.json (or 203c.json) is, from here up to the repository's top.
+// The project's root: where 203.json (or 203cli.json) is, from here up to the repository's top.
 export function findProjectFile(from) {
   const top = git(["rev-parse", "--show-toplevel"], from);
   let dir = path.resolve(from);
@@ -112,7 +112,7 @@ export function cloneUrlOf(source) {
   return null;
 }
 
-// What publish reads from it, in the keys of the earlier 203c.json (relative paths stay relative to its folder).
+// What publish reads from it, in the keys of the earlier 203cli.json (relative paths stay relative to its folder).
 export function manifestOf(data, {legacy = false} = {}) {
   if (legacy) return {...data};
   const p = data.publish ?? {};

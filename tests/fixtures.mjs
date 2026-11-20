@@ -1,4 +1,4 @@
-// Test files for 203c's tests: ESP32-S3 application images, a merged full-flash image, the 203 Launcher's merged
+// Test files for 203cli's tests: ESP32-S3 application images, a merged full-flash image, the 203 Launcher's merged
 // image as esptool merge_bin makes it, UF2 files as Matrix OS's `make uf2` writes them, a stand-in API server and a
 // way to run the CLI. Nothing here talks to the real community.
 import {spawn} from "node:child_process";
@@ -8,7 +8,7 @@ import {fileURLToPath} from "node:url";
 import {buildPartitionTable} from "../scripts/recover-plan.mjs";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const CLI = path.join(ROOT, "scripts/203c.mjs");
+export const CLI = path.join(ROOT, "scripts/203cli.mjs");
 
 const enc = s => new TextEncoder().encode(s);
 
@@ -116,7 +116,7 @@ export async function merged({board = "cardenza", table = CARDENZA, flash = 0x3f
 }
 
 // A stand-in API on 127.0.0.1: `routes(req, send, body)` answers or returns false (then 404 not_found, as the API
-// answers). Resolves to {api, requests, close}; `api` is the base 203c takes with --api.
+// answers). Resolves to {api, requests, close}; `api` is the base 203cli takes with --api.
 export async function standInApi(routes) {
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -137,13 +137,13 @@ export async function standInApi(routes) {
 }
 
 // The update notices off (C203_NO_UPDATE_CHECK) and, should a test turn them on, never asking npm or GitHub: for every
-// 203c a test runs (updates.test.mjs turns them on with stand-ins).
+// 203cli a test runs (updates.test.mjs turns them on with stand-ins).
 export const NO_UPDATES = {C203_NO_UPDATE_CHECK: "1", NO_UPDATE_NOTIFIER: "", C203_NPM_REGISTRY: "http://127.0.0.1:9", C203_GITHUB_API: "http://127.0.0.1:9"};
 
-// Runs 203c with these arguments: {code, stdout, stderr, json (stdout parsed), error (stderr's last line parsed)}.
+// Runs 203cli with these arguments: {code, stdout, stderr, json (stdout parsed), error (stderr's last line parsed)}.
 export function run(args, {cwd = ROOT, env = {}} = {}) {
   return new Promise(resolve => {
-    // Not in an agent's sandbox unless a test says so (203c reads these to explain a blocked network).
+    // Not in an agent's sandbox unless a test says so (203cli reads these to explain a blocked network).
     const child = spawn(process.execPath, [CLI, ...args], {cwd, env: {...process.env, COMMUNITY_TOKEN: "", COMMUNITY_API: "", COMMUNITY_LANG: "",
       LC_ALL: "", LC_MESSAGES: "", LANG: "en_US.UTF-8", CLAUDE_CODE_REMOTE: "", CODEX_SANDBOX_NETWORK_DISABLED: "", ...NO_UPDATES, ...env}});
     let stdout = "", stderr = "";

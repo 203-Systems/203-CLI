@@ -1,11 +1,16 @@
-# Publishes 203c to npm (https://www.npmjs.com/package/203c) when a tag vX.Y.Z equal to package.json's version is pushed,
-# after the tests pass. npm trusted publishing: the job's GitHub OIDC token, no NPM_TOKEN secret; npm records the
-# provenance (this repository, this workflow, the commit). Set up once on npmjs.com: the package 203c › Settings ›
-# Trusted publishing › GitHub Actions: organization 203-Systems, repository 203-CLI, workflow release.yml.
+# Publishes to npm, after the tests pass, with npm trusted publishing (the job's GitHub OIDC token; npm records the
+# provenance: this repository, this workflow, the commit). Two packages, one tag each:
+#   tag vX.Y.Z equal to package.json's version              -> 203cli (https://www.npmjs.com/package/203cli)
+#   tag 203c-vX.Y.Z equal to legacy/203c/package.json's     -> the last 203c (https://www.npmjs.com/package/203c): it
+#                                                              depends on 203cli, which must be on npm first
+# Set up on npmjs.com, per package: Settings › Trusted publishing › GitHub Actions: organization 203-Systems, repository
+# 203-CLI, workflow release.yml (203c has it). A package that is not on npm yet cannot have it: its first version is
+# published by hand (npm publish, signed in), or here with an NPM_TOKEN secret (an npm automation token, removed once
+# trusted publishing is set up). A version already on npm is not published again (the job says so and passes).
 name: Release
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', '203c-v*']
 permissions:
   contents: read
 jobs:
@@ -35,11 +40,33 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - name: The tag is package.json's version
-        run: |
-          version=$(node -p 'require("./package.json").version')
-          test "$GITHUB_REF_NAME" = "v$version" || { echo "::error::tag $GITHUB_REF_NAME is not v$version (package.json)"; exit 1; }
-          test "$(node scripts/203c.mjs --version)" = "$version" || { echo "::error::CLI_VERSION is not $version"; exit 1; }
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install -g npm@latest
-      - run: npm publish --provenance --access public
+      - name: The package the tag names, and its checks
+        id: plan
+        run: |
+          case "$GITHUB_REF_NAME" in
+            203c-v*) dir=legacy/203c; want=${GITHUB_REF_NAME#203c-v} ;;
+            v*) dir=.; want=${GITHUB_REF_NAME#v}
+                test "$(node scripts/203cli.mjs --version)" = "$want" || { echo "::error::CLI_VERSION is not $want"; exit 1; } ;;
+            *) echo "::error::$GITHUB_REF_NAME is neither vX.Y.Z (203cli) nor 203c-vX.Y.Z (the last 203c)"; exit 1 ;;
+          esac
+          name=$(node -p "require('./$dir/package.json').name")
+          version=$(node -p "require('./$dir/package.json').version")
+          test "$want" = "$version" || { echo "::error::tag $GITHUB_REF_NAME is not $version ($dir/package.json)"; exit 1; }
+          if [ "$dir" = legacy/203c ]; then
+            range=$(node -p "require('./legacy/203c/package.json').dependencies['203cli']")
+            test -n "$(npm view "203cli@$range" version 2>/dev/null)" || { echo "::error::203cli@$range is not on npm yet: release 203cli first (tag v…)"; exit 1; }
+          fi
+          if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
+            echo "::notice::$name $version is on npm already: nothing to publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+      - if: steps.plan.outputs.skip != 'true'
+        working-directory: ${{ steps.plan.outputs.dir }}
+        run: npm publish --provenance --access public
+        env:
+          # NPM_TOKEN only for a package's first version (see above); without it, setup-node's placeholder as before, and
+          # trusted publishing is used.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || env.NODE_AUTH_TOKEN }}

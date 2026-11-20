@@ -1,4 +1,4 @@
-// The 203 Launcher's USB console as 203c and the website speak it (scripts/launcher-usb.mjs; binding and sending over a
+// The 203 Launcher's USB console as 203cli and the website speak it (scripts/launcher-usb.mjs; binding and sending over a
 // USB cable): `account` read, `account bind` written with its fields percent-encoded, `flash firmware` in acknowledged
 // 2 KB chunks, refusals as codes; against the demo Launcher on a fake port (what ?usb=demo uses on the pages).
 // Run: node --test tests/launcher-usb.test.mjs

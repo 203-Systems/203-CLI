@@ -1,10 +1,10 @@
 # Tutorials (教程): the format
 
-Every firmware on the 203 community can have **tutorials**: how to use it, on the device, step by step. They are written in one format, the one of the Cardenza's own guide (https://cardenza.203.io/guide/): **lessons of short steps**, each step a sentence or two, the keys it asks for lit on a drawing of the board, and what the screen shows. The community shows a tutorial that way on the firmware's page (its 教程 / Tutorials tab), in Chinese, English or both. Its API refuses a tutorial that does not follow this page, and `203c tutorial check` says where, line by line.
+Every firmware on the 203 community can have **tutorials**: how to use it, on the device, step by step. They are written in one format, the one of the Cardenza's own guide (https://cardenza.203.io/guide/): **lessons of short steps**, each step a sentence or two, the keys it asks for lit on a drawing of the board, and what the screen shows. The community shows a tutorial that way on the firmware's page (its 教程 / Tutorials tab), in Chinese, English or both. Its API refuses a tutorial that does not follow this page, and `203cli tutorial check` says where, line by line.
 
 A tutorial is either
 
-- **written here** (a guide): a JSON file in the format below, uploaded on the site (the tab's 写教程 / Write a tutorial, an editor that checks while you type and shows the result) or with `203c tutorial publish`; or
+- **written here** (a guide): a JSON file in the format below, uploaded on the site (the tab's 写教程 / Write a tutorial, an editor that checks while you type and shows the result) or with `203cli tutorial publish`; or
 - **a link** to a tutorial elsewhere (a video, a blog, a wiki): a title and an `https://` address. People who open it first see a page that says they are leaving the community and where to.
 
 The firmware's owner's tutorials are its **official** ones and come first; anyone signed in may add theirs (one guide and up to 5 links each per firmware). The owner and the community's admins may hide one; its author edits or deletes it.
@@ -78,7 +78,7 @@ Nothing else: no HTML (`<tags>`, `&entities;`), no pictures in the words, no hea
 
 ### Keys
 
-The Cardenza's key caps, named as CardenzaHAL's `keyboard/legends.h` (and `203c board press`) names them, in lower case:
+The Cardenza's key caps, named as CardenzaHAL's `keyboard/legends.h` (and `203cli board press`) names them, in lower case:
 
 | Row | Keys |
 |---|---|
@@ -94,7 +94,7 @@ Also: `enter` (= `ok`), and the yellow arrows `up` `down` `left` `right` (= `;` 
 
 A step's `image` is one picture: a screenshot of the device's screen (shown in the board's display, enlarged pixel for pixel; the Cardenza's is 240 x 135) or a photo. PNG, JPEG or WebP, at most 2 MB; at most 60 different pictures in a tutorial. A step without one keeps the lesson's last picture on the screen.
 
-- In the file on your computer, `image` is the picture's path relative to the file: `"shots/mode.png"` (forward slashes, no `..`). `203c tutorial publish` uploads each one (once: by its SHA-256) and publishes the file with `image:<id>` in its place; your file stays as it is.
+- In the file on your computer, `image` is the picture's path relative to the file: `"shots/mode.png"` (forward slashes, no `..`). `203cli tutorial publish` uploads each one (once: by its SHA-256) and publishes the file with `image:<id>` in its place; your file stays as it is.
 - On the site, add the pictures in the editor's 图片 / Pictures panel: a reference to a file of the same name becomes its `image:<id>`.
 - What the community stores has only `image:<id>`: pictures its author uploaded for that firmware (pictures elsewhere, `https://…`, are refused: the site loads pictures from the community only).
 
@@ -105,11 +105,11 @@ A step's `image` is one picture: a screenshot of the device's screen (shown in t
 ## Checking and publishing
 
 ```sh
-203c tutorial new                     # docs/tutorial.json to start from (the firmware from 203.json)
-203c tutorial check docs/tutorial.json   # every error, with its line and column; exit 0 when it passes
-203c tutorial publish docs/tutorial.json # check, upload the pictures, publish (again: changes what changed)
-203c tutorial link CODE https://… --title "…"
-203c tutorial list CODE
+203cli tutorial new                   # docs/tutorial.json to start from (the firmware from 203.json)
+203cli tutorial check docs/tutorial.json  # every error, with its line and column; exit 0 when it passes
+203cli tutorial publish docs/tutorial.json # check, upload the pictures, publish (again: changes what changed)
+203cli tutorial link CODE https://… --title "…"
+203cli tutorial list CODE
 ```
 
 An error names where it is and what is wrong, for example

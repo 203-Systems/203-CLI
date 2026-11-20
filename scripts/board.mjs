@@ -1,4 +1,4 @@
-// 203c board: a running firmware on CardenzaHAL, seen and driven from a computer over its USB cable (the HAL's development
+// 203cli board: a running firmware on CardenzaHAL, seen and driven from a computer over its USB cable (the HAL's development
 // channel, CardenzaHAL docs/usb-dev.md; the bytes: board-usb.mjs). What it is (info), its flash (partitions), memory and
 // tasks, the SD card, the I2C bus, its screen as a PNG, keys pressed as if by a finger, its last crash (core dump), and
 // files on its SD card. No sign-in, like flash and log. Nothing here writes the device's flash: only files on the card
@@ -126,7 +126,7 @@ export function decodeScreen(bytes) {
   const b = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
   if (b.length < 8 || b[0] !== 0x53) throw new BoardError("bad_answer", "the screen's answer does not start with its header ('S')");
   const version = b[1], width = b[2] | (b[3] << 8), height = b[4] | (b[5] << 8), encoding = b[6], source = b[7];
-  if (version !== 1) throw new BoardError("bad_answer", `the screen's format ${version} is newer than this 203c (it reads 1): update 203c`);
+  if (version !== 1) throw new BoardError("bad_answer", `the screen's format ${version} is newer than this 203cli (it reads 1): update 203cli`);
   if (!width || !height || width * height > 4 << 20) throw new BoardError("bad_answer", `the screen's size ${width} × ${height} is not a screen`);
   const pixels = new Uint16Array(width * height);
   if (encoding === 0) {
@@ -141,7 +141,7 @@ export function decodeScreen(bytes) {
       filled += count;
     }
     if (filled !== pixels.length) throw new BoardError("bad_answer", `the screen's runs give ${filled} pixels for ${width} × ${height}`);
-  } else throw new BoardError("bad_answer", `the screen's encoding ${encoding} is unknown to this 203c: update 203c`);
+  } else throw new BoardError("bad_answer", `the screen's encoding ${encoding} is unknown to this 203cli: update 203cli`);
   return {version, width, height, encoding, source, pixels};
 }
 /** RGB565 (red in bits 15-11) to 8-bit RGB, each channel spread to the full range. */
@@ -196,7 +196,7 @@ export function cardPath(text, usage, {root = true, field = "PATH"} = {}) {
   const parts = p.split("/").filter(Boolean);
   if (parts.some(part => part === "." || part === "..")) throw usage(`${field} ${text}: no . or .. on the card`, {field, hint: "A path from the card's root, e.g. Projects/song.ccproj"});
   const joined = parts.join("/");
-  if (!joined && !root) throw usage(`${field} is the card's root: name a file or folder`, {field, hint: "e.g. Projects/song.ccproj (203c board files ls lists them)"});
+  if (!joined && !root) throw usage(`${field} is the card's root: name a file or folder`, {field, hint: "e.g. Projects/song.ccproj (203cli board files ls lists them)"});
   if (enc.encode(joined).length > LIMITS.path) throw usage(`${field} is longer than ${LIMITS.path} bytes`, {field});
   return joined;
 }
@@ -235,7 +235,7 @@ export function table(rows, right = []) {
 
 // ---------------------------------------------------------------------------------------------
 // A command's time with the board: the channel opened, Ctrl-C answered (CANCEL, so the firmware stops sending; the command's
-// own clean-up runs: an upload aborted, a part file removed), errors said in 203c's terms, the channel closed.
+// own clean-up runs: an upload aborted, a part file removed), errors said in 203cli's terms, the channel closed.
 
 /** The firmware's refusal (its reason) or the channel's trouble as a CliError. */
 export function boardCliError(error, ctx) {
@@ -252,7 +252,7 @@ export function boardCliError(error, ctx) {
     case "timeout":
     case "gap":
       return new CliError("board_timeout", `The device stopped answering: ${error.message}`, {exit: EXIT.later, next: again,
-        hint: "Run it again; when it keeps happening the firmware is stuck or too busy to answer (its log: 203c log)"});
+        hint: "Run it again; when it keeps happening the firmware is stuck or too busy to answer (its log: 203cli log)"});
     case "gone":
     case "closed":
       return new CliError("board_lost", `The connection to the device was lost: ${error.message}`, {exit: EXIT.later, next: again,
@@ -260,17 +260,17 @@ export function boardCliError(error, ctx) {
     case "cancelled":
       return new CliError("board_timeout", "The firmware cancelled the answer", {exit: EXIT.later, next: again, hint: "Run it again"});
     default:
-      return new CliError("board_protocol", `The firmware's answer is not what this 203c reads: ${error.message}`, {exit: EXIT.refused,
-        hint: "Update 203c (npm install -g 203c); if it is current, the firmware's CardenzaHAL may be newer or broken: report it (feedback --kind bug)"});
+      return new CliError("board_protocol", `The firmware's answer is not what this 203cli reads: ${error.message}`, {exit: EXIT.refused,
+        hint: "Update 203cli (npm install -g 203cli); if it is current, the firmware's CardenzaHAL may be newer or broken: report it (feedback --kind bug)"});
   }
 }
 function refusalHint(reason) {
   if (/framebuffer/i.test(reason)) return "This firmware draws through the panel's handles itself (Display::GetPanel): there is no frame to copy";
-  if (/not found|no such|enoent/i.test(reason)) return "Check the path: 203c board files ls lists the card";
-  if (/card|mount/i.test(reason)) return "Is there an SD card? 203c board storage says whether one is mounted";
-  if (/exist/i.test(reason)) return "Something has that name already: remove it first (203c board files rm), or choose another";
-  if (/coredump|core dump/i.test(reason)) return "203c board partitions shows whether the table has a coredump partition";
-  return "Read the reason; 203c board status and 203c board storage say more about the device";
+  if (/not found|no such|enoent/i.test(reason)) return "Check the path: 203cli board files ls lists the card";
+  if (/card|mount/i.test(reason)) return "Is there an SD card? 203cli board storage says whether one is mounted";
+  if (/exist/i.test(reason)) return "Something has that name already: remove it first (203cli board files rm), or choose another";
+  if (/coredump|core dump/i.test(reason)) return "203cli board partitions shows whether the table has a coredump partition";
+  return "Read the reason; 203cli board status and 203cli board storage say more about the device";
 }
 
 /** Opens the channel, runs `work(board)`, closes it. ctx.boardLinks: the ways to the device (the tests' stand-in). */

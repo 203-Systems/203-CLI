@@ -1,4 +1,4 @@
-// Every 203c command: its words, arguments, flags (with help), examples, and what it runs (an API
+// Every 203cli command: its words, arguments, flags (with help), examples, and what it runs (an API
 // operation of lib.mjs, or a function of publish.mjs). The parser, --help, unknown-flag suggestions and
 // reference/cli.md all come from this table. Part of the Agent Skill skill/203-community.
 import {doctor, publish, createFirmware, editFirmware, setCover, checklist, dryRunUpload, init, forkFirmware, cloneFirmware, editMe,
@@ -81,7 +81,7 @@ function cmd(usage, summary, spec = {}) {
 // ---------------------------------------------------------------------------------------------
 // Start, signing in
 
-cmd("doctor", "Check everything 203c needs: Node, the API, the sign-in (kind, scopes), what is left today", {group: "Start", offline: true,
+cmd("doctor", "Check everything 203cli needs: Node, the API, the sign-in (kind, scopes), what is left today", {group: "Start", offline: true,
   run: doctor, examples: ["doctor --json"]});
 cmd("login", "Sign in: opens the browser, the user approves on the site and it comes back (no browser here: --with-token, a personal token; or --no-browser, a code approved on /activate, then login --wait; in GitHub Actions: --github-oidc --firmware CODE, no secret)",
   {group: "Start", offline: true,
@@ -108,10 +108,10 @@ cmd("init", "Write 203.json (the project file) from what the project says: CMake
     "publish-source": B("Attach a source archive to every version (publish_source: true)"), force: B("Overwrite an existing 203.json")},
   run: init, topic: "manifest", examples: ['init --summary "A four-track groovebox" --json', 'init --name "My synth" --bin build/my_synth.bin --publish-source --json']});
 
-cmd("skill install", "Put the Agent Skill (SKILL.md, the guides, this 203c) into the coding agents' skills folders: Claude Code's ~/.claude/skills (CLAUDE_SKILLS_DIR), Codex's ~/.codex/skills when it is there; run it after npm install -g 203c and after every update", {group: "Start",
+cmd("skill install", "Put the Agent Skill (SKILL.md, the guides, this 203cli) into the coding agents' skills folders: Claude Code's ~/.claude/skills (CLAUDE_SKILLS_DIR), Codex's ~/.codex/skills when it is there; run it after npm install -g 203cli and after every update", {group: "Start",
   offline: true, flags: {dir: V("DIR", "Install into this skills folder only (it gets 203-community/)"), ...DRY},
   run: skillInstall, topic: "start", examples: ["skill install", "skill install --dry-run --json", "skill install --dir ~/.agents/skills"]});
-cmd("updates", "Whether a newer 203c is out (npm) and whether this project's CardenzaHAL submodule is behind its main or not a clean copy, with the command for each; --quiet: only those notices, from today's answer (for scripts and CardenzaHAL's build). The commands of the work (sim, flash, log, board, new, fork, publish, rules, …) print the same notices on stderr when they end, asking at most once a day; off in CI and with NO_UPDATE_NOTIFIER or C203_NO_UPDATE_CHECK=1", {group: "Start",
+cmd("updates", "Whether a newer 203cli is out (npm) and whether this project's CardenzaHAL submodule is behind its main or not a clean copy, with the command for each; --quiet: only those notices, from today's answer (for scripts and CardenzaHAL's build). The commands of the work (sim, flash, log, board, new, fork, publish, rules, …) print the same notices on stderr when they end, asking at most once a day; off in CI and with NO_UPDATE_NOTIFIER or C203_NO_UPDATE_CHECK=1", {group: "Start",
   offline: true, flags: {project: V("DIR", "The firmware project whose CardenzaHAL submodule is checked (default: here)"),
     quiet: B("Only the notices, nothing when all is current; from today's answer, and none in CI or with the opt-outs (for scripts and builds)")},
   run: updatesCommand, topic: "start", examples: ["updates", "updates --json", "updates --quiet --project ."]});
@@ -128,7 +128,7 @@ cmd("publish", "Publish a firmware version in one go: makes the firmware if need
     summary: FIRMWARE_FIELDS.summary, description: FIRMWARE_FIELDS.description, "description-file": FIRMWARE_FIELDS["description-file"],
     tags: FIRMWARE_FIELDS.tags, cover: FIRMWARE_FIELDS.cover, "clone-url": FIRMWARE_FIELDS["clone-url"],
     private: FIRMWARE_FIELDS.private, password: FIRMWARE_FIELDS.password, launcher: B("A new firmware is a launcher (merged full-flash images)"),
-    license: FIRMWARE_FIELDS.license, manifest: V("PATH", "The project file (default: 203.json here or above, else 203c.json)")},
+    license: FIRMWARE_FIELDS.license, manifest: V("PATH", "The project file (default: 203.json here or above, else 203cli.json)")},
   run: ctx => publish(ctx, {mode: "publish"}), write: true, topic: "publish",
   examples: ['publish --name "My synth" --summary "Four-track groovebox: drums, Juno, DX7, sampler" --bin build/my-synth.bin --notes-file CHANGELOG.md --dry-run --json',
     "publish --firmware K7M2QX --bin build/my-synth.bin --json", 'publish --firmware K7M2QX --channel dev --version "dev.$(date +%Y%m%d%H%M)" --bin build/my-synth.bin --json']});
@@ -708,7 +708,7 @@ cmd("source upload VCODE [DIR]", "Attach the source archive of the project in DI
 cmd("source delete CODE VCODE", "Remove a version's source archive", {group: "Publishing", flags: YES, confirm: true, op: "version_source_delete", write: true,
   args: ctx => ({code: ctx.args.CODE, version_code: ctx.args.VCODE}), examples: ["source delete K7M2QX V3X9PA --yes --json"]});
 
-// The commands of the work on a firmware (and every board command) print the update notices when they end: a newer 203c,
+// The commands of the work on a firmware (and every board command) print the update notices when they end: a newer 203cli,
 // the project's CardenzaHAL behind its main (updates.mjs; doctor lists them itself).
 for (const name of ["new", "init", "fork", "clone", "link", "rules", "publish", "versions publish", "versions simulator", "sim build", "sim upload", "sim check",
   "source check", "source upload", "sync", "flash", "log", "devices recover"]) COMMANDS.find(c => c.name === name).notices = true;

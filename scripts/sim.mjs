@@ -111,11 +111,11 @@ export function findProject({bins = [], from = []} = {}) {
 
 // ---------------------------------------------------------------------------------------------
 // The build script: the project's HAL copy when it has the web target, else --hal, else a clone of
-// CardenzaHAL kept in the cache (~/.cache/203c/CardenzaHAL).
+// CardenzaHAL kept in the cache (~/.cache/203cli/CardenzaHAL).
 
 export function halCache() {
   const base = process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache");
-  return path.join(base, "203c", "CardenzaHAL");
+  return path.join(base, "203cli", "CardenzaHAL");
 }
 const halRepo = () => process.env.COMMUNITY_HAL_REPO || HAL_REPO;
 
@@ -291,7 +291,7 @@ export function readSimDir(dir, {targets = []} = {}) {
     let m;
     try { m = JSON.parse(fs.readFileSync(simJson, "utf8")); } catch (error) { problem("invalid", `sim.json is not valid JSON (${error.message})`, "Build it again (sim build)"); return out; }
     out.manifest = m;
-    if (m.format !== 1) out.warnings.push({code: "sim_format", message: `sim.json says format ${m.format}: 203c knows format 1`, hint: "Update the skill if the upload is refused"});
+    if (m.format !== 1) out.warnings.push({code: "sim_format", message: `sim.json says format ${m.format}: 203cli knows format 1`, hint: "Update the skill if the upload is refused"});
     if (m.entry && m.entry !== "index.html") problem("invalid", `sim.json's entry is ${m.entry}: the community opens index.html`, "Build it with CardenzaHAL's cardenza_web.py");
     if (targets.length && m.target && !targets.includes(m.target)) {
       problem("sim_wrong_target", `This simulator version is a ${m.target}'s, but the version is for ${targets.join(", ")}`, "Build the simulator version of the same device (or publish the BIN for that device)");
@@ -387,7 +387,7 @@ export function siteOf(api) {
 }
 export const playUrl = (ctx, vcode) => `${siteOf(ctx.api)}/play/${vcode}`;
 
-/** The simulator version of a version as 203c answers it. */
+/** The simulator version of a version as 203cli answers it. */
 export function simState(ctx, version, extra = {}) {
   const s = version?.simulator;
   if (!s) return {status: "none", ...extra};

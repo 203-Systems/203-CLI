@@ -1,4 +1,4 @@
-// 203c log: a device's log over its USB cable, for trying a build on one's own Cardenza (and a test on a computer with one
+// 203cli log: a device's log over its USB cable, for trying a build on one's own Cardenza (and a test on a computer with one
 // plugged in: --until). No sign-in, like flash. Where the log is:
 //   a firmware on CardenzaHAL that started USB (no serial port): its console on the HAL's system channel (usb/usb.cpp,
 //     the command 0x43): asked for as SysEx F0 23 43 01 F7, the text comes as F0 24 43 <text> F7 (the last KB first: the
@@ -98,7 +98,7 @@ time.sleep(0.05)
 export function logSource({port = null, platform = process.platform} = {}) {
   if (port) return {via: "serial", path: port, name: port};
   if (!["linux", "darwin"].includes(platform)) {
-    throw new CliError("unsupported_platform", "203c log reads the USB cable on macOS and Linux", {exit: EXIT.refused,
+    throw new CliError("unsupported_platform", "203cli log reads the USB cable on macOS and Linux", {exit: EXIT.refused,
       hint: "On Windows: pip install hidapi, then python components/CardenzaHAL/tools/cardenza_usb.py console 60 (a firmware that started USB); " +
         "a firmware without USB or the Launcher: any serial monitor on its COM port (idf.py -p COM5 monitor)"});
   }
@@ -168,7 +168,7 @@ function serialReader(file) {
 
 function coremidiReader(seconds) {
   const python = macPython();
-  if (!python) throw new CliError("python_missing", "203c log reads a firmware's MIDI on macOS with python3 (CoreMIDI)", {exit: EXIT.refused, hint: "xcode-select --install"});
+  if (!python) throw new CliError("python_missing", "203cli log reads a firmware's MIDI on macOS with python3 (CoreMIDI)", {exit: EXIT.refused, hint: "xcode-select --install"});
   const child = spawn(python, ["-I", "-c", COREMIDI_CONSOLE_HEAD + COREMIDI_PRELUDE + COREMIDI_CONSOLE, String(seconds > 0 ? seconds + 1 : 0)], {stdio: ["ignore", "pipe", "pipe"]});
   let text = "", errors = "", ended = false;
   child.stdout.on("data", chunk => { text += chunk.toString("latin1"); });

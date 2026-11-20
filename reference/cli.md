@@ -1,7 +1,7 @@
-# 203c command reference
+# 203cli command reference
 
-Generated from the CLI's command table (`node scripts/203c.mjs help --reference > reference/cli.md`). `203c` is the command
-`npm install -g 203c` puts on PATH, else `node <the skill's folder>/scripts/203c.mjs`; run it
+Generated from the CLI's command table (`node scripts/203cli.mjs help --reference > reference/cli.md`). `203cli` is the command
+`npm install -g 203cli` puts on PATH, else `node <the skill's folder>/scripts/203cli.mjs`; run it
 from the firmware project's folder. Every
 command takes the global options; with `--json` the answer is JSON on stdout and an error is one JSON line on stderr (its
 last line): `{"error","code","field","hint","next":[commands],"exit"}`. `--help --json` gives any command (or, alone,
@@ -40,7 +40,7 @@ all of them) as JSON.
 | `oidc_channel` | 1 | trusted publishing: this run may not publish on that channel (`channel_allowed`; stable needs a tag vX.Y.Z, beta a tag vX.Y.Z-beta.N, else dev; and the publisher's channels) | publish on an allowed channel, or run on such a tag |
 | `oidc_invalid` | 4 | login --github-oidc: the community did not take GitHub's token (`reason`: audience, expired, replayed, …) | run login --github-oidc again; audience: --api must be the community's API base |
 | `oidc_unavailable` | 2 | login --github-oidc outside GitHub Actions, or a job without permissions: id-token: write | give the job permissions: id-token: write (help ci) |
-| `publish_only` | 1 | a trusted-publishing credential tried something else than publishing its firmware's versions (page edits, other firmware, account actions) | do that with the owner's own sign-in (on the site, or 203c login on a computer) |
+| `publish_only` | 1 | a trusted-publishing credential tried something else than publishing its firmware's versions (page edits, other firmware, account actions) | do that with the owner's own sign-in (on the site, or 203cli login on a computer) |
 | `invalid_token` | 4 | login --with-token / --token: not a personal token (cct_ and 64 hex digits) | copy the whole token, or the user makes a new one on the site (设置 › 个人令牌, /me/tokens) |
 | `web_only` | 1 | personal tokens, bind codes, devices and personal data are managed on the website only | ask the user to open the page in `url` |
 | `reauth_required` | 4 | the website needs a recent sign-in for this | the user signs in again on the site |
@@ -72,7 +72,7 @@ all of them) as JSON.
 | `sim_toolchain` | 6 | Emscripten, CMake or Python is missing for the simulator version (in publish, on stable / beta: a decision) | install what `hint` says, or --no-sim |
 | `sim_build_failed` | 6 | the firmware does not compile for the browser (`log_tail` has the errors) | fix them, or --no-sim (publish); sim build shows them again |
 | `sim_no_web_target` | 1 | the CardenzaHAL found has no web target yet (no tools/cardenza_web.py) | --hal DIR with a checkout that has it; publish goes on with the BIN alone |
-| `sim_not_project` | 2 | no ESP-IDF project of the firmware where 203c looked | --project DIR (publish) or sim build DIR |
+| `sim_not_project` | 2 | no ESP-IDF project of the firmware where 203cli looked | --project DIR (publish) or sim build DIR |
 | `simulator_fails` | 1 | the simulator version did not say it was ready within 15 s in the checker's browser | fix it and sim upload again, or sim check VCODE --again |
 | `official_only` | 1 | sounds, projects and works are only for official firmware | use the official firmware's code (`firmware list --official`) |
 | `section_closed` | 1 | that section (sounds, projects or works) is not open yet: admins only | nothing to fix; share it when the section opens (`sections`) |
@@ -83,6 +83,7 @@ all of them) as JSON.
 | `password_wrong` | 1 | a wrong password (`attempts_left`) | ask the owner for the password |
 | `too_large` | 1 | a file over the limit | make it smaller |
 | `rate_limited` | 3 | too many today (`retry_after` seconds) | wait, then run it again |
+| `moved` | 1 | the community moved (`api`: where it is now); 203cli follows a move by itself, so this comes only when it could not (an address that is not the community's) | run it with --api set to `api` (next), and update 203cli: npm install -g 203cli |
 | `expired` | 1 | a code, ticket or sign-in ran out | start again (next) |
 | `deleted` | 1 | it was deleted | nothing to do with it |
 | `not_for_target` | 1 | that version has no BIN for that device | choose another version or device |
@@ -95,9 +96,9 @@ all of them) as JSON.
 | `port_unavailable` | 1 | flash: the port cannot be opened (no permission, another program has it, not a serial port) | Linux: the dialout group; close serial monitors and the website's page; check `--port` |
 | `port_failed` | 3 | flash: the port failed while it was used (unplugged) | plug it in again and run it again |
 | `no_launcher` | 1 | flash: no 203 Launcher answered on the port (another device's port, or the Launcher in USB Drive mode) | leave USB Drive (its home screen) or give the right `--port`, then run it again |
-| `firmware_unreachable` | 1 | flash / devices recover / board: the device runs a firmware and 203c cannot reach it (Linux: no permission for its MIDI or HID, or another program has its MIDI port; macOS: no python3 for CoreMIDI) | Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in) |
+| `firmware_unreachable` | 1 | flash / devices recover / board: the device runs a firmware and 203cli cannot reach it (Linux: no permission for its MIDI or HID, or another program has its MIDI port; macOS: no python3 for CoreMIDI) | Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in) |
 | `no_launcher_port` | 3 | flash / devices recover: the firmware was asked to restart and no serial port came up | plug the cable in again and run it again; a firmware that does not take the command: press HOME and choose Back to Launcher (no such menu: hold FN while plugging it in) |
-| `launcher_countdown` | 3 | flash: the restarted Launcher started the firmware again before 203c reached it (twice) | press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows |
+| `launcher_countdown` | 3 | flash: the restarted Launcher started the firmware again before 203cli reached it (twice) | press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows |
 | `launcher_busy` | 3 | flash: the Launcher is in a menu | go back to its home screen, then run it again |
 | `device_timeout` | 3 | flash: the device stopped answering | plug the cable in again and run it again |
 | `launcher_old` | 1 | flash: this Launcher cannot install over USB | update the Launcher (its home screen: Update Launcher) |
@@ -121,12 +122,12 @@ all of them) as JSON.
 | `board_busy` | 3 | board: the firmware's development channel has 8 requests queued | wait a moment, run it again |
 | `board_timeout` | 3 | board: the device stopped answering, or part of an answer was lost more than once | run it again; if it keeps happening, read its log (`log`) |
 | `board_lost` | 3 | board: the device went away (restarted, unplugged) | plug it in, let the firmware start, run it again |
-| `board_protocol` | 1 | board: the firmware's answer is not what this 203c reads | update 203c (`npm install -g 203c`); else report it |
+| `board_protocol` | 1 | board: the firmware's answer is not what this 203cli reads | update 203cli (`npm install -g 203cli`); else report it |
 | `dir_not_empty` | 1 | new: the folder is there and not empty | give another DIR |
 | `git_missing` | 1 | new, project diff: git is not installed | install git |
 | `not_a_repository` | 1 | project diff local: this folder is not a git repository | compare two versions or a fork instead, or git init |
 | `no_source` | 1 | project diff: that version or fork has no source archive (and no repository) | versions published with publish_source: true carry one; pick another version |
-| `skill_incomplete` | 1 | skill install: this 203c lacks the skill's files | npm install -g 203c again |
+| `skill_incomplete` | 1 | skill install: this 203cli lacks the skill's files | npm install -g 203cli again |
 | `skill_failed` | 1 | skill install: the skills folder could not be written | check the folder, or give another with --dir |
 | `git_failed` | 1 | new: git init failed | read the message; check the folder |
 | `hal_unavailable` | 3 | new: CardenzaHAL could not be added (the network, GitHub) | run it again |
@@ -142,19 +143,19 @@ all of them) as JSON.
 | `risk_not_accepted` | 1 | a third-party launcher | add --accept-risk if the user accepts it |
 | `unreachable` | 3 | the API cannot be reached (ENOTFOUND in a sandboxed agent: its allowlist may lack the community's hosts) | check the network / --api; `doctor`; a sandbox: `help sandbox` |
 | `network_blocked_sandbox` | 1 | a network allowlist on the way blocked the community (an agent's sandbox: Claude Code on the web, Codex …; a 403 with x-deny-reason: host_not_allowed, or one that is not the API's; in a sandbox also ENOTFOUND or a proxy's certificate) | only the user can allow it: cardenza.203.io and apps.203.io in the environment's network settings (`hint` says where; `help sandbox`), then run it again |
-| `network_blocked_cdn` | 1 | the firewall in front of the site (Cloudflare) blocked the request (`ray`) | nothing to fix in the project: other programs (curl, urllib, web fetches) are blocked, 203c normally passes; report it with the Ray ID or try another network |
+| `network_blocked_cdn` | 1 | the firewall in front of the site (Cloudflare) blocked the request (`ray`) | nothing to fix in the project: other programs (curl, urllib, web fetches) are blocked, 203cli normally passes; report it with the Ray ID or try another network |
 | `unavailable` | 3 | the API or a provider failed | try again later |
 | `upload_failed` | 3 | an upload failed | run the same command again: it resumes |
 
 ## Start
 
-### `203c doctor`
+### `203cli doctor`
 
-Check everything 203c needs: Node, the API, the sign-in (kind, scopes), what is left today
+Check everything 203cli needs: Node, the API, the sign-in (kind, scopes), what is left today
 
-    203c doctor --json
+    203cli doctor --json
 
-### `203c login`
+### `203cli login`
 
 Sign in: opens the browser, the user approves on the site and it comes back (no browser here: --with-token, a personal token; or --no-browser, a code approved on /activate, then login --wait; in GitHub Actions: --github-oidc --firmware CODE, no secret)
 
@@ -168,49 +169,49 @@ Sign in: opens the browser, the user approves on the site and it comes back (no 
 - `--github-oidc` Trusted publishing in GitHub Actions (permissions: id-token: write): the job's OIDC token for a 15-minute credential that publishes --firmware's versions; kept for this run only, renewed by itself; repeatable
 - `--firmware CODE` With --github-oidc: the firmware whose trusted publisher this repository is (default: 203.json's code)
 
-    203c login
-    203c login --json
-    203c login --with-token < token.txt
-    203c login --no-browser --json
-    203c login --wait --json
-    203c login --github-oidc --firmware K7M2QX --json
+    203cli login
+    203cli login --json
+    203cli login --with-token < token.txt
+    203cli login --no-browser --json
+    203cli login --wait --json
+    203cli login --github-oidc --firmware K7M2QX --json
 
-### `203c logout`
+### `203cli logout`
 
 Sign out: revokes this token on the server and forgets it here (in GitHub Actions: the run's trusted-publishing credential)
 
-    203c logout
-    203c logout --json
+    203cli logout
+    203cli logout --json
 
-### `203c whoami`
+### `203cli whoami`
 
 The signed-in account and this sign-in: its kind (cli or ci), name and scopes
 
-    203c whoami --json
+    203cli whoami --json
 
-### `203c quotas`
+### `203cli quotas`
 
 What is left of every limit (firmware, versions today, works, models, …)
 
-    203c quotas --json
+    203cli quotas --json
 
-### `203c help [TOPIC]`
+### `203cli help [TOPIC]`
 
 Recipes: help start, publish, ci, manifest, fork, source, checks, page, errors …; or help COMMAND
 
-    203c help publish
-    203c help errors
+    203cli help publish
+    203cli help errors
 
-### `203c rules`
+### `203cli rules`
 
 The firmware project rules (CardenzaHAL's FIRMWARE-PROJECT.md): dependencies, files, HAL rules, builds, checks, publishing; --online for the newest
 
 - `--online` Fetch the newest copy from the site (/develop.md) instead of the one in the skill
 
-    203c rules
-    203c rules --online
+    203cli rules
+    203cli rules --online
 
-### `203c init`
+### `203cli init`
 
 Write 203.json (the project file) from what the project says: CMake project(), version.txt or the git tag, you, the git remote, LICENSE
 
@@ -224,32 +225,32 @@ Write 203.json (the project file) from what the project says: CMake project(), v
 - `--publish-source` Attach a source archive to every version (publish_source: true)
 - `--force` Overwrite an existing 203.json
 
-    203c init --summary "A four-track groovebox" --json
-    203c init --name "My synth" --bin build/my_synth.bin --publish-source --json
+    203cli init --summary "A four-track groovebox" --json
+    203cli init --name "My synth" --bin build/my_synth.bin --publish-source --json
 
-### `203c skill install`
+### `203cli skill install`
 
-Put the Agent Skill (SKILL.md, the guides, this 203c) into the coding agents' skills folders: Claude Code's ~/.claude/skills (CLAUDE_SKILLS_DIR), Codex's ~/.codex/skills when it is there; run it after npm install -g 203c and after every update
+Put the Agent Skill (SKILL.md, the guides, this 203cli) into the coding agents' skills folders: Claude Code's ~/.claude/skills (CLAUDE_SKILLS_DIR), Codex's ~/.codex/skills when it is there; run it after npm install -g 203cli and after every update
 
 - `--dir DIR` Install into this skills folder only (it gets 203-community/)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c skill install
-    203c skill install --dry-run --json
-    203c skill install --dir ~/.agents/skills
+    203cli skill install
+    203cli skill install --dry-run --json
+    203cli skill install --dir ~/.agents/skills
 
-### `203c updates`
+### `203cli updates`
 
-Whether a newer 203c is out (npm) and whether this project's CardenzaHAL submodule is behind its main or not a clean copy, with the command for each; --quiet: only those notices, from today's answer (for scripts and CardenzaHAL's build). The commands of the work (sim, flash, log, board, new, fork, publish, rules, …) print the same notices on stderr when they end, asking at most once a day; off in CI and with NO_UPDATE_NOTIFIER or C203_NO_UPDATE_CHECK=1
+Whether a newer 203cli is out (npm) and whether this project's CardenzaHAL submodule is behind its main or not a clean copy, with the command for each; --quiet: only those notices, from today's answer (for scripts and CardenzaHAL's build). The commands of the work (sim, flash, log, board, new, fork, publish, rules, …) print the same notices on stderr when they end, asking at most once a day; off in CI and with NO_UPDATE_NOTIFIER or C203_NO_UPDATE_CHECK=1
 
 - `--project DIR` The firmware project whose CardenzaHAL submodule is checked (default: here)
 - `--quiet` Only the notices, nothing when all is current; from today's answer, and none in CI or with the opt-outs (for scripts and builds)
 
-    203c updates
-    203c updates --json
-    203c updates --quiet --project .
+    203cli updates
+    203cli updates --json
+    203cli updates --quiet --project .
 
-### `203c new NAME [DIR]`
+### `203cli new NAME [DIR]`
 
 Start a firmware project: CardenzaHAL as a git submodule and its template, named NAME, with 203.json, the README and the release workflow; it builds as it is (no sign-in)
 
@@ -259,12 +260,12 @@ Start a firmware project: CardenzaHAL as a git submodule and its template, named
 - `--project ID` CMake's project() name, the BIN's name (default from NAME: "Pocket Metronome" → pocket_metronome)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c new "Pocket Metronome" --summary "A metronome with tap tempo and accents" --json
-    203c new Metronome metronome --dry-run --json
+    203cli new "Pocket Metronome" --summary "A metronome with tap tempo and accents" --json
+    203cli new Metronome metronome --dry-run --json
 
 ## Publishing
 
-### `203c publish`
+### `203cli publish`
 
 Publish a firmware version in one go: makes the firmware if needed, uploads, waits for the checks; safe to run again (sign-in with write)
 
@@ -302,13 +303,13 @@ Publish a firmware version in one go: makes the firmware if needed, uploads, wai
 - `--password P` The download password of a private firmware (8-64 characters)
 - `--launcher` A new firmware is a launcher (merged full-flash images)
 - `--license SPDX` The licence: an SPDX identifier (MIT, Apache-2.0, GPL-3.0-only, …) or proprietary
-- `--manifest PATH` The project file (default: 203.json here or above, else 203c.json)
+- `--manifest PATH` The project file (default: 203.json here or above, else 203cli.json)
 
-    203c publish --name "My synth" --summary "Four-track groovebox: drums, Juno, DX7, sampler" --bin build/my-synth.bin --notes-file CHANGELOG.md --dry-run --json
-    203c publish --firmware K7M2QX --bin build/my-synth.bin --json
-    203c publish --firmware K7M2QX --channel dev --version "dev.$(date +%Y%m%d%H%M)" --bin build/my-synth.bin --json
+    203cli publish --name "My synth" --summary "Four-track groovebox: drums, Juno, DX7, sampler" --bin build/my-synth.bin --notes-file CHANGELOG.md --dry-run --json
+    203cli publish --firmware K7M2QX --bin build/my-synth.bin --json
+    203cli publish --firmware K7M2QX --channel dev --version "dev.$(date +%Y%m%d%H%M)" --bin build/my-synth.bin --json
 
-### `203c versions publish CODE`
+### `203cli versions publish CODE`
 
 Publish a version of your firmware CODE (the same checks as publish; never makes a firmware) (sign-in with write)
 
@@ -335,9 +336,9 @@ Publish a version of your firmware CODE (the same checks as publish; never makes
 - `--force` Go on despite a quality warning (only when that is really meant)
 - `--yes` Yes to what needs it (turn a channel on, a name someone else uses, no simulator version when it cannot be built)
 
-    203c versions publish K7M2QX --version 1.4.0 --bin cardenza=build/app.bin --notes-file CHANGES.md --dry-run --json
+    203cli versions publish K7M2QX --version 1.4.0 --bin cardenza=build/app.bin --notes-file CHANGES.md --dry-run --json
 
-### `203c firmware create`
+### `203cli firmware create`
 
 Make a firmware (its page); publish versions to it with publish (sign-in with write)
 
@@ -360,9 +361,9 @@ Make a firmware (its page); publish versions to it with publish (sign-in with wr
 - `--force` Go on despite a quality warning (only when that is really meant)
 - `--yes` Make it even when someone else's firmware has this name
 
-    203c firmware create --name "My synth" --summary "Four-track groovebox: drums, Juno, DX7, sampler" --tags groovebox --source-url https://github.com/me/my-synth --json
+    203cli firmware create --name "My synth" --summary "Four-track groovebox: drums, Juno, DX7, sampler" --tags groovebox --source-url https://github.com/me/my-synth --json
 
-### `203c firmware edit CODE`
+### `203cli firmware edit CODE`
 
 Change a firmware's page or settings (only the fields given) (sign-in with write)
 
@@ -385,10 +386,10 @@ Change a firmware's page or settings (only the fields given) (sign-in with write
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 - `--force` Go on despite a quality warning (only when that is really meant)
 
-    203c firmware edit K7M2QX --summary "Four-track groovebox: drums, Juno, DX7, sampler" --json
-    203c firmware edit K7M2QX --dev --json
+    203cli firmware edit K7M2QX --summary "Four-track groovebox: drums, Juno, DX7, sampler" --json
+    203cli firmware edit K7M2QX --dev --json
 
-### `203c firmware cover CODE [IMAGE]`
+### `203cli firmware cover CODE [IMAGE]`
 
 Set a firmware's cover picture (PNG/JPEG/WebP, 16:9, ≤ 2 MB); --remove takes it away (sign-in with write)
 
@@ -397,17 +398,17 @@ Set a firmware's cover picture (PNG/JPEG/WebP, 16:9, ≤ 2 MB); --remove takes i
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c firmware cover K7M2QX cover.png --json
-    203c firmware cover K7M2QX --file cover.png --dry-run --json
-    203c firmware cover K7M2QX --remove --yes --json
+    203cli firmware cover K7M2QX cover.png --json
+    203cli firmware cover K7M2QX --file cover.png --dry-run --json
+    203cli firmware cover K7M2QX --remove --yes --json
 
-### `203c firmware images list CODE`
+### `203cli firmware images list CODE`
 
 A firmware's pictures: the gallery (shown large above the description, at most 9, in order) and the description's own (at most 20), each with its id, caption, size, the reference to put in the description and whether it is there
 
-    203c firmware images list K7M2QX --json
+    203cli firmware images list K7M2QX --json
 
-### `203c firmware images add CODE IMAGE...`
+### `203cli firmware images add CODE IMAGE...`
 
 Add pictures (PNG/JPEG/WebP, ≤ 2 MB each) to the gallery above the description, or with --description to the description (it prints each one's ![](image:ID) to put in the text); a picture it has already is skipped (sign-in with write)
 
@@ -415,11 +416,11 @@ Add pictures (PNG/JPEG/WebP, ≤ 2 MB each) to the gallery above the description
 - `--description` Into the description (placed by its text: ![words](image:ID)), not the gallery
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c firmware images add K7M2QX docs/home.png --caption "The home screen" --json
-    203c firmware images add K7M2QX docs/seq.png docs/mix.png --dry-run --json
-    203c firmware images add K7M2QX docs/signal-flow.png --description --json
+    203cli firmware images add K7M2QX docs/home.png --caption "The home screen" --json
+    203cli firmware images add K7M2QX docs/seq.png docs/mix.png --dry-run --json
+    203cli firmware images add K7M2QX docs/signal-flow.png --description --json
 
-### `203c firmware images edit CODE ID`
+### `203cli firmware images edit CODE ID`
 
 A picture's caption ("": none) or place: the gallery or the description (sign-in with write)
 
@@ -427,44 +428,44 @@ A picture's caption ("": none) or place: the gallery or the description (sign-in
 - `--place gallery|description` Move it: into the gallery it goes last
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c firmware images edit K7M2QX 7ces8nvr --caption "Sixteen steps a page" --json
-    203c firmware images edit K7M2QX 7ces8nvr --place description --json
+    203cli firmware images edit K7M2QX 7ces8nvr --caption "Sixteen steps a page" --json
+    203cli firmware images edit K7M2QX 7ces8nvr --place description --json
 
-### `203c firmware images remove CODE ID...`
+### `203cli firmware images remove CODE ID...`
 
 Remove pictures (the description keeps its words where it named one: there it shows nothing) (sign-in with write)
 
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c firmware images remove K7M2QX 7ces8nvr --dry-run --json
-    203c firmware images remove K7M2QX 7ces8nvr --yes --json
+    203cli firmware images remove K7M2QX 7ces8nvr --dry-run --json
+    203cli firmware images remove K7M2QX 7ces8nvr --yes --json
 
-### `203c firmware images order CODE ID...`
+### `203cli firmware images order CODE ID...`
 
 The gallery's order: these ids first, in this order, the others after them as they were (sign-in with write)
 
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c firmware images order K7M2QX q4hzuufx 7ces8nvr --json
+    203cli firmware images order K7M2QX q4hzuufx 7ces8nvr --json
 
-### `203c firmware images prune CODE`
+### `203cli firmware images prune CODE`
 
 Remove the description's pictures its text no longer uses (sign-in with write)
 
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c firmware images prune K7M2QX --dry-run --json
-    203c firmware images prune K7M2QX --yes --json
+    203cli firmware images prune K7M2QX --dry-run --json
+    203cli firmware images prune K7M2QX --yes --json
 
-### `203c firmware checklist CODE`
+### `203cli firmware checklist CODE`
 
 What a firmware's page has and lacks (cover, pictures, summary, description, links, notes), with the command for each
 
-    203c firmware checklist K7M2QX --json
+    203cli firmware checklist K7M2QX --json
 
-### `203c versions simulator CODE VCODE`
+### `203cli versions simulator CODE VCODE`
 
 Upload a version's simulator version (the same as sim upload VCODE DIR) (sign-in with write)
 
@@ -474,9 +475,9 @@ Upload a version's simulator version (the same as sim upload VCODE DIR) (sign-in
 - `--poll SECONDS` How often to ask (default 5)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c versions simulator K7M2QX V3X9PA --dir build-web/site --json
+    203cli versions simulator K7M2QX V3X9PA --dir build-web/site --json
 
-### `203c fork CODE [DIR]`
+### `203cli fork CODE [DIR]`
 
 Fork a firmware to change it: makes your fork (or finds yours), clones its source into DIR and writes 203.json there (code, forked_from) (sign-in with write)
 
@@ -489,10 +490,10 @@ Fork a firmware to change it: makes your fork (or finds yours), clones its sourc
 - `--no-clone` Make the fork only; do not clone
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c fork V6QK28 my-synth --json
-    203c fork K7M2QX --no-clone --json
+    203cli fork V6QK28 my-synth --json
+    203cli fork K7M2QX --no-clone --json
 
-### `203c link [CODE]`
+### `203cli link [CODE]`
 
 Bind this project (203.json) to its firmware, or move the binding after the repository moved: 203.json's code and source, the page's source link, and this GitHub repository as the trusted publisher its CI publishes with (sign-in with write)
 
@@ -501,25 +502,25 @@ Bind this project (203.json) to its firmware, or move the binding after the repo
 - `--no-ci` Leave the trusted publishers as they are
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c link --dry-run --json
-    203c link K7M2QX --json
-    203c link --move --json
+    203cli link --dry-run --json
+    203cli link K7M2QX --json
+    203cli link --move --json
 
-### `203c clone CODE [DIR]`
+### `203cli clone CODE [DIR]`
 
 git clone a firmware's source (its clone link, else its parent's) into DIR; publish from inside goes to CODE
 
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c clone K7M2QX my-synth --json
+    203cli clone K7M2QX my-synth --json
 
-### `203c firmware publishers list CODE`
+### `203cli firmware publishers list CODE`
 
 Trusted publishers of your firmware: the GitHub repositories (workflow, environment, channels, last use) whose Actions runs publish it without a secret
 
-    203c firmware publishers list K7M2QX --json
+    203cli firmware publishers list K7M2QX --json
 
-### `203c firmware publishers add CODE`
+### `203cli firmware publishers add CODE`
 
 Link a trusted publisher: a GitHub repository whose Actions runs (that workflow, that environment) may publish CODE's versions (at most 5) (sign-in with write)
 
@@ -528,45 +529,45 @@ Link a trusted publisher: a GitHub repository whose Actions runs (that workflow,
 - `--environment NAME` Only jobs in this GitHub environment (e.g. release, with its own protection rules)
 - `--channels stable,beta,dev` The channels it may publish on (default all three; a run's ref limits them too: tags vX.Y.Z stable, vX.Y.Z-beta.N beta, else dev)
 
-    203c firmware publishers add K7M2QX --repository me/my-synth --workflow firmware.yml --json
-    203c firmware publishers add K7M2QX --repository me/my-synth --workflow release.yml --environment release --channels stable,beta --json
+    203cli firmware publishers add K7M2QX --repository me/my-synth --workflow firmware.yml --json
+    203cli firmware publishers add K7M2QX --repository me/my-synth --workflow release.yml --environment release --channels stable,beta --json
 
-### `203c firmware publishers remove CODE ID`
+### `203cli firmware publishers remove CODE ID`
 
 Remove a trusted publisher (ID, or its OWNER/NAME when it is the only one of that repository): its runs' credentials stop working at once (sign-in with write) Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c firmware publishers remove K7M2QX 3 --yes --json
-    203c firmware publishers remove K7M2QX me/my-synth --yes --json
+    203cli firmware publishers remove K7M2QX 3 --yes --json
+    203cli firmware publishers remove K7M2QX me/my-synth --yes --json
 
-### `203c source check [DIR]`
+### `203cli source check [DIR]`
 
 What the source archive of the project in DIR (default here) would hold: the commit's tracked files, checked for secrets
 
-    203c source check --json
+    203cli source check --json
 
-### `203c source upload VCODE [DIR]`
+### `203cli source upload VCODE [DIR]`
 
 Attach the source archive of the project in DIR (default here) to a version of yours (git archive of the commit, checked for secrets) (sign-in with write)
 
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 - `--force` Upload although the working tree has uncommitted changes (they are not in the archive)
 
-    203c source upload V3X9PA --dry-run --json
-    203c source upload V3X9PA --json
+    203cli source upload V3X9PA --dry-run --json
+    203cli source upload V3X9PA --json
 
-### `203c source delete CODE VCODE`
+### `203cli source delete CODE VCODE`
 
 Remove a version's source archive (sign-in with write) Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c source delete K7M2QX V3X9PA --yes --json
+    203cli source delete K7M2QX V3X9PA --yes --json
 
 ## Tutorials
 
-### `203c tutorial new [FILE]`
+### `203cli tutorial new [FILE]`
 
 Start a tutorial file (default docs/tutorial.json): the format with one lesson of two steps to write over, for 203.json's firmware
 
@@ -576,38 +577,38 @@ Start a tutorial file (default docs/tutorial.json): the format with one lesson o
 - `--force` Write over the file when it exists
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c tutorial new --json
-    203c tutorial new docs/tutorial.json --languages en --title "Getting started" --firmware K7M2QX --json
+    203cli tutorial new --json
+    203cli tutorial new docs/tutorial.json --languages en --title "Getting started" --firmware K7M2QX --json
 
-### `203c tutorial check [FILE]`
+### `203cli tutorial check [FILE]`
 
 Check a tutorial file as the community will: the format (fields, languages, lengths, markup, key names) and its local pictures; every error with its line and column
 
 - `--firmware CODE` The firmware it is for: "firmware" in the file must be this one
 
-    203c tutorial check --json
-    203c tutorial check docs/tutorial.json
+    203cli tutorial check --json
+    203cli tutorial check docs/tutorial.json
 
-### `203c tutorial publish [FILE]`
+### `203cli tutorial publish [FILE]`
 
 Publish your tutorial of a firmware (one each): checks it, uploads its local pictures it lacks (once, by SHA-256), adds it or changes yours; safe to run again (sign-in with write)
 
 - `--firmware CODE` The firmware (default: "firmware" in the file, else 203.json's code)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c tutorial publish --dry-run --json
-    203c tutorial publish docs/tutorial.json --firmware K7M2QX --json
+    203cli tutorial publish --dry-run --json
+    203cli tutorial publish docs/tutorial.json --firmware K7M2QX --json
 
-### `203c tutorial link CODE URL`
+### `203cli tutorial link CODE URL`
 
 Add a link to a tutorial elsewhere (a video, a blog; https only, up to 5 of yours a firmware); the same URL again changes its title (sign-in with write)
 
 - `--title TEXT` What it is (2-60 wide, plain text) (required)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c tutorial link K7M2QX https://www.bilibili.com/video/BV1xx411c7mD --title "Video: the first ten minutes" --json
+    203cli tutorial link K7M2QX https://www.bilibili.com/video/BV1xx411c7mD --title "Video: the first ten minutes" --json
 
-### `203c tutorial list [CODE]`
+### `203cli tutorial list [CODE]`
 
 A firmware's tutorials (the official ones, its owner's, first), with ids and pages; --all: every firmware that has tutorials
 
@@ -616,40 +617,40 @@ A firmware's tutorials (the official ones, its owner's, first), with ids and pag
 - `--q WORDS` With --all: search words
 - `--page N` Page, from 1 (24 a page)
 
-    203c tutorial list K7M2QX --json
-    203c tutorial list --all --target cardenza --json
+    203cli tutorial list K7M2QX --json
+    203cli tutorial list --all --target cardenza --json
 
-### `203c tutorial show CODE ID`
+### `203cli tutorial show CODE ID`
 
 A tutorial: a guide's lessons and steps (its file as written, for its author), or a link's address; --out saves a guide's file
 
 - `--out PATH` Save the guide's file there (to change it and publish again)
 - `--force` Write over --out when it exists
 
-    203c tutorial show K7M2QX 7ces8nvr --json
-    203c tutorial show K7M2QX 7ces8nvr --out docs/tutorial.json
+    203cli tutorial show K7M2QX 7ces8nvr --json
+    203cli tutorial show K7M2QX 7ces8nvr --out docs/tutorial.json
 
-### `203c tutorial rm CODE ID`
+### `203cli tutorial rm CODE ID`
 
 Delete your tutorial (admins: any) (sign-in with write) Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c tutorial rm K7M2QX 7ces8nvr --yes --json
+    203cli tutorial rm K7M2QX 7ces8nvr --yes --json
 
-### `203c tutorial hide CODE ID`
+### `203cli tutorial hide CODE ID`
 
 Hide a tutorial on your firmware (its owner, an admin; its author is told), or --off to show it again (sign-in with write)
 
 - `--off` Show it again
 - `--reason TEXT` Why (its author reads it)
 
-    203c tutorial hide K7M2QX 7ces8nvr --reason "Another firmware's keys" --json
-    203c tutorial hide K7M2QX 7ces8nvr --off --json
+    203cli tutorial hide K7M2QX 7ces8nvr --reason "Another firmware's keys" --json
+    203cli tutorial hide K7M2QX 7ces8nvr --off --json
 
 ## Simulator
 
-### `203c sim build [DIR]`
+### `203cli sim build [DIR]`
 
 Build the simulator version of the firmware in DIR (default here) with CardenzaHAL's web target; prints where
 
@@ -660,10 +661,10 @@ Build the simulator version of the firmware in DIR (default here) with CardenzaH
 - `--project DIR` The ESP-IDF project (the same as DIR)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c sim build --json
-    203c sim build firmware/ --hal ~/CardenzaHAL --json
+    203cli sim build --json
+    203cli sim build firmware/ --hal ~/CardenzaHAL --json
 
-### `203c sim upload VCODE DIR`
+### `203cli sim upload VCODE DIR`
 
 Upload a built simulator version to a version of yours (only when it differs); the checker opens it, Play once it boots (sign-in with write)
 
@@ -672,10 +673,10 @@ Upload a built simulator version to a version of yours (only when it differs); t
 - `--poll SECONDS` How often to ask (default 5)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c sim upload V3X9PA build-web/site --json
-    203c sim upload V3X9PA build-web/site --dry-run --json
+    203cli sim upload V3X9PA build-web/site --json
+    203cli sim upload V3X9PA build-web/site --dry-run --json
 
-### `203c sim check VCODE`
+### `203cli sim check VCODE`
 
 A version's simulator version: boots (Play), fails (why), or waiting for the checker; --again checks it again
 
@@ -684,20 +685,20 @@ A version's simulator version: boots (Play), fails (why), or waiting for the che
 - `--timeout SECONDS` How long to wait for the checker (default 600: it runs every few minutes)
 - `--poll SECONDS` How often to ask (default 5)
 
-    203c sim check V3X9PA --json
-    203c sim check V3X9PA --again --json
+    203cli sim check V3X9PA --json
+    203cli sim check V3X9PA --again --json
 
 ## Firmware
 
-### `203c firmware mine`
+### `203cli firmware mine`
 
 Your own firmware (private ones too), with their codes
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c firmware mine --json
+    203cli firmware mine --json
 
-### `203c firmware list`
+### `203cli firmware list`
 
 Public firmware of one device (official ones first)
 
@@ -713,18 +714,18 @@ Public firmware of one device (official ones first)
 - `--cursor C` The previous answer's next_cursor (the next page)
 - `--limit N` Items a page, 1-60
 
-    203c firmware list --official --json
-    203c firmware list --q synth --limit 10 --json
+    203cli firmware list --official --json
+    203cli firmware list --q synth --limit 10 --json
 
-### `203c firmware show CODE`
+### `203cli firmware show CODE`
 
 A firmware (a private one needs --unlock)
 
 - `--unlock TOKEN` cfu_… from firmware unlock
 
-    203c firmware show K7M2QX --json
+    203cli firmware show K7M2QX --json
 
-### `203c firmware fork CODE`
+### `203cli firmware fork CODE`
 
 Fork a firmware (or a version) into a new firmware of yours (sign-in with write)
 
@@ -738,53 +739,53 @@ Fork a firmware (or a version) into a new firmware of yours (sign-in with write)
 - `--force` Go on despite a quality warning (only when that is really meant)
 - `--yes` Fork even when you have a firmware of this name
 
-    203c firmware fork K7M2QX --name "My synth" --summary "K7M2QX with a fifth track" --json
+    203cli firmware fork K7M2QX --name "My synth" --summary "K7M2QX with a fifth track" --json
 
-### `203c firmware delete CODE`
+### `203cli firmware delete CODE`
 
 Delete a firmware (its forks stay) Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c firmware delete K7M2QX --yes --json
+    203cli firmware delete K7M2QX --yes --json
 
-### `203c firmware like CODE`
+### `203cli firmware like CODE`
 
 Like a firmware
 
-    203c firmware like K7M2QX --json
+    203cli firmware like K7M2QX --json
 
-### `203c firmware unlike CODE`
+### `203cli firmware unlike CODE`
 
 Unlike a firmware
 
-    203c firmware unlike K7M2QX --json
+    203cli firmware unlike K7M2QX --json
 
-### `203c firmware favorite CODE`
+### `203cli firmware favorite CODE`
 
 Favorite a firmware
 
-    203c firmware favorite K7M2QX --json
+    203cli firmware favorite K7M2QX --json
 
-### `203c firmware unfavorite CODE`
+### `203cli firmware unfavorite CODE`
 
 Unfavorite a firmware
 
-    203c firmware unfavorite K7M2QX --json
+    203cli firmware unfavorite K7M2QX --json
 
-### `203c firmware tree CODE`
+### `203cli firmware tree CODE`
 
 The fork tree around a firmware
 
-    203c firmware tree K7M2QX --json
+    203cli firmware tree K7M2QX --json
 
-### `203c firmware lookup NAME...`
+### `203cli firmware lookup NAME...`
 
 Firmware with exactly this name (ignoring case): yours first, any device, forks too
 
-    203c firmware lookup "My synth" --json
+    203cli firmware lookup "My synth" --json
 
-### `203c firmware based-on CODE ORIGIN`
+### `203cli firmware based-on CODE ORIGIN`
 
 Record what your firmware CODE was made from (ORIGIN: a firmware or version code; none: an original); 203.json follows (sign-in with write)
 
@@ -792,27 +793,27 @@ Record what your firmware CODE was made from (ORIGIN: a firmware or version code
 - `--unlock TOKEN` cfu_… when the original is private
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c firmware based-on K7M2QX V6QK28 --version 0.3.0 --json
-    203c firmware based-on K7M2QX none --json
+    203cli firmware based-on K7M2QX V6QK28 --version 0.3.0 --json
+    203cli firmware based-on K7M2QX none --json
 
-### `203c firmware unlock CODE`
+### `203cli firmware unlock CODE`
 
 Open a private firmware with its password: answers an unlock token for --unlock
 
 - `--password P` The password (required)
 
-    203c firmware unlock K7M2QX --password 1234 --json
+    203cli firmware unlock K7M2QX --password 1234 --json
 
-### `203c firmware works CODE`
+### `203cli firmware works CODE`
 
 Works made with a firmware
 
 - `--version VCODE` One version's works
 - `--page N` Page, from 1 (24 a page)
 
-    203c firmware works K7M2QX --json
+    203cli firmware works K7M2QX --json
 
-### `203c versions list CODE`
+### `203cli versions list CODE`
 
 A firmware's versions, newest first (yours: drafts, checking and sent back too)
 
@@ -820,54 +821,54 @@ A firmware's versions, newest first (yours: drafts, checking and sent back too)
 - `--target DEVICE` Only versions with a BIN for this device (e.g. cardenza)
 - `--page N` Page, from 1 (24 a page)
 
-    203c versions list K7M2QX --json
-    203c versions list K7M2QX --channel beta --target cardenza --json
+    203cli versions list K7M2QX --json
+    203cli versions list K7M2QX --channel beta --target cardenza --json
 
-### `203c versions label CODE LABEL`
+### `203cli versions label CODE LABEL`
 
 A firmware's version by its label (1.4.0)
 
-    203c versions label K7M2QX 1.4.0 --json
+    203cli versions label K7M2QX 1.4.0 --json
 
-### `203c versions show VCODE`
+### `203cli versions show VCODE`
 
 A version and its firmware
 
-    203c versions show V3X9PA --json
+    203cli versions show V3X9PA --json
 
-### `203c versions edit VCODE`
+### `203cli versions edit VCODE`
 
 Change a version's release notes (sign-in with write)
 
 - `--notes TEXT` Release notes (Markdown); @FILE reads a file
 - `--notes-file PATH` Release notes from a file (CHANGELOG.md: the entry of this version)
 
-    203c versions edit V3X9PA --notes "Fixes the arpeggiator at 1/32" --json
+    203cli versions edit V3X9PA --notes "Fixes the arpeggiator at 1/32" --json
 
-### `203c versions delete VCODE`
+### `203cli versions delete VCODE`
 
 Delete a version (its code then answers deleted) Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c versions delete V3X9PA --yes --json
+    203cli versions delete V3X9PA --yes --json
 
-### `203c versions check VCODE`
+### `203cli versions check VCODE`
 
 A version's status and check report (steps, boot log, appeal)
 
-    203c versions check V3X9PA --json
+    203cli versions check V3X9PA --json
 
-### `203c versions appeal VCODE`
+### `203cli versions appeal VCODE`
 
 The checks were wrong (a false positive): say why, 10-2000 characters (sign-in with write)
 
 - `--message TEXT` Why the check is wrong
 - `--message-file PATH` The message from a file
 
-    203c versions appeal V3X9PA --message "It panics only because QEMU has no touch controller; on the device it boots" --json
+    203cli versions appeal V3X9PA --message "It panics only because QEMU has no touch controller; on the device it boots" --json
 
-### `203c versions download VCODE`
+### `203cli versions download VCODE`
 
 A version's BIN for a device
 
@@ -875,21 +876,21 @@ A version's BIN for a device
 - `--accept-risk` Accept a third-party launcher's risk
 - `--out PATH` Save it here
 
-    203c versions download V3X9PA --target cardenza --out app.bin --json
+    203cli versions download V3X9PA --target cardenza --out app.bin --json
 
-### `203c builds identify [FILE]`
+### `203cli builds identify [FILE]`
 
 What a BIN is: its signature checked by the community (a downloaded BIN ends with it), else its SHA-256; the firmware, version, lineage, and whether a newer build is out
 
 - `--sha256 HEX` A file's SHA-256 instead of a file
 - `--target DEVICE` The device (narrows a SHA-256 match)
 
-    203c builds identify app.bin --json
-    203c builds identify --sha256 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 --json
+    203cli builds identify app.bin --json
+    203cli builds identify --sha256 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 --json
 
 ## Sharing
 
-### `203c sounds upload FILE...`
+### `203cli sounds upload FILE...`
 
 Share a sound pack (.ccpreset banks, .wav samples) for an official firmware (sign-in with write)
 
@@ -904,9 +905,9 @@ Share a sound pack (.ccpreset banks, .wav samples) for an official firmware (sig
 - `--tags a,b` Up to 8 tags
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c sounds upload pads.ccpreset pad-c3.wav --firmware 3YGNF5 --title "Warm pads" --tags pad --dry-run --json
+    203cli sounds upload pads.ccpreset pad-c3.wav --firmware 3YGNF5 --title "Warm pads" --tags pad --dry-run --json
 
-### `203c sounds list`
+### `203cli sounds list`
 
 Sound packs (official firmware)
 
@@ -919,15 +920,15 @@ Sound packs (official firmware)
 - `--cursor C` The previous answer's next_cursor (the next page)
 - `--limit N` Items a page, 1-60
 
-    203c sounds list --tag lofi --json
+    203cli sounds list --tag lofi --json
 
-### `203c sounds show ID`
+### `203cli sounds show ID`
 
 A sound (files, preview)
 
-    203c sounds show ab12cd34 --json
+    203cli sounds show ab12cd34 --json
 
-### `203c sounds edit ID`
+### `203cli sounds edit ID`
 
 Change a sound (sign-in with write)
 
@@ -937,26 +938,26 @@ Change a sound (sign-in with write)
 - `--tags a,b` Tags
 - `--engine ENGINE` mixed or its banks' engine
 
-    203c sounds edit ab12cd34 --tags pad,keys --json
+    203cli sounds edit ab12cd34 --tags pad,keys --json
 
-### `203c sounds delete ID`
+### `203cli sounds delete ID`
 
 Delete a sound Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c sounds delete ab12cd34 --yes --json
+    203cli sounds delete ab12cd34 --yes --json
 
-### `203c sounds download ID`
+### `203cli sounds download ID`
 
 A sound's files (every file into a folder, or --file NAME)
 
 - `--file NAME` One file
 - `--out PATH` Where to save (a folder without --file)
 
-    203c sounds download ab12cd34 --out ./sounds --json
+    203cli sounds download ab12cd34 --out ./sounds --json
 
-### `203c projects upload FILE...`
+### `203cli projects upload FILE...`
 
 Share a project (one .ccproj and its .wav samples) for an official firmware (sign-in with write)
 
@@ -971,9 +972,9 @@ Share a project (one .ccproj and its .wav samples) for an official firmware (sig
 - `--tags a,b` Up to 8 tags
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c projects upload NIGHT.ccproj kick.wav --firmware 3YGNF5 --title "Night drive" --preview night.mp3 --dry-run --json
+    203cli projects upload NIGHT.ccproj kick.wav --firmware 3YGNF5 --title "Night drive" --preview night.mp3 --dry-run --json
 
-### `203c projects list`
+### `203cli projects list`
 
 Projects (official firmware)
 
@@ -985,15 +986,15 @@ Projects (official firmware)
 - `--cursor C` The previous answer's next_cursor (the next page)
 - `--limit N` Items a page, 1-60
 
-    203c projects list --tag lofi --json
+    203cli projects list --tag lofi --json
 
-### `203c projects show ID`
+### `203cli projects show ID`
 
 A project (files, preview)
 
-    203c projects show ab12cd34 --json
+    203cli projects show ab12cd34 --json
 
-### `203c projects edit ID`
+### `203cli projects edit ID`
 
 Change a project (sign-in with write)
 
@@ -1003,26 +1004,26 @@ Change a project (sign-in with write)
 - `--tags a,b` Tags
 - `--bpm N` 30-300
 
-    203c projects edit ab12cd34 --tags pad,keys --json
+    203cli projects edit ab12cd34 --tags pad,keys --json
 
-### `203c projects delete ID`
+### `203cli projects delete ID`
 
 Delete a project Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c projects delete ab12cd34 --yes --json
+    203cli projects delete ab12cd34 --yes --json
 
-### `203c projects download ID`
+### `203cli projects download ID`
 
 A project's files (every file into a folder, or --file NAME)
 
 - `--file NAME` One file
 - `--out PATH` Where to save (a folder without --file)
 
-    203c projects download ab12cd34 --out ./projects --json
+    203cli projects download ab12cd34 --out ./projects --json
 
-### `203c works upload FILE`
+### `203cli works upload FILE`
 
 Share a work (audio or video made with an official firmware) (sign-in with write)
 
@@ -1034,9 +1035,9 @@ Share a work (audio or video made with an official firmware) (sign-in with write
 - `--tags a,b` Up to 5 tags
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c works upload song.wav --firmware 3YGNF5 --title "Rain" --tags lofi --dry-run --json
+    203cli works upload song.wav --firmware 3YGNF5 --title "Rain" --tags lofi --dry-run --json
 
-### `203c works list`
+### `203cli works list`
 
 Works
 
@@ -1048,15 +1049,15 @@ Works
 - `--cursor C` The previous answer's next_cursor (the next page)
 - `--limit N` Items a page, 1-60
 
-    203c works list --tag lofi --json
+    203cli works list --tag lofi --json
 
-### `203c works show ID`
+### `203cli works show ID`
 
 A work
 
-    203c works show ab12cd34 --json
+    203cli works show ab12cd34 --json
 
-### `203c works edit ID`
+### `203cli works edit ID`
 
 Change a work (sign-in with write)
 
@@ -1065,23 +1066,23 @@ Change a work (sign-in with write)
 - `--tags a,b` Tags
 - `--version VCODE` A version code (empty: none)
 
-    203c works edit ab12cd34 --tags lofi,demo --json
+    203cli works edit ab12cd34 --tags lofi,demo --json
 
-### `203c works delete ID`
+### `203cli works delete ID`
 
 Delete a work Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c works delete ab12cd34 --yes --json
+    203cli works delete ab12cd34 --yes --json
 
-### `203c works approve ID`
+### `203cli works approve ID`
 
 Publish a work your device sent (it is held until you approve it) (sign-in with write)
 
-    203c works approve ab12cd34 --json
+    203cli works approve ab12cd34 --json
 
-### `203c models upload FILE...`
+### `203cli models upload FILE...`
 
 Share a 3D model (.stl .step .3mf .obj) (sign-in with write)
 
@@ -1102,9 +1103,9 @@ Share a 3D model (.stl .step .3mf .obj) (sign-in with write)
 - `--print-notes TEXT` Print notes
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c models upload stand.stl --title "Desk stand" --license CC-BY-4.0 --target cardenza --dry-run --json
+    203cli models upload stand.stl --title "Desk stand" --license CC-BY-4.0 --target cardenza --dry-run --json
 
-### `203c models list`
+### `203cli models list`
 
 Models
 
@@ -1117,118 +1118,118 @@ Models
 - `--cursor C` The previous answer's next_cursor (the next page)
 - `--limit N` Items a page, 1-60
 
-    203c models list --target cardenza --json
+    203cli models list --target cardenza --json
 
-### `203c models show ID`
+### `203cli models show ID`
 
 A model
 
-    203c models show ab12cd34 --json
+    203cli models show ab12cd34 --json
 
-### `203c models remixes ID`
+### `203cli models remixes ID`
 
 Remixes of a model
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c models remixes ab12cd34 --json
+    203cli models remixes ab12cd34 --json
 
-### `203c models delete ID`
+### `203cli models delete ID`
 
 Delete a model Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c models delete ab12cd34 --yes --json
+    203cli models delete ab12cd34 --yes --json
 
-### `203c models download ID`
+### `203cli models download ID`
 
 A model file
 
 - `--file NAME` One file (default the first)
 - `--out PATH` Save it here
 
-    203c models download ab12cd34 --out stand.stl --json
+    203cli models download ab12cd34 --out stand.stl --json
 
 ## Browse
 
-### `203c sections`
+### `203cli sections`
 
 The six sections and their counts
 
-    203c sections --json
+    203cli sections --json
 
-### `203c sections show ID`
+### `203cli sections show ID`
 
 A section's categories (use them as --tag) and tags
 
-    203c sections show sounds --json
+    203cli sections show sounds --json
 
-### `203c tags`
+### `203cli tags`
 
 The most used tags
 
 - `--kind KIND` firmware, post, work, model, sound or project
 - `--section official|community` Firmware only
 
-    203c tags --kind sound --json
+    203cli tags --kind sound --json
 
-### `203c search WORDS...`
+### `203cli search WORDS...`
 
 Search everything (6 of each kind); a code is looked up
 
-    203c search groovebox --json
+    203cli search groovebox --json
 
-### `203c code CODE`
+### `203cli code CODE`
 
 What a firmware or version code names
 
-    203c code K7M2QX --json
+    203cli code K7M2QX --json
 
-### `203c targets`
+### `203cli targets`
 
 The devices the community knows
 
-    203c targets --json
+    203cli targets --json
 
-### `203c user ID [WHAT]`
+### `203cli user ID [WHAT]`
 
 A person, or their firmware|works|posts|models|sounds|projects|badges
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c user ab12cd34 --json
-    203c user ab12cd34 firmware --json
+    203cli user ab12cd34 --json
+    203cli user ab12cd34 firmware --json
 
-### `203c mine WHAT`
+### `203cli mine WHAT`
 
 Your firmware|works|posts|models|sounds|projects
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c mine sounds --json
+    203cli mine sounds --json
 
-### `203c notifications`
+### `203cli notifications`
 
 Your notifications (--read marks them read)
 
 - `--read` Mark them all read
 - `--page N` Page, from 1 (24 a page)
 
-    203c notifications --json
+    203cli notifications --json
 
-### `203c favorites`
+### `203cli favorites`
 
 Your favourites
 
 - `--kind KIND` firmware, post, work, model, sound or project
 - `--page N` Page, from 1 (24 a page)
 
-    203c favorites --kind firmware --json
+    203cli favorites --kind firmware --json
 
 ## Community
 
-### `203c posts list`
+### `203cli posts list`
 
 Forum posts
 
@@ -1240,15 +1241,15 @@ Forum posts
 - `--cursor C` The previous answer's next_cursor (the next page)
 - `--limit N` Items a page, 1-60
 
-    203c posts list --json
+    203cli posts list --json
 
-### `203c posts show ID`
+### `203cli posts show ID`
 
 A post
 
-    203c posts show ab12cd34 --json
+    203cli posts show ab12cd34 --json
 
-### `203c posts create`
+### `203cli posts create`
 
 Write a post (sign-in with write)
 
@@ -1258,9 +1259,9 @@ Write a post (sign-in with write)
 - `--tags a,b` Up to 5
 - `--firmware CODE` A firmware it is about
 
-    203c posts create --title "1.4.0 is out" --body "What changed: …" --tags announcement --json
+    203cli posts create --title "1.4.0 is out" --body "What changed: …" --tags announcement --json
 
-### `203c posts edit ID`
+### `203cli posts edit ID`
 
 Change a post (sign-in with write)
 
@@ -1269,33 +1270,33 @@ Change a post (sign-in with write)
 - `--body-file PATH` Markdown file
 - `--tags a,b` Tags
 
-    203c posts edit ab12cd34 --title "1.4.1 is out" --json
+    203cli posts edit ab12cd34 --title "1.4.1 is out" --json
 
-### `203c posts delete ID`
+### `203cli posts delete ID`
 
 Delete a post Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c posts delete ab12cd34 --yes --json
+    203cli posts delete ab12cd34 --yes --json
 
-### `203c comments list KIND REF`
+### `203cli comments list KIND REF`
 
 Comments on something (REF: a code, an id or CODE/N)
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c comments list firmware K7M2QX --json
+    203cli comments list firmware K7M2QX --json
 
-### `203c comments replies COMMENT`
+### `203cli comments replies COMMENT`
 
 Replies to a comment
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c comments replies 42 --json
+    203cli comments replies 42 --json
 
-### `203c comments add KIND REF`
+### `203cli comments add KIND REF`
 
 Comment on something (sign-in with write)
 
@@ -1303,53 +1304,53 @@ Comment on something (sign-in with write)
 - `--body-file PATH` Text file
 - `--parent COMMENT` Reply to this comment id
 
-    203c comments add request K7M2QX/3 --body "Done in 1.5.0" --json
+    203cli comments add request K7M2QX/3 --body "Done in 1.5.0" --json
 
-### `203c comments edit COMMENT`
+### `203cli comments edit COMMENT`
 
 Change your comment (sign-in with write)
 
 - `--body TEXT` Text
 - `--body-file PATH` Text file
 
-    203c comments edit 42 --body "…" --json
+    203cli comments edit 42 --body "…" --json
 
-### `203c comments delete COMMENT`
+### `203cli comments delete COMMENT`
 
 Delete a comment Needs `--yes`.
 
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c comments delete 42 --yes --json
+    203cli comments delete 42 --yes --json
 
-### `203c like KIND REF`
+### `203cli like KIND REF`
 
 Like something (--off undoes it) (sign-in with write)
 
 - `--off` Undo it
 
-    203c like firmware K7M2QX --json
+    203cli like firmware K7M2QX --json
 
-### `203c favorite KIND REF`
+### `203cli favorite KIND REF`
 
 Favourite something (--off undoes it) (sign-in with write)
 
 - `--off` Undo it
 
-    203c favorite firmware K7M2QX --json
+    203cli favorite firmware K7M2QX --json
 
-### `203c report KIND REF`
+### `203cli report KIND REF`
 
 Report something to the admins (sign-in with write)
 
 - `--reason spam|abuse|illegal|malware|copyright|other` Why (required)
 - `--detail TEXT` Up to 1000 characters
 
-    203c report post ab12cd34 --reason spam --json
+    203cli report post ab12cd34 --reason spam --json
 
 ## Project
 
-### `203c sync [CODE]`
+### `203cli sync [CODE]`
 
 Everything the community has about this project's firmware in one report for an agent: the page, every version and its notes, requests and comments with their replies, merge requests, forks; .203/community.md and .json, new since the last sync marked. Run it before planning changes
 
@@ -1357,28 +1358,28 @@ Everything the community has about this project's firmware in one report for an 
 - `--out DIR` Write the report here (default the project's .203/)
 - `--no-mark` Do not remember this look
 
-    203c sync
-    203c sync --json
-    203c sync --since 2026-11-01 --json
+    203cli sync
+    203cli sync --json
+    203cli sync --since 2026-11-01 --json
 
-### `203c project show [CODE]`
+### `203cli project show [CODE]`
 
 The firmware's page as people see it: name, summary, description, tags, licence, links, cover and screen, counts, newest versions, the latest 10 versions with their notes
 
-    203c project show
-    203c project show V6QK28 --json
+    203cli project show
+    203cli project show V6QK28 --json
 
-### `203c project versions [CODE]`
+### `203cli project versions [CODE]`
 
 Every version with its notes, channel, status, checks and source archive, newest first (24 a page)
 
 - `--channel stable|beta|dev` One channel
 - `--page N` Page, from 1 (24 a page)
 
-    203c project versions --json
-    203c project versions --page 2 --json
+    203cli project versions --json
+    203cli project versions --page 2 --json
 
-### `203c project feedback [CODE]`
+### `203cli project feedback [CODE]`
 
 What people asked for and said: requests (votes, status, answered or not, the discussion) and comment threads with every reply and like, merge requests; each with the version newest when it was written, new ones marked
 
@@ -1386,18 +1387,18 @@ What people asked for and said: requests (votes, status, answered or not, the di
 - `--new` Only what is new
 - `--no-threads` Leave out the discussions and the replies beyond the newest (faster)
 
-    203c project feedback --json
-    203c project feedback --new --json
-    203c project feedback V6QK28 --since 2026-11-01
+    203cli project feedback --json
+    203cli project feedback --new --json
+    203cli project feedback V6QK28 --since 2026-11-01
 
-### `203c project forks [CODE]`
+### `203cli project forks [CODE]`
 
 The forks (魔改版) of the firmware, forks of forks too: each one's base version, newest versions, counts, and the command that compares it
 
-    203c project forks
-    203c project forks V6QK28 --json
+    203cli project forks
+    203cli project forks V6QK28 --json
 
-### `203c project diff [A] [B]`
+### `203cli project diff [A] [B]`
 
 Compare two sources file by file (+/- lines; --patch the unified diff): A and B are a fork's code, a version of this firmware (label or code), or local (this folder, B's default)
 
@@ -1405,11 +1406,11 @@ Compare two sources file by file (+/- lines; --patch the unified diff): A and B 
 - `--max N` Cut the patch at N characters (default 400000)
 - `--firmware CODE` The firmware whose versions labels name (default 203.json's)
 
-    203c project diff K9FORK
-    203c project diff 1.0.0 1.1.0 --json
-    203c project diff K9FORK 1.1.0 --patch
+    203cli project diff K9FORK
+    203cli project diff 1.0.0 1.1.0 --json
+    203cli project diff K9FORK 1.1.0 --patch
 
-### `203c inbox [CODE]`
+### `203cli inbox [CODE]`
 
 What the community said about this project's firmware (203.json, or CODE) since you last looked: requests with votes and new comments, comments, merge requests, versions sent back, notifications; --out writes it as Markdown for an agent
 
@@ -1417,28 +1418,28 @@ What the community said about this project's firmware (203.json, or CODE) since 
 - `--out FILE` Also write it as Markdown (e.g. .203/inbox.md: git-ignore .203/)
 - `--no-mark` Do not remember this look: the next inbox shows the same as new
 
-    203c inbox
-    203c inbox --out .203/inbox.md --json
-    203c inbox K7M2QX --all --json
+    203cli inbox
+    203cli inbox --out .203/inbox.md --json
+    203cli inbox K7M2QX --all --json
 
 ## Requests
 
-### `203c requests list CODE`
+### `203cli requests list CODE`
 
 Requests under a firmware
 
 - `--sort top|new` Order
 - `--page N` Page, from 1 (24 a page)
 
-    203c requests list K7M2QX --sort top --json
+    203cli requests list K7M2QX --sort top --json
 
-### `203c requests show CODE N`
+### `203cli requests show CODE N`
 
 A request
 
-    203c requests show K7M2QX 3 --json
+    203cli requests show K7M2QX 3 --json
 
-### `203c requests create CODE`
+### `203cli requests create CODE`
 
 Ask for something in a firmware (sign-in with write)
 
@@ -1446,15 +1447,15 @@ Ask for something in a firmware (sign-in with write)
 - `--body TEXT` Markdown
 - `--body-file PATH` File
 
-    203c requests create K7M2QX --title "Swing for the arpeggiator" --json
+    203cli requests create K7M2QX --title "Swing for the arpeggiator" --json
 
-### `203c requests vote CODE N VOTE`
+### `203cli requests vote CODE N VOTE`
 
 Vote a request up (1), down (-1) or take it back (0) (sign-in with write)
 
-    203c requests vote K7M2QX 3 1 --json
+    203cli requests vote K7M2QX 3 1 --json
 
-### `203c dev list`
+### `203cli dev list`
 
 Tracker: your firmware's requests with their internal status
 
@@ -1463,15 +1464,15 @@ Tracker: your firmware's requests with their internal status
 - `--sort top|new|updated` Order
 - `--page N` Page, from 1 (24 a page)
 
-    203c dev list --firmware K7M2QX --sort top --json
+    203cli dev list --firmware K7M2QX --sort top --json
 
-### `203c dev read CODE N`
+### `203cli dev read CODE N`
 
 Tracker: a request with votes, internal notes and the whole discussion
 
-    203c dev read K7M2QX 3 --json
+    203cli dev read K7M2QX 3 --json
 
-### `203c dev update CODE N`
+### `203cli dev update CODE N`
 
 Tracker: status, progress, labels, a note, a link (never notifies anyone) (sign-in with write)
 
@@ -1482,24 +1483,24 @@ Tracker: status, progress, labels, a note, a link (never notifies anyone) (sign-
 - `--note-file PATH` Note from a file
 - `--link URL` An https link, appended
 
-    203c dev update K7M2QX 3 --status in_progress --progress 10 --note "Plan: …" --json
+    203cli dev update K7M2QX 3 --status in_progress --progress 10 --note "Plan: …" --json
 
-### `203c merges list CODE`
+### `203cli merges list CODE`
 
 Merge requests aimed at a firmware
 
 - `--status open|merged|closed|all` Which
 - `--page N` Page, from 1 (24 a page)
 
-    203c merges list K7M2QX --json
+    203cli merges list K7M2QX --json
 
-### `203c merges show CODE N`
+### `203cli merges show CODE N`
 
 A merge request
 
-    203c merges show K7M2QX 1 --json
+    203cli merges show K7M2QX 1 --json
 
-### `203c merges open PARENT`
+### `203cli merges open PARENT`
 
 Offer your fork back to its parent (sign-in with write)
 
@@ -1510,17 +1511,17 @@ Offer your fork back to its parent (sign-in with write)
 - `--from-version VCODE` A version of the fork
 - `--github-url URL` A GitHub pull request
 
-    203c merges open K7M2QX --from P4RK9T --title "A fifth track" --json
+    203cli merges open K7M2QX --from P4RK9T --title "A fifth track" --json
 
-### `203c merges status CODE N STATUS`
+### `203cli merges status CODE N STATUS`
 
 Merge, close or reopen a merge request (STATUS: merged, closed, open) (sign-in with write)
 
 - `--merged-version VCODE` For merged: the version that has it
 
-    203c merges status K7M2QX 1 merged --json
+    203cli merges status K7M2QX 1 merged --json
 
-### `203c feedback`
+### `203cli feedback`
 
 Send feedback about the community (a bug or an idea) (sign-in with write)
 
@@ -1530,45 +1531,45 @@ Send feedback about the community (a bug or an idea) (sign-in with write)
 - `--message-file PATH` File
 - `--page PATH` Where on the site
 
-    203c feedback --kind bug --title "Typo on /levels" --message "Experiance" --json
+    203cli feedback --kind bug --title "Typo on /levels" --message "Experiance" --json
 
-### `203c feedback mine`
+### `203cli feedback mine`
 
 Your appeals and feedback, with their status and our reply
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c feedback mine --json
+    203cli feedback mine --json
 
 ## Devices
 
-### `203c devices list`
+### `203cli devices list`
 
 Your devices: online (in its Launcher, or a firmware running) or off, last seen
 
-    203c devices list --json
+    203cli devices list --json
 
-### `203c devices bind-code`
+### `203cli devices bind-code`
 
 Web only: a Launcher signs in by approving its code on the site (/activate); the bind code is on /me/devices
 
 - `--new` (web only)
 
-    203c devices bind-code
+    203cli devices bind-code
 
-### `203c devices rename DEVICE NAME...`
+### `203cli devices rename DEVICE NAME...`
 
 Web only: rename a device on /me/devices
 
-    203c devices rename 3 "Studio Cardenza"
+    203cli devices rename 3 "Studio Cardenza"
 
-### `203c devices unbind DEVICE`
+### `203cli devices unbind DEVICE`
 
 Web only: sign a device out on /me/devices (我的设备)
 
-    203c devices unbind 3
+    203cli devices unbind 3
 
-### `203c flash [CODE]`
+### `203cli flash [CODE]`
 
 Install a firmware on a device over a USB cable (线刷), through its 203 Launcher: a firmware's newest build for the device (--channel) or a version, by its code, or a local --bin. No sign-in and no bound device: the device on, on a cable, in its Launcher or running a firmware (restarted into the Launcher first) (macOS and Linux)
 
@@ -1579,12 +1580,12 @@ Install a firmware on a device over a USB cable (线刷), through its 203 Launch
 - `--name NAME` The name the Launcher keeps it under (default: the firmware's)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
-    203c flash V6QK28 --json
-    203c flash V6QK28 --channel beta --port /dev/ttyACM0 --json
-    203c flash --bin build/app.bin --json
-    203c flash V6QK28 --dry-run --json
+    203cli flash V6QK28 --json
+    203cli flash V6QK28 --channel beta --port /dev/ttyACM0 --json
+    203cli flash --bin build/app.bin --json
+    203cli flash V6QK28 --dry-run --json
 
-### `203c log`
+### `203cli log`
 
 A Cardenza's log over its USB cable: a running firmware's console (CardenzaHAL's system channel) or the serial port (the 203 Launcher, a firmware without USB); --until makes it a test (no sign-in; macOS and Linux)
 
@@ -1594,12 +1595,12 @@ A Cardenza's log over its USB cable: a running firmware's console (CardenzaHAL's
 - `--port PORT` Read this serial port (/dev/ttyACM0, /dev/cu.usbmodem…) instead of looking
 - `--out FILE` Also append the lines to FILE
 
-    203c log
-    203c log --seconds 30 --json
-    203c log --until "ready" --seconds 30 --json
-    203c log --port /dev/ttyACM0 --out boot.log
+    203cli log
+    203cli log --seconds 30 --json
+    203cli log --until "ready" --seconds 30 --json
+    203cli log --port /dev/ttyACM0 --out boot.log
 
-### `203c devices recover`
+### `203cli devices recover`
 
 Recovery flash: the newest official Launcher and the device's official firmware, as the Launcher would have them (erases the whole internal flash; the SD card is not touched). --out saves the images and the esptool command, --port writes them with esptool
 
@@ -1610,11 +1611,11 @@ Recovery flash: the newest official Launcher and the device's official firmware,
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 - `--yes` Yes, erase the device's internal flash (with --port)
 
-    203c devices recover --dry-run --json
-    203c devices recover --out recover --json
-    203c devices recover --port /dev/ttyACM0 --yes
+    203cli devices recover --dry-run --json
+    203cli devices recover --out recover --json
+    203cli devices recover --port /dev/ttyACM0 --yes
 
-### `203c devices send DEVICE CODE`
+### `203cli devices send DEVICE CODE`
 
 Install a firmware (newest on a channel) or a version on a bound, online device and follow it (sign-in with write)
 
@@ -1623,100 +1624,100 @@ Install a firmware (newest on a channel) or a version on a bound, online device 
 - `--no-wait` Do not follow it
 - `--unlock TOKEN` cfu_… for someone else's private firmware
 
-    203c devices send 3 K7M2QX --start --json
-    203c devices send 3 K7M2QX --no-wait --json
+    203cli devices send 3 K7M2QX --start --json
+    203cli devices send 3 K7M2QX --no-wait --json
 
-### `203c devices status DEVICE COMMAND`
+### `203cli devices status DEVICE COMMAND`
 
 A command sent to a device (its id from devices send): downloading n %, installed, started, or why it failed; --wait follows it
 
 - `--wait` Follow it until it ends
 
-    203c devices status 3 41 --json
-    203c devices status 3 41 --wait --json
+    203cli devices status 3 41 --json
+    203cli devices status 3 41 --wait --json
 
-### `203c devices update-launcher DEVICE`
+### `203cli devices update-launcher DEVICE`
 
 Upgrade the device's 203 Launcher to the newest for it (我的设备's 升级启动器) and follow it until the new Launcher runs; devices list shows launcher_update (sign-in with write)
 
 - `--channel stable|beta|dev` The channel (default stable; CI builds go to dev)
 - `--no-wait` Do not follow it
 
-    203c devices update-launcher 3 --json
-    203c devices update-launcher 3 --no-wait --json
+    203cli devices update-launcher 3 --json
+    203cli devices update-launcher 3 --no-wait --json
 
 ## Board (a running firmware over USB)
 
-### `203c board info`
+### `203cli board info`
 
 What the firmware on the cable is: name, version, community code, build, ELF SHA-256, CardenzaHAL commit, Launcher, chip, uptime and reset reason
 
-    203c board info
-    203c board info --json
+    203cli board info
+    203cli board info --json
 
-### `203c board partitions`
+### `203cli board partitions`
 
 The flash: every partition (offsets and sizes in hex), app images and how full, NVS entries used, the running one, free flash
 
-    203c board partitions
-    203c board partitions --json
+    203cli board partitions
+    203cli board partitions --json
 
-### `203c board memory`
+### `203cli board memory`
 
 Heaps (internal, PSRAM, DMA: free, least free, largest block) and tasks (core, priority, stack left, CPU)
 
 - `--window MS` How long CPU per task is measured, 10-2550 ms (default 500)
 
-    203c board memory
-    203c board memory --window 2000 --json
+    203cli board memory
+    203cli board memory --window 2000 --json
 
-### `203c board storage`
+### `203cli board storage`
 
 The SD card: mounted, its size, the file system's size and free space
 
-    203c board storage --json
+    203cli board storage --json
 
-### `203c board status`
+### `203cli board status`
 
 The display, keys down, the system menu, USB and the presence service
 
-    203c board status --json
+    203cli board status --json
 
-### `203c board i2c`
+### `203cli board i2c`
 
 Every device that answers on the shared I2C bus (the codec, the expansion port's)
 
-    203c board i2c --json
+    203cli board i2c --json
 
-### `203c board screen`
+### `203cli board screen`
 
 A screenshot: the firmware's next frame as a PNG (prints its path)
 
 - `--out FILE.png` Where to write it (default cardenza-<date>-<time>.png in the current folder)
 
-    203c board screen
-    203c board screen --out menu.png --json
+    203cli board screen
+    203cli board screen --out menu.png --json
 
-### `203c board press KEY...`
+### `203cli board press KEY...`
 
 Press keys as a finger would, one after another (fn+s: together): esc, 1, q, fn, ok, space, up/down/left/right (; . , /), home …
 
 - `--hold MS` How long each is held (default 100)
 - `--gap MS` The pause after each (default 100)
 
-    203c board press down down ok
-    203c board press fn+s
-    203c board press home --json
-    203c board press esc --hold 1500
+    203cli board press down down ok
+    203cli board press fn+s
+    203cli board press home --json
+    203cli board press esc --hold 1500
 
-### `203c board keys [STEP...]`
+### `203cli board keys [STEP...]`
 
 Keys down and up step by step (KEY:down, KEY:up, a number: milliseconds to wait); none: the keys held from the computer
 
-    203c board keys fn:down s:down 200 s:up fn:up
-    203c board keys --json
+    203cli board keys fn:down s:down 200 s:up fn:up
+    203cli board keys --json
 
-### `203c board coredump`
+### `203cli board coredump`
 
 The last crash's core dump: whether there is one, its task and backtrace; --out saves it, --elf decodes the backtrace, --erase erases it
 
@@ -1724,52 +1725,52 @@ The last crash's core dump: whether there is one, its task and backtrace; --out 
 - `--elf FILE` The firmware's ELF (build/<project>.elf): decode the backtrace with xtensa-esp32s3-elf-addr2line
 - `--erase` Erase the dump afterwards (after --out saved it)
 
-    203c board coredump
-    203c board coredump --out crash.elf --elf build/my_synth.elf --json
-    203c board coredump --out crash.elf --erase
+    203cli board coredump
+    203cli board coredump --out crash.elf --elf build/my_synth.elf --json
+    203cli board coredump --out crash.elf --erase
 
-### `203c board files ls [PATH]`
+### `203cli board files ls [PATH]`
 
 The files in a folder of the SD card (default its root; paths are from the card's root, a leading / or /sdcard/ is dropped)
 
-    203c board files ls
-    203c board files ls CardenzaSynth/Projects --json
+    203cli board files ls
+    203cli board files ls CardenzaSynth/Projects --json
 
-### `203c board files get PATH [LOCAL]`
+### `203cli board files get PATH [LOCAL]`
 
 Copy a file from the SD card here (LOCAL: a file or folder; default its name in the current folder)
 
-    203c board files get CardenzaSynth/Logs/log.txt
-    203c board files get CardenzaSynth/Projects/DEMO.ccproj backup/ --json
+    203cli board files get CardenzaSynth/Logs/log.txt
+    203cli board files get CardenzaSynth/Projects/DEMO.ccproj backup/ --json
 
-### `203c board files put LOCAL [PATH]`
+### `203cli board files put LOCAL [PATH]`
 
 Copy a file onto the SD card (PATH: the file, or a folder it goes into; default its name at the root)
 
-    203c board files put kick.wav CardenzaSynth/Samples/
-    203c board files put song.ccproj CardenzaSynth/Projects/song.ccproj --json
+    203cli board files put kick.wav CardenzaSynth/Samples/
+    203cli board files put song.ccproj CardenzaSynth/Projects/song.ccproj --json
 
-### `203c board files rm PATH`
+### `203cli board files rm PATH`
 
 Remove a file (or an empty folder) from the SD card
 
-    203c board files rm CardenzaSynth/Samples/old.wav --json
+    203cli board files rm CardenzaSynth/Samples/old.wav --json
 
-### `203c board files mkdir PATH`
+### `203cli board files mkdir PATH`
 
 Make a folder on the SD card
 
-    203c board files mkdir CardenzaSynth/Samples/drums --json
+    203cli board files mkdir CardenzaSynth/Samples/drums --json
 
-### `203c board files mv FROM TO`
+### `203cli board files mv FROM TO`
 
 Rename or move a file or folder on the SD card
 
-    203c board files mv Samples/a.wav Samples/kick.wav --json
+    203cli board files mv Samples/a.wav Samples/kick.wav --json
 
 ## People
 
-### `203c me edit`
+### `203cli me edit`
 
 Change your name, bio or avatar (sign-in with write)
 
@@ -1778,62 +1779,62 @@ Change your name, bio or avatar (sign-in with write)
 - `--bio-file PATH` The bio from a file
 - `--avatar a01..a24` One of the site's avatars
 
-    203c me edit --name "Lin" --bio "Makes grooveboxes for the Cardenza" --json
+    203cli me edit --name "Lin" --bio "Makes grooveboxes for the Cardenza" --json
 
-### `203c xp`
+### `203cli xp`
 
 Your XP history and level
 
 - `--page N` Page, from 1 (24 a page)
 
-    203c xp --json
+    203cli xp --json
 
-### `203c levels`
+### `203cli levels`
 
 Levels and the XP rules
 
-    203c levels --json
+    203cli levels --json
 
-### `203c badges`
+### `203cli badges`
 
 Your badges
 
-    203c badges --json
+    203cli badges --json
 
-### `203c badges all`
+### `203cli badges all`
 
 Every badge and how it is earned
 
-    203c badges all --json
+    203cli badges all --json
 
-### `203c badges wear ID...`
+### `203cli badges wear ID...`
 
 Wear 0-3 of your badges, in this order (none: take them all off) (sign-in with write)
 
-    203c badges wear b4k9 x2m7 --json
-    203c badges wear none --json
+    203cli badges wear b4k9 x2m7 --json
+    203cli badges wear none --json
 
-### `203c titles`
+### `203cli titles`
 
 Your titles
 
-    203c titles --json
+    203cli titles --json
 
-### `203c titles wear ID`
+### `203cli titles wear ID`
 
 Wear a title (none: no title) (sign-in with write)
 
-    203c titles wear none --json
+    203cli titles wear none --json
 
 ## Admin
 
-### `203c admin overview`
+### `203cli admin overview`
 
 Admin: counts
 
-    203c admin overview --json
+    203cli admin overview --json
 
-### `203c admin users`
+### `203cli admin users`
 
 Admin: people
 
@@ -1841,98 +1842,98 @@ Admin: people
 - `--status STATUS` active, banned or deleted
 - `--page N` Page, from 1 (24 a page)
 
-    203c admin users --q mika --json
+    203cli admin users --q mika --json
 
-### `203c admin ban ID`
+### `203cli admin ban ID`
 
 Admin: ban a person (sign-in with write)
 
 - `--reason TEXT` Why (required)
 - `--days 1|7|30` How long (default: until lifted)
 
-    203c admin ban ab12cd34 --reason "spam" --days 7 --json
+    203cli admin ban ab12cd34 --reason "spam" --days 7 --json
 
-### `203c admin unban ID`
+### `203cli admin unban ID`
 
 Admin: lift a ban (sign-in with write)
 
-    203c admin unban ab12cd34 --json
+    203cli admin unban ab12cd34 --json
 
-### `203c admin delete-user ID`
+### `203cli admin delete-user ID`
 
 Admin: close an account Needs `--yes`.
 
 - `--reason TEXT` Why (required)
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c admin delete-user ab12cd34 --reason "asked" --yes --json
+    203cli admin delete-user ab12cd34 --reason "asked" --yes --json
 
-### `203c admin hide KIND REF`
+### `203cli admin hide KIND REF`
 
 Admin: hide content
 
 - `--reason TEXT` Why
 
-    203c admin hide post ab12cd34 --reason spam --json
+    203cli admin hide post ab12cd34 --reason spam --json
 
-### `203c admin unhide KIND REF`
+### `203cli admin unhide KIND REF`
 
 Admin: unhide content
 
 - `--reason TEXT` Why
 
-    203c admin unhide post ab12cd34 --reason spam --json
+    203cli admin unhide post ab12cd34 --reason spam --json
 
-### `203c admin delete KIND REF`
+### `203cli admin delete KIND REF`
 
 Admin: delete content Needs `--yes`.
 
 - `--reason TEXT` Why
 - `--yes` Yes, do it (it cannot be undone)
 
-    203c admin delete post ab12cd34 --reason spam --yes --json
+    203cli admin delete post ab12cd34 --reason spam --yes --json
 
-### `203c admin feature KIND REF`
+### `203cli admin feature KIND REF`
 
 Admin: feature (加精) firmware, a sound, project, work, model or post (--off undoes it) (sign-in with write)
 
 - `--off` Undo it
 
-    203c admin feature firmware K7M2QX --json
+    203cli admin feature firmware K7M2QX --json
 
-### `203c admin official CODE`
+### `203cli admin official CODE`
 
 Admin: the official tag on a firmware (--off removes it) (sign-in with write)
 
 - `--off` Remove it
 
-    203c admin official K7M2QX --json
+    203cli admin official K7M2QX --json
 
-### `203c admin pin ID`
+### `203cli admin pin ID`
 
 Admin: pin a post (--off undoes it) (sign-in with write)
 
 - `--off` Undo it
 
-    203c admin pin ab12cd34 --json
+    203cli admin pin ab12cd34 --json
 
-### `203c admin lock ID`
+### `203cli admin lock ID`
 
 Admin: lock a post (--off undoes it) (sign-in with write)
 
 - `--off` Undo it
 
-    203c admin lock ab12cd34 --json
+    203cli admin lock ab12cd34 --json
 
-### `203c admin add-official HUB_APP_ID`
+### `203cli admin add-official HUB_APP_ID`
 
 Admin: show a hub App as an official firmware (sign-in with write)
 
 - `--tags a,b` Tags
 
-    203c admin add-official 0b7c…-uuid --json
+    203cli admin add-official 0b7c…-uuid --json
 
-### `203c admin section-set ID`
+### `203cli admin section-set ID`
 
 Admin: replace a section's categories and / or open or close it (sign-in with write)
 
@@ -1940,43 +1941,43 @@ Admin: replace a section's categories and / or open or close it (sign-in with wr
 - `--open` Open the section to everyone
 - `--closed` Close it (admins only)
 
-    203c admin section-set models --categories '[{"tag":"case","label_zh":"外壳","label_en":"Cases"}]' --json
-    203c admin section-set sounds --open --json
+    203cli admin section-set models --categories '[{"tag":"case","label_zh":"外壳","label_en":"Cases"}]' --json
+    203cli admin section-set sounds --open --json
 
-### `203c admin reports`
+### `203cli admin reports`
 
 Admin: reports
 
 - `--status open|resolved` Which
 - `--page N` Page, from 1 (24 a page)
 
-    203c admin reports --json
+    203cli admin reports --json
 
-### `203c admin resolve N ACTION`
+### `203cli admin resolve N ACTION`
 
 Admin: resolve a report (ACTION: dismiss, hide, delete, ban) (sign-in with write)
 
 - `--note TEXT` Note
 - `--days N` Ban days
 
-    203c admin resolve 12 dismiss --json
+    203cli admin resolve 12 dismiss --json
 
-### `203c admin audit`
+### `203cli admin audit`
 
 Admin: the audit log
 
 - `--actor ID` A user id
 - `--page N` Page, from 1 (24 a page)
 
-    203c admin audit --json
+    203cli admin audit --json
 
-### `203c admin titles`
+### `203cli admin titles`
 
 Admin: titles
 
-    203c admin titles --json
+    203cli admin titles --json
 
-### `203c admin title-create [TEXT]`
+### `203cli admin title-create [TEXT]`
 
 Admin: make a title (--zh / --en; one may be left out) (sign-in with write)
 
@@ -1985,17 +1986,17 @@ Admin: make a title (--zh / --en; one may be left out) (sign-in with write)
 - `--color COLOR` cyan, yellow, violet, green, pink, blue, lime, amber (needed but for an admin title)
 - `--admin` An admin title (its colour is the admins' orange-red)
 
-    203c admin title-create --zh 测试员 --en Tester --color cyan --json
+    203cli admin title-create --zh 测试员 --en Tester --color cyan --json
 
-### `203c admin grant-title USER TITLE`
+### `203cli admin grant-title USER TITLE`
 
 Admin: grant a title (--off takes it back) (sign-in with write)
 
 - `--off` Take it back
 
-    203c admin grant-title ab12cd34 t9p4b98w --json
+    203cli admin grant-title ab12cd34 t9p4b98w --json
 
-### `203c admin badge-create [NAME]`
+### `203cli admin badge-create [NAME]`
 
 Admin: make a badge to grant (sign-in with write)
 
@@ -2006,25 +2007,25 @@ Admin: make a badge to grant (sign-in with write)
 - `--description-zh TEXT` Chinese description
 - `--description-en TEXT` English description
 
-    203c admin badge-create --en Helper --icon b05 --json
+    203cli admin badge-create --en Helper --icon b05 --json
 
-### `203c admin grant-badge USER BADGE`
+### `203cli admin grant-badge USER BADGE`
 
 Admin: grant a badge (--off takes it back) (sign-in with write)
 
 - `--off` Take it back
 
-    203c admin grant-badge ab12cd34 x2m7 --json
+    203cli admin grant-badge ab12cd34 x2m7 --json
 
-### `203c admin xp USER DELTA`
+### `203cli admin xp USER DELTA`
 
 Admin: adjust a person's XP (audited) (sign-in with write)
 
 - `--reason TEXT` Why (required)
 
-    203c admin xp ab12cd34 50 --reason "Helped with the docs" --json
+    203cli admin xp ab12cd34 50 --reason "Helped with the docs" --json
 
-### `203c admin issues`
+### `203cli admin issues`
 
 Admin: appeals, bug reports and ideas
 
@@ -2032,15 +2033,15 @@ Admin: appeals, bug reports and ideas
 - `--status STATUS` Status
 - `--page N` Page, from 1 (24 a page)
 
-    203c admin issues --kind false_positive --json
+    203cli admin issues --kind false_positive --json
 
-### `203c admin issue N`
+### `203cli admin issue N`
 
 Admin: an issue with the full check report, log and BINs
 
-    203c admin issue 7 --json
+    203cli admin issue 7 --json
 
-### `203c admin issue-update N`
+### `203cli admin issue-update N`
 
 Admin: status, note, link, or a reply the author sees (sign-in with write)
 
@@ -2051,69 +2052,69 @@ Admin: status, note, link, or a reply the author sees (sign-in with write)
 - `--reply TEXT` Shown to the author
 - `--reply-file PATH` File
 
-    203c admin issue-update 7 --status false_positive --reply "Fixed in the checker" --json
+    203cli admin issue-update 7 --status false_positive --reply "Fixed in the checker" --json
 
-### `203c admin override VCODE`
+### `203cli admin override VCODE`
 
 Admin: publish a version the checks sent back (a false positive) (sign-in with write)
 
 - `--note TEXT` Why
 - `--note-file PATH` File
 
-    203c admin override V3X9PA --note "Touch IC missing in QEMU" --json
+    203cli admin override V3X9PA --note "Touch IC missing in QEMU" --json
 
-### `203c admin recheck VCODE`
+### `203cli admin recheck VCODE`
 
 Admin: run a version's checks again (sign-in with write)
 
-    203c admin recheck V3X9PA --json
+    203cli admin recheck V3X9PA --json
 
 ## Other
 
-### `203c api METHOD PATH`
+### `203cli api METHOD PATH`
 
 Call any endpoint (reference/api.md): GET or POST, a path below the API
 
 - `--body JSON` A JSON body for POST
 
-    203c api GET /firmware/K7M2QX/versions --json
+    203cli api GET /firmware/K7M2QX/versions --json
 
-### `203c ops`
+### `203cli ops`
 
 Every API operation with its JSON schema (for programs)
 
-    203c ops
+    203cli ops
 
 ## Help topics
 
-- `203c help start` — Start here: what to run for what
-- `203c help new` — A new firmware for the Cardenza: make, build, try, publish, listen
-- `203c help project` — The project's firmware on the community: page, versions, what people say, forks, differences
-- `203c help link` — Binding a project to its firmware, and moving it
-- `203c help signin` — Signing in
-- `203c help publish` — Publishing a firmware version
-- `203c help ci` — Publishing from CI: trusted publishing from GitHub Actions (no secret)
-- `203c help manifest` — 203.json (the project file)
-- `203c help channels` — Channels
-- `203c help versions` — Version labels and codes
-- `203c help checks` — When the checks send a version back (exit 5)
-- `203c help page` — A good firmware page
-- `203c help cover` — Covers
-- `203c help description` — Writing the description: short, for people deciding to install (the guide, its template and an example)
-- `203c help pictures` — Pictures: the gallery above the description (3-5 screenshots), and pictures in the description
-- `203c help tutorials` — Tutorials (教程): how to use a firmware, in the one tutorial format
-- `203c help sounds` — Sound packs (official firmware only; the section may not be open yet)
-- `203c help projects` — Projects (official firmware only)
-- `203c help works` — Works (official firmware only)
-- `203c help models` — 3D models
-- `203c help errors` — Errors and exit codes
-- `203c help fork` — Changing someone's firmware: fork, clone, publish (provenance)
-- `203c help source` — Source code on the firmware page
-- `203c help rules` — The firmware project rules
-- `203c help sim` — Simulator versions (Play)
-- `203c help launchers` — Launchers: only the official 203 Launcher
-- `203c help devices` — Installing firmware on a device: over a USB cable (no sign-in) or sent over Wi-Fi
-- `203c help board` — A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203c board)
-- `203c help requests` — Requests and the developer tracker
-- `203c help sandbox` — Running in a sandboxed agent (Claude Code on the web, Codex cloud…): allowing the community's hosts
-- `203c help admin` — Admins
+- `203cli help start` — Start here: what to run for what
+- `203cli help new` — A new firmware for the Cardenza: make, build, try, publish, listen
+- `203cli help project` — The project's firmware on the community: page, versions, what people say, forks, differences
+- `203cli help link` — Binding a project to its firmware, and moving it
+- `203cli help signin` — Signing in
+- `203cli help publish` — Publishing a firmware version
+- `203cli help ci` — Publishing from CI: trusted publishing from GitHub Actions (no secret)
+- `203cli help manifest` — 203.json (the project file)
+- `203cli help channels` — Channels
+- `203cli help versions` — Version labels and codes
+- `203cli help checks` — When the checks send a version back (exit 5)
+- `203cli help page` — A good firmware page
+- `203cli help cover` — Covers
+- `203cli help description` — Writing the description: short, for people deciding to install (the guide, its template and an example)
+- `203cli help pictures` — Pictures: the gallery above the description (3-5 screenshots), and pictures in the description
+- `203cli help tutorials` — Tutorials (教程): how to use a firmware, in the one tutorial format
+- `203cli help sounds` — Sound packs (official firmware only; the section may not be open yet)
+- `203cli help projects` — Projects (official firmware only)
+- `203cli help works` — Works (official firmware only)
+- `203cli help models` — 3D models
+- `203cli help errors` — Errors and exit codes
+- `203cli help fork` — Changing someone's firmware: fork, clone, publish (provenance)
+- `203cli help source` — Source code on the firmware page
+- `203cli help rules` — The firmware project rules
+- `203cli help sim` — Simulator versions (Play)
+- `203cli help launchers` — Launchers: only the official 203 Launcher
+- `203cli help devices` — Installing firmware on a device: over a USB cable (no sign-in) or sent over Wi-Fi
+- `203cli help board` — A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203cli board)
+- `203cli help requests` — Requests and the developer tracker
+- `203cli help sandbox` — Running in a sandboxed agent (Claude Code on the web, Codex cloud…): allowing the community's hosts
+- `203cli help admin` — Admins

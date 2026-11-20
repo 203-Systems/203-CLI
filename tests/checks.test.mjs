@@ -1,4 +1,4 @@
-// 203c's local checks (scripts/checks.mjs), made before anything is sent, the way the community's server and checker
+// 203cli's local checks (scripts/checks.mjs), made before anything is sent, the way the community's server and checker
 // make them: codes, version labels, channels, tags, summaries, placeholders; BINs (the application image and every
 // wrong file named for what it is; UF2 files for the download-only devices); covers, media and changelog entries.
 // Run: node --test tests/checks.test.mjs

@@ -13,7 +13,7 @@ The description is what people read under the pictures on a firmware's page, and
 
 ## Length {#length}
 
-Aim for **800 characters** or fewer (pictures are not counted). Over **1500** the editor and 203c warn; over **3000** a description cannot be saved. Short is not a loss: what does not fit here belongs elsewhere.
+Aim for **800 characters** or fewer (pictures are not counted). Over **1500** the editor and 203cli warn; over **3000** a description cannot be saved. Short is not a loss: what does not fit here belongs elsewhere.
 
 | Not in the description | Where it goes |
 | --- | --- |
@@ -24,11 +24,11 @@ Aim for **800 characters** or fewer (pictures are not counted). Over **1500** th
 
 ## Pictures {#pictures}
 
-Show it before you describe it: **3–5 different screenshots of the firmware itself** in its gallery, the large pictures above the description. The screen people see first, then one for each main feature. With a Cardenza on the USB cable running it, `203c board screen --out docs/screens/home.png` saves the screen as a PNG (the page enlarges it pixel for pixel); a photo of the device works too. On the site the gallery is a suggestion; `203c publish` needs 3–5 (203.json's `publish.images`). A picture inside the text: **Insert picture** on the site, `![words](image:<id>)` in Markdown.
+Show it before you describe it: **3–5 different screenshots of the firmware itself** in its gallery, the large pictures above the description. The screen people see first, then one for each main feature. With a Cardenza on the USB cable running it, `203cli board screen --out docs/screens/home.png` saves the screen as a PNG (the page enlarges it pixel for pixel); a photo of the device works too. On the site the gallery is a suggestion; `203cli publish` needs 3–5 (203.json's `publish.images`). A picture inside the text: **Insert picture** on the site, `![words](image:<id>)` in Markdown.
 
 ## The template {#template}
 
-The editor's **Use the template** puts this in; `203c new` writes it to `docs/description.md`. Replace every `<…>`.
+The editor's **Use the template** puts this in; `203cli new` writes it to `docs/description.md`. Replace every `<…>`.
 
 ```markdown
 <What it is and who it is for, in one or two sentences.>
@@ -107,7 +107,7 @@ A line ends where you end it (do not wrap long lines by hand); a blank line star
 
 ## 长度 {#length}
 
-目标是 **800 个字符**以内（插图不算）。超过 **1500** 时，编辑器和 203c 会提醒；超过 **3000** 就保存不了。短不是损失：放不下的内容本来就该放在别处。
+目标是 **800 个字符**以内（插图不算）。超过 **1500** 时，编辑器和 203cli 会提醒；超过 **3000** 就保存不了。短不是损失：放不下的内容本来就该放在别处。
 
 | 不写进简介 | 放到哪里 |
 | --- | --- |
@@ -118,11 +118,11 @@ A line ends where you end it (do not wrap long lines by hand); a blank line star
 
 ## 图片 {#pictures}
 
-先让人看到，再用文字介绍：在图片（简介上面的大图）里放 **3–5 张固件自己的截图**，每张都不一样：第一张是用户最先看到的画面，然后每个主要功能一张。Cardenza 用 USB 线连着电脑、正在运行这个固件时，`203c board screen --out docs/screens/home.png` 把屏幕存成一张 PNG（页面会按像素放大）；设备的照片也可以。在网页上发布时图片只是建议；用 `203c publish` 发布必须有 3–5 张（203.json 的 `publish.images`）。正文里的插图：网页上点**插入图片**，Markdown 里写 `![说明](image:<id>)`。
+先让人看到，再用文字介绍：在图片（简介上面的大图）里放 **3–5 张固件自己的截图**，每张都不一样：第一张是用户最先看到的画面，然后每个主要功能一张。Cardenza 用 USB 线连着电脑、正在运行这个固件时，`203cli board screen --out docs/screens/home.png` 把屏幕存成一张 PNG（页面会按像素放大）；设备的照片也可以。在网页上发布时图片只是建议；用 `203cli publish` 发布必须有 3–5 张（203.json 的 `publish.images`）。正文里的插图：网页上点**插入图片**，Markdown 里写 `![说明](image:<id>)`。
 
 ## 模板 {#template}
 
-编辑器里点 **用模板**会放进这段；`203c new` 会把它写成 `docs/description.md`。把每个 `<…>` 换成自己的内容。
+编辑器里点 **用模板**会放进这段；`203cli new` 会把它写成 `docs/description.md`。把每个 `<…>` 换成自己的内容。
 
 ```markdown
 <一两句话：它是什么，给谁用。>

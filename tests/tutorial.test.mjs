@@ -1,7 +1,7 @@
 // Tutorials (the community's "Tutorials"; the format: reference/tutorial-format.md). First the format's checker,
 // scripts/tutorial-format.mjs, the one module the community's API and editor run too: a good file, every error code with
 // its line and column, key names (combos, aliases, home), the steps' markup, widths, one-language texts and the picture
-// modes. Then 203c tutorial against a stand-in API that keeps tutorials and their pictures as the community does: new,
+// modes. Then 203cli tutorial against a stand-in API that keeps tutorials and their pictures as the community does: new,
 // check, publish (pictures once, by SHA-256; the file as written), link, list, show, rm, hide.
 // Run: node --test tests/tutorial.test.mjs
 import {test, before, after} from "node:test";
@@ -191,7 +191,7 @@ test("format: link tutorials (title, https address)", () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// 203c tutorial against a stand-in API
+// 203cli tutorial against a stand-in API
 
 const TOKEN = "cct_" + "c".repeat(64);
 const CODE = "K7M2QX";
@@ -233,7 +233,7 @@ before(async () => {
     const dry = /(^|&)dry_run=1(&|$)/.test(query);
     const json = body && body.startsWith("{") ? JSON.parse(body) : {};
     if (pathname === "/api/") return send(200, {version: 2, limits: {}});
-    if (pathname === "/api/me") return send(200, {...ME, role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203c"}});
+    if (pathname === "/api/me") return send(200, {...ME, role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203cli"}});
     if (pathname === `/api/firmware/${CODE}` && req.method === "GET") return send(200, {code: CODE, name: "Pocket Tracker", owner: ME, can: {edit: true}});
     if (pathname === "/api/firmware/ZZZZZZ") return send(404, {error: "No firmware has this code", code: "not_found"});
     const base = `/api/firmware/${CODE}`;
@@ -295,8 +295,8 @@ before(async () => {
     if (pathname === "/api/tutorials") return send(200, {total: 1, page: 1, page_size: 24, items: [{firmware: {code: CODE, name: "Pocket Tracker"}, total: tutorials.size, tutorials: []}]});
     return false;
   });
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "203c-home-"));
-  work = fs.mkdtempSync(path.join(os.tmpdir(), "203c-tutorial-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-home-"));
+  work = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-tutorial-"));
   fs.writeFileSync(path.join(work, "203.json"), JSON.stringify({format: 1, name: "Pocket Tracker", code: CODE}, null, 2) + "\n");
 });
 after(async () => { await stand.close(); fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(work, {recursive: true, force: true}); });

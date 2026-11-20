@@ -1,4 +1,4 @@
-// A network between 203c and the community that blocks it (the user, 2026-11-20: an agent in Claude Code's cloud got
+// A network between 203cli and the community that blocks it (the user, 2026-11-20: an agent in Claude Code's cloud got
 // "HTTP 403"): an agent sandbox's allowlist (403 with x-deny-reason: host_not_allowed, a 403 from the community's host
 // that is not its JSON, and in a sandbox that says it is one a name that does not resolve or a proxy's certificate),
 // the CDN's block page (Cloudflare), and the API's own refusals, which stay what they are. Fake fetch answers only.
@@ -29,7 +29,7 @@ const forbidden = () => new Response(JSON.stringify({error: "Not yours", code: "
 // A fetch that fails the way undici does: TypeError("fetch failed") with the system's code on its cause.
 const failing = code => async () => { throw Object.assign(new TypeError("fetch failed"), {cause: Object.assign(new Error(code), {code})}); };
 const client = (fetcher, {env = NO_SANDBOX, lang = "en"} = {}) => new Client({api: API, token: null, fetch: fetcher, env, lang});
-const ctx = (c, words = ["whoami"]) => ({client: c, api: c.api, words, run: w => ["203c", ...w, "--json"].join(" "), cmd: () => ["203c", ...words, "--json"].join(" ")});
+const ctx = (c, words = ["whoami"]) => ({client: c, api: c.api, words, run: w => ["203cli", ...w, "--json"].join(" "), cmd: () => ["203cli", ...words, "--json"].join(" ")});
 
 test("agentSandbox: only what the sandboxes document", () => {
   assert.equal(agentSandbox({CLAUDE_CODE_REMOTE: "true"}), "claude_code");
@@ -47,12 +47,12 @@ test("a 403 with x-deny-reason: host_not_allowed is the sandbox's allowlist, wit
   assert.deepEqual(error.data.allow, ["cardenza.203.io", "apps.203.io"]);
   assert.match(error.message, /network allowlist blocked cardenza\.203\.io \(HTTP 403, x-deny-reason: host_not_allowed\)/);
   for (const words of [/cardenza\.203\.io and apps\.203\.io/, /claude\.ai\/code/, /Network access: Limited/, /Allow package managers/, /Allowed domains/,
-    /Save changes/, /Full/, /Owner/, /admin settings › Cloud environments/, /Codex cloud/, /a file in the repository cannot/, /203c rules/,
-    /203c skill install/, /flash --bin/]) assert.match(error.hint, words);
-  // 203c's answer: exit 1 (a change the user makes, not "later"), the same command first, then doctor.
+    /Save changes/, /Full/, /Owner/, /admin settings › Cloud environments/, /Codex cloud/, /a file in the repository cannot/, /203cli rules/,
+    /203cli skill install/, /flash --bin/]) assert.match(error.hint, words);
+  // 203cli's answer: exit 1 (a change the user makes, not "later"), the same command first, then doctor.
   const out = explainApiError(error, ctx(client(async () => denied())));
   assert.deepEqual([out.code, out.exit], ["network_blocked_sandbox", 1]);
-  assert.deepEqual(out.next, ["203c whoami --json", "203c doctor --json"]);
+  assert.deepEqual(out.next, ["203cli whoami --json", "203cli doctor --json"]);
   assert.equal(out.hint, error.hint);
   // Any host: an upload's storage host is named with the two.
   const upload = await client(async () => denied()).fetch("https://storage.example.test/up").catch(e => e);
@@ -63,7 +63,7 @@ test("a 403 with x-deny-reason: host_not_allowed is the sandbox's allowlist, wit
 
 test("in Chinese with --lang zh / COMMUNITY_LANG=zh", async () => {
   const error = await client(async () => denied(), {lang: "zh"}).get("/me").catch(e => e);
-  assert.match(error.message, /这个环境的网络白名单拦下了 cardenza\.203\.io（HTTP 403，x-deny-reason: host_not_allowed）：在这里 203c 连不上 203 社区/);
+  assert.match(error.message, /这个环境的网络白名单拦下了 cardenza\.203\.io（HTTP 403，x-deny-reason: host_not_allowed）：在这里 203cli 连不上 203 社区/);
   for (const words of [/只有用户自己能放行 cardenza\.203\.io、apps\.203\.io/, /Allowed domains/, /Owner/, /Codex 云端/, /不用联网的照样能做/]) assert.match(error.hint, words);
   const cdn = await client(async () => cfShort(), {lang: "zh"}).get("/").catch(e => e);
   assert.match(cdn.message, /网站的防火墙（cardenza\.203\.io 前面的 Cloudflare）拦下了这个请求（HTTP 403，Ray ID a5d75026da776fe0-IAD）/);
@@ -76,7 +76,7 @@ test("Cloudflare's block page is the CDN, not the sandbox; the API's own 403 sta
     assert.match(error.data.ray, /^a5d7/);
     assert.match(error.message, /The site's firewall \(Cloudflare, in front of cardenza\.203\.io\) blocked this request \(HTTP 403, Ray ID a5d7/);
     assert.match(error.hint, /only the site's owner/);
-    assert.match(error.hint, /203c\/\d+\.\d+\.\d+/);
+    assert.match(error.hint, /203cli\/\d+\.\d+\.\d+/);
     assert.match(error.hint, /github\.com\/203-Systems\/203-CLI\/issues/);
     const out = explainApiError(error, ctx(client(async () => answer())));
     assert.deepEqual([out.code, out.exit], ["network_blocked_cdn", 1]);
@@ -113,7 +113,7 @@ test("ENOTFOUND for the community in a sandbox that says it is one: its allowlis
   assert.deepEqual([plain.code, plain.message], ["unreachable", "Cannot reach https://cardenza.203.io/community/api (ENOTFOUND)"]);
   const out = explainApiError(plain, ctx(client(failing("ENOTFOUND"))));
   assert.deepEqual([out.code, out.exit], ["unreachable", 3]);
-  assert.match(out.hint, /In a sandboxed agent \(Claude Code on the web, Codex cloud…\).*allow cardenza\.203\.io and apps\.203\.io \(203c help sandbox/);
+  assert.match(out.hint, /In a sandboxed agent \(Claude Code on the web, Codex cloud…\).*allow cardenza\.203\.io and apps\.203\.io \(203cli help sandbox/);
   // Not every failure is the sandbox: refused elsewhere is unreachable, with no such hint.
   const refused = explainApiError(await client(failing("ECONNREFUSED"), {env: CLAUDE}).get("/").catch(e => e), ctx(client(failing("ECONNREFUSED"))));
   assert.equal(refused.code, "unreachable");
@@ -156,20 +156,20 @@ test("probeHost and doctor: both hosts checked, the sandbox reported with the sa
   assert.deepEqual([no.ok, no.error.code], [false, "network_blocked_sandbox"]);
 
   const doctorCtx = c => ({client: c, api: c.api, notes: [], flags: {}, tokenSource: null, tokenFile: os.devNull, pendingLogin: null,
-    run: (w, {json = true} = {}) => ["203c", ...w, ...(json ? ["--json"] : [])].join(" "), cmd: () => "203c doctor --json"});
+    run: (w, {json = true} = {}) => ["203cli", ...w, ...(json ? ["--json"] : [])].join(" "), cmd: () => "203cli doctor --json"});
   // Everything blocked, in a Claude Code cloud session.
   const blocked = await doctor(doctorCtx(client(async () => denied(), {env: CLAUDE})));
   assert.equal(blocked.exit, 1);
   assert.equal(blocked.json.sandbox, "claude_code");
   assert.equal(blocked.json.problems[0].code, "network_blocked_sandbox");
   assert.match(blocked.json.problems[0].hint, /Allowed domains/);
-  assert.deepEqual(blocked.json.next, ["203c doctor --json"]);
+  assert.deepEqual(blocked.json.next, ["203cli doctor --json"]);
   const hosts = blocked.json.checks.filter(c => c.name === "host");
   assert.deepEqual(hosts.map(c => [c.host, c.ok, c.code]), [["cardenza.203.io", false, "network_blocked_sandbox"], ["apps.203.io", false, "network_blocked_sandbox"]]);
   assert.ok(blocked.json.checks.some(c => c.name === "sandbox" && /CLAUDE_CODE_REMOTE/.test(c.detail)));
   assert.match(blocked.text, /✗ host +cardenza\.203\.io: blocked \(network_blocked_sandbox, host_not_allowed\)/);
   assert.match(blocked.text, /\n {4}- Claude Code on the web/, "the hint's lines indented");
-  // The API's host allowed, its twin not: a warning with the steps (203c works through the API's host).
+  // The API's host allowed, its twin not: a warning with the steps (203cli works through the API's host).
   const twin = await doctor(doctorCtx(client(async url => new URL(url).hostname === "apps.203.io" ? denied() : root())));
   assert.ok(!twin.json.problems.some(p => p.code === "network_blocked_sandbox"));
   const warning = twin.json.warnings.find(w => w.code === "network_blocked_sandbox");
@@ -193,8 +193,8 @@ test("the CLI: exit 1, the code, the multi-line hint; help sandbox", async () =>
     assert.equal(json.code, 1, json.stderr);
     assert.equal(json.error.code, "network_blocked_sandbox");
     assert.equal(json.error.host, "127.0.0.1");
-    assert.match(json.error.next[0], /203c\.mjs whoami --api \S+ --json$/);
-    assert.match(json.error.next[1], /203c\.mjs doctor --api \S+ --json$/);
+    assert.match(json.error.next[0], /203cli\.mjs whoami --api \S+ --json$/);
+    assert.match(json.error.next[1], /203cli\.mjs doctor --api \S+ --json$/);
     const text = await run(["--api", api, "whoami"], {env});
     assert.match(text.stderr, /\(network_blocked_sandbox\)\n {2}Only the user can allow cardenza\.203\.io, apps\.203\.io and 127\.0\.0\.1/);
     assert.match(text.stderr, /\n {2}- Claude Code on the web/);
@@ -208,5 +208,5 @@ test("the CLI: exit 1, the code, the multi-line hint; help sandbox", async () =>
   assert.equal(help.code, 0);
   assert.match(help.stdout, /network_blocked_sandbox/);
   assert.match(help.stdout, /network_blocked_cdn/);
-  assert.match(topicText("sandbox", "203c"), /Allowed domains/);
+  assert.match(topicText("sandbox", "203cli"), /Allowed domains/);
 });

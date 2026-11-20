@@ -1,8 +1,8 @@
 // The update notices (scripts/updates.mjs): versions compared, npm's answer kept a day, failures and a network that never
 // answers silent, the switches (CI, GITHUB_ACTIONS, NO_UPDATE_NOTIFIER, C203_NO_UPDATE_CHECK), a project whose CardenzaHAL
 // submodule is behind its main, at it, or not a clean copy (the HAL's own check_submodule.py), against a stand-in
-// fetch; then 203c itself against stand-in npm and GitHub servers: the notices on stderr only (before an error's JSON
-// line), never in stdout or the exit code, nothing in CI, and `203c updates` (--json, --quiet).
+// fetch; then 203cli itself against stand-in npm and GitHub servers: the notices on stderr only (before an error's JSON
+// line), never in stdout or the exit code, nothing in CI, and `203cli updates` (--json, --quiet).
 // Run: node --test tests/updates.test.mjs
 import {test, before, after} from "node:test";
 import assert from "node:assert/strict";
@@ -18,7 +18,7 @@ import {automaticOff, checkUpdates, compareVersions, findHalSubmodule, githubRep
 const PYTHON = process.platform === "win32" ? "python" : "python3";
 const hasPython = spawnSync(PYTHON, ["--version"], {encoding: "utf8"}).status === 0;
 let dir;
-before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "203c-updates-")); });
+before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-updates-")); });
 after(() => fs.rmSync(dir, {recursive: true, force: true}));
 const scratch = name => { const d = path.join(dir, name); fs.mkdirSync(d, {recursive: true}); return d; };
 const git = (cwd, ...args) => {
@@ -37,7 +37,7 @@ function fakeFetch(answer) {
   };
   return {fetch, asked};
 }
-const npm = version => url => url.endsWith("/203c/latest") ? {status: 200, body: {name: "203c", version}} : {status: 404, body: {}};
+const npm = version => url => url.endsWith("/203cli/latest") ? {status: 200, body: {name: "203cli", version}} : {status: 404, body: {}};
 const NOW = Date.UTC(2026, 10, 20, 12);
 
 test("versions: major.minor.patch, a pre-release below its release", () => {
@@ -72,13 +72,13 @@ test("GitHub repositories from submodule URLs", () => {
   assert.equal(githubRepo("../CardenzaHAL"), null);
 });
 
-test("203c: a newer version on npm is a notice; npm is asked once a day, the answer kept for the day", async () => {
+test("203cli: a newer version on npm is a notice; npm is asked once a day, the answer kept for the day", async () => {
   const file = path.join(scratch("state-cli"), "updates.json");
   const f = fakeFetch(npm("9.0.0"));
   const first = await checkUpdates({fetch: f.fetch, file, now: NOW, env: {}, current: "3.5.0", hal: false});
-  assert.deepEqual(first.notices, [`203c 9.0.0 is out (you have 3.5.0): ${UPDATE_CLI}`]);
+  assert.deepEqual(first.notices, [`203cli 9.0.0 is out (you have 3.5.0): ${UPDATE_CLI}`]);
   assert.equal(first.cli.checked, "now");
-  assert.deepEqual(f.asked, ["https://registry.npmjs.org/203c/latest"]);
+  assert.deepEqual(f.asked, ["https://registry.npmjs.org/203cli/latest"]);
   assert.equal(fs.statSync(file).isFile(), true);
   assert.doesNotMatch(fs.readFileSync(file, "utf8"), /token|cct_/);
   // Within the day: from the file, nothing asked, the notice still there.
@@ -88,7 +88,7 @@ test("203c: a newer version on npm is a notice; npm is asked once a day, the ans
   assert.equal(f.asked.length, 1);
   // Updated since: no notice (the running version decides).
   assert.deepEqual((await checkUpdates({fetch: f.fetch, file, now: NOW + 5000, env: {}, current: "9.0.0", hal: false})).notices, []);
-  // A day later: asked again. fresh (doctor, 203c updates): asked whatever the file says.
+  // A day later: asked again. fresh (doctor, 203cli updates): asked whatever the file says.
   await checkUpdates({fetch: f.fetch, file, now: NOW + DAY_MS + 1, env: {}, current: "3.5.0", hal: false});
   assert.equal(f.asked.length, 2);
   await checkUpdates({fetch: f.fetch, file, now: NOW + DAY_MS + 2, env: {}, current: "3.5.0", hal: false, fresh: true});
@@ -100,7 +100,7 @@ test("203c: a newer version on npm is a notice; npm is asked once a day, the ans
   // A mirror: C203_NPM_REGISTRY.
   const m = fakeFetch(npm("9.0.0"));
   await checkUpdates({fetch: m.fetch, file: path.join(dir, "state-mirror.json"), now: NOW, env: {C203_NPM_REGISTRY: "https://registry.npmmirror.com/"}, hal: false});
-  assert.deepEqual(m.asked, ["https://registry.npmmirror.com/203c/latest"]);
+  assert.deepEqual(m.asked, ["https://registry.npmmirror.com/203cli/latest"]);
 });
 
 test("failures are silent and kept for the day: offline, an error page, no version, a network that never answers", async () => {
@@ -132,7 +132,7 @@ test("startNotices: on stderr's writer when the command ends; nothing at all whe
   const notices = startNotices({fetch: fakeFetch(npm("9.0.0")).fetch, file: path.join(dir, "state-start.json"), env: {}, current: "3.5.0", hal: false,
     write: text => lines.push(text)});
   assert.equal((await notices.show()).length, 1);
-  assert.deepEqual(lines, [`203c: 203c 9.0.0 is out (you have 3.5.0): ${UPDATE_CLI}\n`]);
+  assert.deepEqual(lines, [`203cli: 203cli 9.0.0 is out (you have 3.5.0): ${UPDATE_CLI}\n`]);
   for (const env of [{CI: "true"}, {GITHUB_ACTIONS: "true"}, {NO_UPDATE_NOTIFIER: "1"}, {C203_NO_UPDATE_CHECK: "1"}]) {
     const f = fakeFetch(npm("9.0.0"));
     const off = startNotices({fetch: f.fetch, file: path.join(dir, "state-off.json"), env, current: "3.5.0", hal: false, write: () => assert.fail("written")});
@@ -147,7 +147,7 @@ test("startNotices: on stderr's writer when the command ends; nothing at all whe
   assert.ok(Date.now() - started < 1500);
 });
 
-// A firmware project as 203c new makes one: CardenzaHAL as the submodule components/CardenzaHAL (from a local "upstream"
+// A firmware project as 203cli new makes one: CardenzaHAL as the submodule components/CardenzaHAL (from a local "upstream"
 // whose URL in .gitmodules is then GitHub's), optionally with a tools/check_submodule.py.
 function project(name, {checkScript = null} = {}) {
   const upstream = scratch(name + "-hal");
@@ -167,7 +167,7 @@ function project(name, {checkScript = null} = {}) {
   return {fw, commit, hal: path.join(fw, "components", "CardenzaHAL")};
 }
 const github = compare => url => {
-  if (url.endsWith("/203c/latest")) return {status: 200, body: {version: CLI_VERSION}};
+  if (url.endsWith("/203cli/latest")) return {status: 200, body: {version: CLI_VERSION}};
   const m = /\/repos\/([^/]+\/[^/]+)\/compare\/([0-9a-f]{40})\.\.\.main\?per_page=1&page=2$/.exec(url);
   return m ? compare(m[2], m[1]) : {status: 404, body: {message: "Not Found"}};
 };
@@ -252,7 +252,7 @@ test("CardenzaHAL: the HAL's own check_submodule.py says it is not a clean copy 
 });
 
 // ---------------------------------------------------------------------------------------------
-// 203c itself, against stand-in npm and GitHub servers
+// 203cli itself, against stand-in npm and GitHub servers
 
 let server, base, requests = [], latest = "99.0.0", hang = false;
 before(async () => {
@@ -260,7 +260,7 @@ before(async () => {
     requests.push(req.url);
     if (hang) return;   // never answers
     if (req.url === "/api/") { res.writeHead(200, {"content-type": "application/json"}); return res.end(JSON.stringify({version: 2, limits: {}})); }
-    if (req.url === "/npm/203c/latest") { res.writeHead(200, {"content-type": "application/json"}); return res.end(JSON.stringify({name: "203c", version: latest})); }
+    if (req.url === "/npm/203cli/latest") { res.writeHead(200, {"content-type": "application/json"}); return res.end(JSON.stringify({name: "203cli", version: latest})); }
     if (/^\/gh\/repos\/203-Systems\/CardenzaHAL\/compare\//.test(req.url)) { res.writeHead(200, {"content-type": "application/json"}); return res.end(JSON.stringify({status: "ahead", ahead_by: 7})); }
     res.writeHead(404); res.end("{}");
   });
@@ -270,16 +270,16 @@ before(async () => {
 after(() => { server.closeAllConnections?.(); server.close(); });
 const cli = (args, {env = {}, cwd = dir} = {}) => run(args, {cwd, env: {XDG_CONFIG_HOME: fs.mkdtempSync(path.join(dir, "home-")), CI: "", GITHUB_ACTIONS: "",
   C203_NO_UPDATE_CHECK: "", NO_UPDATE_NOTIFIER: "", C203_NPM_REGISTRY: base + "/npm", C203_GITHUB_API: base + "/gh", ...env}});
-const NOTICE = `203c: 203c 99.0.0 is out (you have ${CLI_VERSION}): ${UPDATE_CLI}`;
+const NOTICE = `203cli: 203cli 99.0.0 is out (you have ${CLI_VERSION}): ${UPDATE_CLI}`;
 
-test("203c: a command of the work ends with the notices on stderr; stdout and the exit code are the command's", async () => {
+test("203cli: a command of the work ends with the notices on stderr; stdout and the exit code are the command's", async () => {
   const p = project("fw-cli");
   const r = await cli(["rules"], {cwd: p.fw});
   assert.equal(r.code, 0, r.stderr);
   assert.match(r.stdout, /CardenzaHAL/);
   assert.doesNotMatch(r.stdout, /99\.0\.0 is out|7 commits behind/, "the notices are not in stdout");
   assert.ok(r.stderr.includes(NOTICE + "\n"), r.stderr);
-  assert.match(r.stderr, /203c: CardenzaHAL in this project \(components\/CardenzaHAL\) is 7 commits behind its main: git submodule update --remote components\/CardenzaHAL/);
+  assert.match(r.stderr, /203cli: CardenzaHAL in this project \(components\/CardenzaHAL\) is 7 commits behind its main: git submodule update --remote components\/CardenzaHAL/);
   // --json: stdout is the answer alone.
   const j = await cli(["rules", "--json"], {cwd: p.fw});
   assert.equal(j.code, 0);
@@ -292,7 +292,7 @@ test("203c: a command of the work ends with the notices on stderr; stdout and th
   assert.ok(e.stderr.indexOf(NOTICE) >= 0 && e.stderr.indexOf(NOTICE) < e.stderr.lastIndexOf("{\"error\""), e.stderr);
 });
 
-test("203c: nothing in CI, with the opt-outs, on --version and help, or on commands outside the work", async () => {
+test("203cli: nothing in CI, with the opt-outs, on --version and help, or on commands outside the work", async () => {
   for (const env of [{CI: "true"}, {GITHUB_ACTIONS: "true"}, {NO_UPDATE_NOTIFIER: "1"}, {C203_NO_UPDATE_CHECK: "1"}]) {
     const before = requests.length;
     const r = await cli(["rules"], {env});
@@ -308,7 +308,7 @@ test("203c: nothing in CI, with the opt-outs, on --version and help, or on comma
   assert.equal(requests.length, before);
 });
 
-test("203c: a network that never answers costs the command at most the timeout and says nothing", async () => {
+test("203cli: a network that never answers costs the command at most the timeout and says nothing", async () => {
   hang = true;
   try {
     const started = Date.now();
@@ -319,7 +319,7 @@ test("203c: a network that never answers costs the command at most the timeout a
   } finally { hang = false; }
 });
 
-test("203c updates: both answers (--json), --quiet: only the notices or nothing, exit 0", async () => {
+test("203cli updates: both answers (--json), --quiet: only the notices or nothing, exit 0", async () => {
   const p = project("fw-updates");
   const r = await cli(["updates", "--json"], {cwd: p.fw});
   assert.equal(r.code, 0, r.stderr);
@@ -330,12 +330,12 @@ test("203c updates: both answers (--json), --quiet: only the notices or nothing,
   assert.doesNotMatch(r.stderr, /is out/, "no second copy on stderr");
   const text = await cli(["updates", "--project", p.fw]);
   assert.equal(text.code, 0);
-  assert.match(text.stdout, /^! 203c 99\.0\.0 is out/m);
+  assert.match(text.stdout, /^! 203cli 99\.0\.0 is out/m);
   assert.match(text.stdout, /^! CardenzaHAL in this project .* 7 commits behind its main/m);
   const quiet = await cli(["updates", "--quiet", "--project", p.fw]);
   assert.equal(quiet.code, 0);
   assert.equal(quiet.stdout.trim().split("\n").length, 2);
-  assert.match(quiet.stdout, /^203c 99\.0\.0 is out/);
+  assert.match(quiet.stdout, /^203cli 99\.0\.0 is out/);
   // --project (CardenzaHAL's build, run in its build folder): the commands from the project's top.
   assert.match(quiet.stdout, / git submodule update --remote components\/CardenzaHAL,/);
   // All current: --quiet prints nothing; plain says so.
@@ -345,7 +345,7 @@ test("203c updates: both answers (--json), --quiet: only the notices or nothing,
     assert.equal(none.code, 0);
     assert.equal(none.stdout, "");
     const plain = await cli(["updates"]);
-    assert.match(plain.stdout, new RegExp(`✓ 203c ${CLI_VERSION.replace(/\./g, "\\.")} is the newest`));
+    assert.match(plain.stdout, new RegExp(`✓ 203cli ${CLI_VERSION.replace(/\./g, "\\.")} is the newest`));
     assert.match(plain.stdout, /no CardenzaHAL submodule/);
   } finally { latest = "99.0.0"; }
   // --quiet where nothing is asked by itself (the HAL's build in CI): nothing, nothing asked.
@@ -375,12 +375,12 @@ test("doctor: asks now, in CI too, and lists both (cli, hal, the warnings with t
   assert.equal(byName.hal.ok, false);
   assert.match(byName.hal.detail, /^components\/CardenzaHAL [0-9a-f]{7}: 7 commits behind its main$/);
   const warned = Object.fromEntries(d.json.warnings.map(w => [w.code, w]));
-  assert.deepEqual(warned.cli_outdated.next, ["npm install -g 203c", "203c skill install"]);
+  assert.deepEqual(warned.cli_outdated.next, ["npm install -g 203cli", "203cli skill install"]);
   assert.deepEqual(warned.hal_behind.next, ["git submodule update --remote components/CardenzaHAL", "git add components/CardenzaHAL"]);
   assert.doesNotMatch(d.stderr, /is out/, "not said a second time");
   // Text: the lines and the commands.
   const t = await cli(["--api", base + "/api", "doctor"], {cwd: p.fw});
-  assert.match(t.stdout, /^- cli +203c \S+ \(99\.0\.0 is out\)$/m);
+  assert.match(t.stdout, /^- cli +203cli \S+ \(99\.0\.0 is out\)$/m);
   assert.match(t.stdout, /^! CardenzaHAL in this project \(components\/CardenzaHAL\) is 7 commits behind its main\n {4}Update it, build and test, then commit the new pointer\n {4}→ git submodule update --remote components\/CardenzaHAL$/m);
   // The user's own switch: not asked, said so.
   const quiet = requests.length;

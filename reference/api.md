@@ -31,11 +31,11 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `GET /auth/github/login?next` | GitHub sign-in (only when configured) |  | redirect |
 | `GET /auth/github/callback` | GitHub's redirect back (only when configured) |  | redirect |
 | `POST /auth/logout` | Sign out (clears the session cookie) |  | Status |
-| `POST /auth/device/start` | Start a device authorization (203c: client cli; a Launcher: client device); approved on /activate — body: client?, name?, device_id?, target?, launcher_version? |  | DeviceStart |
+| `POST /auth/device/start` | Start a device authorization (203cli: client cli; a Launcher: client device); approved on /activate — body: client?, name?, device_id?, target?, launcher_version? |  | DeviceStart |
 | `POST /auth/device/poll` | Poll a device authorization: 428 until approved, then the credential once — body: request_id |  | DeviceToken |
 | `GET /auth/device/{user_code}` | What a sign-in code asks for (the /activate page) | website only | DeviceRequest |
 | `POST /auth/device/approve` | Approve (scopes, a name) or refuse a sign-in — body: user_code, approve, scopes?, name? | website only | DeviceApproved |
-| `GET /auth/authorize?response_type&client_id&redirect_uri&code_challenge&code_challenge_method&state&scope&name` | 203c's browser sign-in: check an authorization request (PKCE S256, loopback redirect); answers the site's /authorize page to open |  | AuthorizeCheck |
+| `GET /auth/authorize?response_type&client_id&redirect_uri&code_challenge&code_challenge_method&state&scope&name` | 203cli's browser sign-in: check an authorization request (PKCE S256, loopback redirect); answers the site's /authorize page to open |  | AuthorizeCheck |
 | `POST /auth/authorize` | Approve (scopes) or refuse a browser sign-in (the /authorize page); answers where to send the browser — body: response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state, scope?, name?, approve, scopes? | website only | Authorized |
 | `POST /auth/token` | Exchange an authorization code and its verifier for a cli credential (once, within 60 seconds) — body: grant_type, code, code_verifier, redirect_uri, client_id |  | DeviceToken |
 | `POST /auth/cli/start` | Start a CLI sign-in (the device authorization with client cli; 203c before 3.1) — body: name? |  | CliStart |
@@ -64,7 +64,7 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `POST /me/credentials/{id}/revoke` | Revoke one (w<n>, t<n>, d<n>); the current session: signed out | website only | Revoked |
 | `POST /me/credentials/revoke-all` | Revoke every credential (keep_current: this browser stays signed in, default) — body: keep_current? | website only | Revoked |
 | `GET /me/quotas` | What is left of every limit (per account, per day) | read | Quotas |
-| `GET /me/tokens` | Personal tokens: 203c's sign-ins (cli) and the ones made on the site (ci) | website only | TokenList |
+| `GET /me/tokens` | Personal tokens: 203cli's sign-ins (cli) and the ones made on the site (ci) | website only | TokenList |
 | `POST /me/tokens` | Make a personal token (ci; shown once; no end unless expires_in_days; at most 20) — body: name, scopes, expires_in_days? | website only | 201 NewToken |
 | `POST /me/tokens/{id}/delete` | Delete a personal token (it stops working at once) | website only | Status |
 | `GET /me/devices` | Bound devices (online, where, what each has installed) and, for the website, the current bind code | read | Devices |

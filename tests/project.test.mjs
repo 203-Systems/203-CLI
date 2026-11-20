@@ -1,4 +1,4 @@
-// A project's life with 203c, against a stand-in API and a stand-in CardenzaHAL (a local git repository with the template):
+// A project's life with 203cli, against a stand-in API and a stand-in CardenzaHAL (a local git repository with the template):
 // new (the project made from the template, named, the HAL as a submodule), inbox (what the community said since the last
 // look, as JSON and Markdown, then nothing new), link (203.json, the page's source link, the trusted publisher, --move).
 // Run: node --test tests/project.test.mjs
@@ -18,7 +18,7 @@ const state = {publishers: [{id: 7, repository: "olduser/pocket-metronome", work
 const git = (args, cwd) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=tester", "-c", "init.defaultBranch=main", ...args], {cwd, encoding: "utf8"});
 
 before(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "203c-project-"));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-project-"));
   home = path.join(root, "config");
   // A stand-in CardenzaHAL: the template's files that new renames, and the build tool.
   hal = path.join(root, "CardenzaHAL");
@@ -132,12 +132,12 @@ test("new: the template named, CardenzaHAL as the submodule, 203.json and a READ
   assert.equal(project.summary, "A metronome with tap tempo");
   assert.deepEqual(project.publish.bins, {cardenza: "build/pocket_metronome.bin"});
   assert.match(fs.readFileSync(path.join(dir, "README.md"), "utf8"), /tools\/cardenza\.py build/, "the HAL's build tool");
-  // The page's description from the guide's template (a HAL without one: 203c writes it), named in 203.json; the
+  // The page's description from the guide's template (a HAL without one: 203cli writes it), named in 203.json; the
   // screenshots to take before the first publish.
   assert.equal(project.publish.description_file, "docs/description.md");
   assert.match(fs.readFileSync(path.join(dir, "docs/description.md"), "utf8"), /^<What it is and who it is for/);
   assert.ok(r.json.todo.some(t => /docs\/description\.md: the page's description/.test(t)) && r.json.todo.some(t => /publish\.images/.test(t)), JSON.stringify(r.json.todo));
-  assert.ok(r.json.next.includes("203c flash --bin build/pocket_metronome.bin") || r.json.next.some(n => /flash --bin build\/pocket_metronome\.bin/.test(n)));
+  assert.ok(r.json.next.includes("203cli flash --bin build/pocket_metronome.bin") || r.json.next.some(n => /flash --bin build\/pocket_metronome\.bin/.test(n)));
   assert.match(git(["status", "--porcelain"], dir).stdout, /^A  203\.json$/m, "staged, not committed");
 
   const again = await cli(["new", "Pocket Metronome", "--json"], {token: ""});
@@ -206,7 +206,7 @@ test("link: 203.json, the page's source link and the trusted publisher follow th
   assert.match(theirs.error.next[0], /fork V6QK28/);
 });
 
-test("skill install: the Agent Skill from this 203c into a skills folder, replaced whole on an update; doctor sees it", async () => {
+test("skill install: the Agent Skill from this 203cli into a skills folder, replaced whole on an update; doctor sees it", async () => {
   const skills = path.join(root, "skills");
   const dry = await cli(["skill", "install", "--dir", skills, "--dry-run", "--json"], {token: ""});
   assert.equal(dry.code, 0, dry.stderr);
@@ -214,7 +214,7 @@ test("skill install: the Agent Skill from this 203c into a skills folder, replac
   const r = await cli(["skill", "install", "--dir", skills, "--json"], {token: ""});
   assert.equal(r.code, 0, r.stderr);
   const dir = path.join(skills, "203-community");
-  for (const item of ["SKILL.md", "LICENSE", "scripts/203c.mjs", "reference/cli.md", "products/cardenza/README.md"]) assert.ok(fs.existsSync(path.join(dir, item)), item);
+  for (const item of ["SKILL.md", "LICENSE", "scripts/203cli.mjs", "reference/cli.md", "products/cardenza/README.md"]) assert.ok(fs.existsSync(path.join(dir, item)), item);
   fs.writeFileSync(path.join(dir, "stale.txt"), "old");
   const again = await cli(["skill", "install", "--dir", skills, "--json"], {token: ""});
   assert.equal(again.json.skill[0].status, "updated");

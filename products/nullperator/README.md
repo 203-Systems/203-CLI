@@ -17,9 +17,9 @@ browser simulator (as the Cardenza has) are not public yet. Until they are, buil
    [`board/pins.h`](https://github.com/203-Systems/NullPerator/blob/main/sources/Adapters/node/hal/nullperator/board/pins.h),
    what each driver does in its [README](https://github.com/203-Systems/NullPerator/blob/main/sources/Adapters/node/hal/nullperator/README.md)).
    Keep hardware access there, not spread through your code: it is what a future stand-alone HAL will replace.
-3. **Build** with ESP-IDF (below), **install through the Launcher** (`203c flash --bin …`), never by flashing the
+3. **Build** with ESP-IDF (below), **install through the Launcher** (`203cli flash --bin …`), never by flashing the
    whole chip.
-4. **Publish** with `203c` and the `nullperator=` prefix (below). Add a `203.json`, `version.txt`, `CHANGELOG.md`,
+4. **Publish** with `203cli` and the `nullperator=` prefix (below). Add a `203.json`, `version.txt`, `CHANGELOG.md`,
    `LICENSE` and a CI release the way the Cardenza's rules describe them
    ([`reference/firmware-project.md`](../../reference/firmware-project.md), sections 2, 6, 8 and 9): those parts are
    the same for every Launcher device; the CardenzaHAL parts are not.
@@ -29,7 +29,7 @@ browser simulator (as the Cardenza has) are not public yet. Until they are, buil
 | | Version |
 |---|---|
 | [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/v5.3.5/esp32s3/get-started/) | 5.3.5 (the tree accepts 5.3.x; its CI uses `espressif/idf:v5.3.5`), target `esp32s3` |
-| Node.js 18+ | `203c` |
+| Node.js 18+ | `203cli` |
 
 ```sh
 git clone https://github.com/203-Systems/NullPerator.git && cd NullPerator
@@ -46,7 +46,7 @@ firmware's (its app at 0x10000), which overwrites the Launcher and the software 
 Launcher, install the application image through it:
 
 ```sh
-203c flash --bin sources/build/node/picoTracker.bin --dry-run --json   # then without --dry-run (a USB cable, no sign-in)
+203cli flash --bin sources/build/node/picoTracker.bin --dry-run --json  # then without --dry-run (a USB cable, no sign-in)
 ```
 
 The Launcher keeps the first 0x1A0000 bytes of the NullPerator's 16 MB flash for itself; a firmware gets the rest
@@ -55,9 +55,9 @@ The Launcher keeps the first 0x1A0000 bytes of the NullPerator's 16 MB flash for
 ## Publish
 
 ```sh
-203c login
-203c publish --bin nullperator=sources/build/node/picoTracker.bin --name "…" --summary "…" --dry-run --json
-# then the same without --dry-run; next time: 203c publish --firmware CODE --bin nullperator=… (or a 203.json)
+203cli login
+203cli publish --bin nullperator=sources/build/node/picoTracker.bin --name "…" --summary "…" --dry-run --json
+# then the same without --dry-run; next time: 203cli publish --firmware CODE --bin nullperator=… (or a 203.json)
 ```
 
 The `nullperator=` prefix matters: without one, a BIN is taken for the Cardenza. Give the application image, not a
@@ -65,9 +65,9 @@ merged image, the bootloader or the ELF. The community checks the image and that
 not on CardenzaHAL (expected here), and it has no simulator version (Play) for this device yet. One firmware can
 carry builds for several devices: `--bin cardenza=… --bin nullperator=…`.
 
-The page: 203c publishes with 3–5 different pictures of it running in the gallery (screenshots or photos:
-`--image a.png --image b.png --image c.png`, or 203.json's `publish.images`; `203c help pictures`) and a short
-description for people deciding to install (`203c help description`).
+The page: 203cli publishes with 3–5 different pictures of it running in the gallery (screenshots or photos:
+`--image a.png --image b.png --image c.png`, or 203.json's `publish.images`; `203cli help pictures`) and a short
+description for people deciding to install (`203cli help description`).
 
 ## Hardware reference
 

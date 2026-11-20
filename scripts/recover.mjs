@@ -1,4 +1,4 @@
-// 203c devices recover: the website's recovery flash (恢复刷机, /recover) from a computer. The official
+// 203cli devices recover: the website's recovery flash (恢复刷机, /recover) from a computer. The official
 // 203 Launcher and the device's official firmware (GET /recovery), downloaded (POST /versions/<VCODE>/download,
 // counted) and checked against the SHA-256 the API gives, laid out by recover-plan.mjs (the site's
 // recover-plan.js, the same file: tests/recover-plan.test.mjs), then
@@ -123,7 +123,7 @@ export async function recoverDevice(ctx) {
     if (back && back.port !== port) ctx.say(`The device came back on ${back.port}`);
     if (back) port = back.port;
   }
-  const tmp = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || "/tmp"), "203c-recover-"));
+  const tmp = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || "/tmp"), "203cli-recover-"));
   try {
     const files = plan.writes.map((w, i) => { const f = path.join(tmp, `${i}.bin`); fs.writeFileSync(f, w.data); return f; });
     for (const args of esptoolCommands(plan, files, port)) {
@@ -132,7 +132,7 @@ export async function recoverDevice(ctx) {
       if (run.status !== 0) {
         const tail = String((run.stderr || "") + (run.stdout || "")).trim().split("\n").slice(-6).join("\n");
         throw new CliError("flash_failed", `esptool stopped (${run.status ?? run.signal}): the device is not restored`, {exit: EXIT.refused,
-          hint: "Put the device in download mode (in its Launcher esptool does it; a running CardenzaHAL firmware is restarted into it by 203c; else, Cardenza: hold HOME while plugging the USB cable in), check the cable and the port, then run it again. A device can always be restored again.",
+          hint: "Put the device in download mode (in its Launcher esptool does it; a running CardenzaHAL firmware is restarted into it by 203cli; else, Cardenza: hold HOME while plugging the USB cable in), check the cable and the port, then run it again. A device can always be restored again.",
           next: [ctx.cmd()], data: {log_tail: tail}});
       }
     }

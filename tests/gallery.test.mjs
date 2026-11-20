@@ -1,4 +1,4 @@
-// A publish with 203c and the page the community wants (the user, 2026-11-20): the gallery must end with 3-5 different
+// A publish with 203cli and the page the community wants (the user, 2026-11-20): the gallery must end with 3-5 different
 // screenshots (signed in yourself; a trusted-publishing run only warns, with a GitHub annotation; a launcher is not held to
 // it), the description is short (over 1500 characters a warning, over 3000 refused, pictures not counted, an unchanged
 // one passes, the template's placeholders refused), init writes docs/description.md, help description prints the guide.
@@ -27,7 +27,7 @@ function png(salt) {
   return out;
 }
 const picture = name => ({id: newId(), url: `/files/${name}.png`, caption: "", width: 240, height: 135, sha256: sha(png(name))});
-const person = {id: "u1", name: "Tester", role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203c"}};
+const person = {id: "u1", name: "Tester", role: "user", scopes: ["read", "write"], credential: {kind: "cli", name: "203cli"}};
 const trusted = {id: "u1", name: "Tester", role: "user", scopes: ["publish"], credential: {kind: "oidc", firmware: CODE, channel_allowed: ["dev"]}};
 
 beforeEach(() => {
@@ -89,8 +89,8 @@ before(async () => {
     if (p === `/api/firmware/${CODE}/images/order`) { fw.images = json.ids.map(id => fw.images.find(x => x.id === id)); return send(200, fw); }
     return false;
   });
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "203c-home-"));
-  work = fs.mkdtempSync(path.join(os.tmpdir(), "203c-gallery-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-home-"));
+  work = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-gallery-"));
   fs.mkdirSync(path.join(work, "build"));
   fs.writeFileSync(path.join(work, "build/app.bin"), await appImage({name: "pocket_tracker"}));
   fs.mkdirSync(path.join(work, "docs/screens"), {recursive: true});
@@ -105,7 +105,7 @@ const writes = () => stand.requests.filter(q => q.method !== "GET" && !/dry_run=
 const project = (dir, publish) => fs.writeFileSync(path.join(dir, "203.json"), JSON.stringify({format: 1, name: "Pocket Tracker", code: CODE,
   summary: "A tracker for the Cardenza", tags: ["tool"], devices: ["cardenza"], publish: {channel: "dev", bins: {cardenza: "build/app.bin"}, ...publish}}, null, 2));
 const inProject = (publish, fn) => async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "203c-project-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-project-"));
   fs.cpSync(work, dir, {recursive: true});
   project(dir, publish);
   try { await fn(dir); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
@@ -133,7 +133,7 @@ test("publish signed in yourself: refused before anything is uploaded unless the
   assert.equal(none.error.code, "gallery_pictures");
   assert.equal(none.error.field, "images");
   assert.equal(none.error.count, 0);
-  assert.match(none.error.error, /0 pictures: 203c publishes a firmware with 3–5 different screenshots/);
+  assert.match(none.error.error, /0 pictures: 203cli publishes a firmware with 3–5 different screenshots/);
   assert.match(none.error.hint, /board screen --out docs\/screens\/1\.png/);
   assert.match(none.error.next[0], /board screen --out docs\/screens\/1\.png/);
   assert.deepEqual(writes(), [], "nothing was sent");
@@ -144,8 +144,8 @@ test("publish signed in yourself: refused before anything is uploaded unless the
   assert.equal(dry.json.problems[0].code, "gallery_pictures");
   // In Chinese.
   const zh = await cli([...PUBLISH, "--lang", "zh"]);
-  assert.match(zh.error.error, /图片只有 0 张：用 203c 发布，固件要有 3–5 张不同的截图/);
-  assert.match(zh.error.hint, /203c board screen --out docs\/screens\/1\.png/);
+  assert.match(zh.error.error, /图片只有 0 张：用 203cli 发布，固件要有 3–5 张不同的截图/);
+  assert.match(zh.error.hint, /203cli board screen --out docs\/screens\/1\.png/);
   // Two the same.
   fw.images = [picture(1), picture(1), picture(2)];
   const same = await cli(PUBLISH);
@@ -154,7 +154,7 @@ test("publish signed in yourself: refused before anything is uploaded unless the
   assert.equal(same.error.duplicates.length, 1);
   // Six.
   fw.images = [1, 2, 3, 4, 5, 6].map(picture);
-  assert.match((await cli(PUBLISH)).error.error, /6 pictures: 203c publishes with 3–5/);
+  assert.match((await cli(PUBLISH)).error.error, /6 pictures: 203cli publishes with 3–5/);
   assert.deepEqual(writes(), []);
   // --image is publish.images on the command line.
   fw.images = [];
@@ -207,7 +207,7 @@ test("a trusted-publishing run only warns about the gallery, with a GitHub annot
   assert.ok(w, JSON.stringify(done.json.warnings));
   assert.match(w.message, /Pocket Tracker's gallery has 0 pictures: a firmware's page shows 3–5 different screenshots/);
   assert.match(w.hint, /Its owner fixes it once \(this release goes on\)/);
-  assert.match(done.stderr, /^::warning title=203c%3A the gallery::Pocket Tracker's gallery has 0 pictures/m);
+  assert.match(done.stderr, /^::warning title=203cli%3A the gallery::Pocket Tracker's gallery has 0 pictures/m);
   // Outside GitHub Actions: no annotation; in a dry run too.
   versions.length = 0;
   const dry = await cli([...PUBLISH, "--dry-run"]);
@@ -226,7 +226,7 @@ test("firmware images: add stops past 5, edit --place gallery stops at 5, taking
   const many = await cli(["firmware", "images", "add", CODE, "docs/screens/5.png", "docs/screens/6.png"]);
   assert.equal(many.code, 1);
   assert.equal(many.error.code, "gallery_pictures");
-  assert.match(many.error.error, /has 4 pictures: 2 more would be 6, and 203c publishes with 3–5/);
+  assert.match(many.error.error, /has 4 pictures: 2 more would be 6, and 203cli publishes with 3–5/);
   assert.deepEqual(writes(), []);
   assert.equal((await cli(["firmware", "images", "add", CODE, "docs/screens/5.png"])).code, 0);
   fw.description_images = [picture(6)];
@@ -236,7 +236,7 @@ test("firmware images: add stops past 5, edit --place gallery stops at 5, taking
   fw.images = fw.images.slice(0, 3);
   const removed = await cli(["firmware", "images", "remove", CODE, fw.images[0].id, "--yes"]);
   assert.equal(removed.code, 0, removed.stderr);
-  assert.equal(removed.json.advice.find(w => w.code === "gallery_short").message, "The gallery will have 2 pictures: the next 203c publish needs 3–5 different ones");
+  assert.equal(removed.json.advice.find(w => w.code === "gallery_short").message, "The gallery will have 2 pictures: the next 203cli publish needs 3–5 different ones");
   const moved = await cli(["firmware", "images", "edit", CODE, fw.images[0].id, "--place", "description"]);
   assert.equal(moved.code, 0, moved.stderr);
   assert.ok(moved.json.advice.some(w => w.code === "gallery_short"));
@@ -291,7 +291,7 @@ test("the template's placeholders are refused; init writes docs/description.md; 
   assert.equal(filled.error.field, "description");
   assert.match(filled.error.error, /still holds the template's <What it is and who it is for/);
   // init in a project without a description: the template in the client's language, named in 203.json.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "203c-init-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-init-"));
   fs.writeFileSync(path.join(dir, "CHANGELOG.md"), "## 0.1.0\n");
   const made = await cli(["init", "--summary", "A tracker for the Cardenza", "--lang", "zh"], {cwd: dir});
   assert.equal(made.code, 0, made.stderr);

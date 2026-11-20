@@ -1,5 +1,5 @@
 // The community API for agents and scripts, without dependencies (Node 18+): a client, the saved
-// token, and every operation (OPS: what 203c's commands run; `203c ops` lists them as JSON).
+// token, and every operation (OPS: what 203cli's commands run; `203cli ops` lists them as JSON).
 // Part of the Agent Skill skill/203-community (this folder is the only copy of the CLI).
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -9,10 +9,16 @@ import path from "node:path";
 import {spawn} from "node:child_process";
 import {parseStl, renderThumbnail} from "./stl.mjs";
 
-// The live copy until community.203.io exists (COMMUNITY.md "203c (the CLI) and the developer guide").
-export const DEFAULT_API = "https://cardenza.203.io/community/api";
-// 203c's own version (doctor prints it; the API sees it in User-Agent).
-export const CLI_VERSION = "3.5.0";
+// Where the community is (COMMUNITY.md "203cli (the CLI) and the developer guide"). It is moving from cardenza.203.io/community
+// to stage.203.io (the user, 2026-11-20). Once it has, the old address answers `code: "moved"` with the new API, and
+// 203cli follows that by itself and remembers it (Client, followMove); NEW_ADDRESS_IS_DEFAULT makes the new one the default.
+export const OLD_API = "https://cardenza.203.io/community/api";
+export const NEW_API = "https://stage.203.io/api";
+export const NEW_ADDRESS_IS_DEFAULT = false;
+export const DEFAULT_API = NEW_ADDRESS_IS_DEFAULT ? NEW_API : OLD_API;
+// 203cli's own version (doctor prints it; the API sees it in User-Agent: 203cli/<version>).
+export const CLI_VERSION = "3.5.1";
+export const USER_AGENT = "203cli/" + CLI_VERSION;
 
 export class ApiError extends Error {
   constructor(status, code, message, data = {}, {hint} = {}) {
@@ -25,11 +31,66 @@ export class ApiError extends Error {
 
 // ---------------------------------------------------------------------------------------------
 // The token: COMMUNITY_TOKEN, else in GitHub Actions this run's trusted-publishing credential (login
-// --github-oidc), else ~/.config/203c/token (XDG_CONFIG_HOME respected), mode 600.
+// --github-oidc), else ~/.config/203cli/token (XDG_CONFIG_HOME respected), mode 600.
+
+/** 203cli's folder: ~/.config/203cli (XDG_CONFIG_HOME respected): the sign-in, the update checks, where the community moved. */
+export function configDir(env = process.env, home = os.homedir()) {
+  return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "203cli");
+}
+/** 203c's folder, before the rename: ~/.config/203c. */
+export function oldConfigDir(env = process.env, home = os.homedir()) {
+  return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "203c");
+}
 
 export function tokenFile() {
-  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-  return path.join(base, "203c", "token");
+  return path.join(configDir(), "token");
+}
+
+/**
+ * Once, at 203cli's first run on a computer where 203c was signed in: 203c's token copied into 203cli's folder (mode 600),
+ * so the sign-in carries over (nothing is printed: no secret, no noise), and sync's last looks (inbox/). 203c's folder is
+ * left as it is, so a 203c still installed keeps working until the community moves; `203cli logout` revokes the token and
+ * removes both copies. The update checks are not copied (asked again), the waiting browser sign-in neither. migrated.json says it was done
+ * (its time and whether a token came), so a later 203c sign-in is never copied over a 203cli one or after a logout.
+ * Returns what it did: {token: true|false} or null (nothing to do).
+ */
+export function migrateFromOldName({env = process.env, home = os.homedir()} = {}) {
+  const from = oldConfigDir(env, home), to = configDir(env, home);
+  const marker = path.join(to, "migrated.json");
+  try {
+    if (!fs.existsSync(from) || fs.existsSync(marker)) return null;
+    let token = null;
+    try { token = fs.readFileSync(path.join(from, "token"), "utf8").trim() || null; } catch { token = null; }
+    fs.mkdirSync(to, {recursive: true, mode: 0o700});
+    const target = path.join(to, "token");
+    let copied = false;
+    if (token && !fs.existsSync(target)) {
+      fs.writeFileSync(target, token + "\n", {mode: 0o600});
+      fs.chmodSync(target, 0o600);
+      copied = true;
+    }
+    // The last look at each firmware (sync's "new since"), kept per firmware in inbox/: no secret, copied as it is.
+    try {
+      for (const name of fs.readdirSync(path.join(from, "inbox"))) {
+        const there = path.join(to, "inbox", name);
+        if (!/\.json$/.test(name) || fs.existsSync(there)) continue;
+        fs.mkdirSync(path.dirname(there), {recursive: true, mode: 0o700});
+        fs.copyFileSync(path.join(from, "inbox", name), there);
+      }
+    } catch { /* none */ }
+    fs.writeFileSync(marker, JSON.stringify({from, at: new Date().toISOString(), token: copied}) + "\n", {mode: 0o600});
+    return {token: copied};
+  } catch { return null; }
+}
+
+/** 203c's own copy of `token`, removed (logout: the same token, revoked): true when there was one. */
+export function forgetOldToken(token, {env = process.env, home = os.homedir()} = {}) {
+  const file = path.join(oldConfigDir(env, home), "token");
+  try {
+    if (!token || fs.readFileSync(file, "utf8").trim() !== token) return false;
+    fs.unlinkSync(file);
+    return true;
+  } catch { return false; }
 }
 
 export function loadToken(api) {
@@ -52,7 +113,7 @@ export const inGithubActions = (env = process.env) => env.GITHUB_ACTIONS === "tr
 export const oidcAvailable = (env = process.env) => !!(env.ACTIONS_ID_TOKEN_REQUEST_URL && env.ACTIONS_ID_TOKEN_REQUEST_TOKEN);
 
 export function runCredentialFile(env = process.env) {
-  return inGithubActions(env) && env.RUNNER_TEMP ? path.join(env.RUNNER_TEMP, "203c", "oidc.json") : null;
+  return inGithubActions(env) && env.RUNNER_TEMP ? path.join(env.RUNNER_TEMP, "203cli", "oidc.json") : null;
 }
 
 /** This run's credential ({api, token, expires_at, firmware, channel_allowed, run_id}) for this API, or null. */
@@ -101,8 +162,14 @@ export async function githubOidcToken(audience, {env = process.env, fetch: fetch
 
 /** The exchange: a GitHub OIDC token for a trusted-publishing credential of FIRMWARE (OidcToken). */
 export async function oidcExchange(client, firmware, {env = process.env} = {}) {
-  const jwt = await githubOidcToken(client.api, {env, fetch: client.fetch});
-  return await client.request("POST", "/auth/oidc/github", {auth: false, body: {token: jwt, firmware}});
+  const exchange = async () => client.request("POST", "/auth/oidc/github",
+    {auth: false, body: {token: await githubOidcToken(client.api, {env, fetch: client.fetch}), firmware}, moved: "throw"});
+  try { return await exchange(); }
+  catch (error) {
+    // The community moved (the client went there): a new token, for the new address's audience.
+    if (error instanceof ApiError && error.followed) return await exchange();
+    throw error;
+  }
 }
 
 /** A run credential to save from an exchange's answer. */
@@ -134,8 +201,8 @@ export function defaultLang(env = process.env) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// A network that keeps 203c from the community (the user, 2026-11-20: an agent in Claude Code's cloud got "HTTP 403",
-// which told nobody what to do). Every request 203c makes goes through Client.fetch, which tells these apart from the
+// A network that keeps 203cli from the community (the user, 2026-11-20: an agent in Claude Code's cloud got "HTTP 403",
+// which told nobody what to do). Every request 203cli makes goes through Client.fetch, which tells these apart from the
 // API's own answers (always JSON) and says what to do:
 // - an agent sandbox's network allowlist (network_blocked_sandbox): a 403 with x-deny-reason: host_not_allowed
 //   (Claude Code's cloud, code.claude.com/docs/en/errors.md#host-not-allowed-in-a-cloud-session); a 403 from one of
@@ -145,12 +212,12 @@ export function defaultLang(env = process.env) {
 //   request was blocked.", its "Access denied" page), which only the site's owner changes.
 // Only the user can allow a host in a sandbox, per environment (a file in the repository cannot).
 
-/** The community's hosts: the live copy and its twin. A sandbox's allowlist needs both. */
-export const COMMUNITY_HOSTS = ["cardenza.203.io", "apps.203.io"];
+/** The community's hosts: the live copy and its twin (after the move, its own host). A sandbox's allowlist needs them all. */
+export const COMMUNITY_HOSTS = NEW_ADDRESS_IS_DEFAULT ? [new URL(NEW_API).hostname] : ["cardenza.203.io", "apps.203.io"];
 export const BLOCKED_CODES = new Set(["network_blocked_sandbox", "network_blocked_cdn"]);
 /** The API could not be reached (no answer, or a network between that blocks it): nothing the API said. */
 export const offline = error => error instanceof ApiError && (error.code === "unreachable" || BLOCKED_CODES.has(error.code));
-/** A fetch that threw, as 203c says it: a blocked network's own error as it is, else `make(the system's reason)`. */
+/** A fetch that threw, as 203cli says it: a blocked network's own error as it is, else `make(the system's reason)`. */
 export const failed = (error, make) => error instanceof ApiError && BLOCKED_CODES.has(error.code) ? error : make(error?.cause?.code || error?.message);
 
 /** The agent sandbox this runs in, from what the sandboxes document: Claude Code's cloud sessions set
@@ -199,7 +266,7 @@ export function blockedFailure(error, {ours = false, sandbox = null} = {}) {
   return null;
 }
 
-/** What 203c says to do in a sandbox that blocks the community (help sandbox, the errors' hints, doctor). */
+/** What 203cli says to do in a sandbox that blocks the community (help sandbox, the errors' hints, doctor). */
 export function sandboxSteps(lang = "en", {sandbox = null, more = []} = {}) {
   const domains = [...COMMUNITY_HOSTS, ...more.filter(host => host && !COMMUNITY_HOSTS.includes(host))];
   if (lang === "zh") {
@@ -224,10 +291,10 @@ export function sandboxSteps(lang = "en", {sandbox = null, more = []} = {}) {
     ...(sandbox === "codex" ? [others, claude] : [claude, others]), OFFLINE_EN].join("\n");
 }
 
-export const OFFLINE_EN = "Meanwhile, what needs no network still works: building (tools/cardenza.py build), 203c rules, 203c skill install, " +
-  "and with the device on this computer's USB cable 203c flash --bin build/<project>.bin, log and board.";
-export const OFFLINE_ZH = "在那之前，不用联网的照样能做：编译（tools/cardenza.py build）、203c rules、203c skill install，设备用 USB 线接在这台电脑上时还有 " +
-  "203c flash --bin build/<project>.bin、log 和 board。";
+export const OFFLINE_EN = "Meanwhile, what needs no network still works: building (tools/cardenza.py build), 203cli rules, 203cli skill install, " +
+  "and with the device on this computer's USB cable 203cli flash --bin build/<project>.bin, log and board.";
+export const OFFLINE_ZH = "在那之前，不用联网的照样能做：编译（tools/cardenza.py build）、203cli rules、203cli skill install，设备用 USB 线接在这台电脑上时还有 " +
+  "203cli flash --bin build/<project>.bin、log 和 board。";
 
 /** The ApiError for a request a network on the way blocked (`url`: the request's, `found`: blockedAnswer / blockedFailure). */
 export function blockedError(found, url, {lang = "en", status = 0, sandbox = null} = {}) {
@@ -238,12 +305,12 @@ export function blockedError(found, url, {lang = "en", status = 0, sandbox = nul
     const message = zh ? `网站的防火墙（${host} 前面的 Cloudflare）拦下了这个请求（HTTP ${status}${ray}）：拒绝它的不是社区`
       : `The site's firewall (Cloudflare, in front of ${host}) blocked this request (HTTP ${status}${ray}): it was not the community that refused it`;
     const hint = zh
-      ? "这个项目和这台电脑上都改不了它：防火墙把这个请求（它来的地址，或发它的程序）当成了机器人，只有网站的主人能在 Cloudflare 里放行。203c 自己的请求" +
-        `（User-Agent 203c/${CLI_VERSION}）平时会放行；它常拦的是别的程序直接发的请求（curl、Python 的 urllib、AI 的网页抓取），这些请用 203c 去做。` +
-        `203c 自己也被拦时：把 Ray ID 告诉 203 Systems（https://github.com/203-Systems/203-CLI/issues，GitHub 连得上），或换个网络再试。\n${OFFLINE_ZH}`
+      ? "这个项目和这台电脑上都改不了它：防火墙把这个请求（它来的地址，或发它的程序）当成了机器人，只有网站的主人能在 Cloudflare 里放行。203cli 自己的请求" +
+        `（User-Agent 203cli/${CLI_VERSION}）平时会放行；它常拦的是别的程序直接发的请求（curl、Python 的 urllib、AI 的网页抓取），这些请用 203cli 去做。` +
+        `203cli 自己也被拦时：把 Ray ID 告诉 203 Systems（https://github.com/203-Systems/203-CLI/issues，GitHub 连得上），或换个网络再试。\n${OFFLINE_ZH}`
       : "Nothing in this project or on this computer changes it: the firewall took the request (where it came from, or the program that sent it) " +
-        `for a bot, and only the site's owner lets it through, in Cloudflare. 203c's own requests (User-Agent 203c/${CLI_VERSION}) normally pass; ` +
-        "what it blocks is other programs fetching directly (curl, Python's urllib, an agent's web fetch): do that with 203c. When 203c itself " +
+        `for a bot, and only the site's owner lets it through, in Cloudflare. 203cli's own requests (User-Agent 203cli/${CLI_VERSION}) normally pass; ` +
+        "what it blocks is other programs fetching directly (curl, Python's urllib, an agent's web fetch): do that with 203cli. When 203cli itself " +
         `is blocked: tell 203 Systems with the Ray ID (https://github.com/203-Systems/203-CLI/issues; GitHub is reachable), or try from another network.\n${OFFLINE_EN}`;
     return new ApiError(0, "network_blocked_cdn", message, {host, http_status: status, reason: found.reason, ...(found.ray ? {ray: found.ray} : {})}, {hint});
   }
@@ -258,8 +325,8 @@ export function blockedError(found, url, {lang = "en", status = 0, sandbox = nul
   // network allowlist all the same: an agent's sandbox, a proxy or a firewall.
   const sure = found.reason === "host_not_allowed" || !!sandbox;
   const message = zh
-    ? `${sure ? "这个环境的网络白名单" : "路上的网络白名单（AI 的沙箱、代理或防火墙）"}拦下了 ${host}（${why}）：在这里 203c 连不上 203 社区`
-    : `${sure ? "This environment's network allowlist" : "A network allowlist on the way (an agent's sandbox, a proxy or a firewall)"} blocked ${host} (${why}): 203c cannot reach the 203 community from here`;
+    ? `${sure ? "这个环境的网络白名单" : "路上的网络白名单（AI 的沙箱、代理或防火墙）"}拦下了 ${host}（${why}）：在这里 203cli 连不上 203 社区`
+    : `${sure ? "This environment's network allowlist" : "A network allowlist on the way (an agent's sandbox, a proxy or a firewall)"} blocked ${host} (${why}): 203cli cannot reach the 203 community from here`;
   return new ApiError(0, "network_blocked_sandbox", message,
     {host, allow: [...new Set([...COMMUNITY_HOSTS, host])], reason: found.reason, ...(status ? {http_status: status} : {}), ...(found.cause ? {cause: found.cause} : {}),
       ...(sandbox ? {sandbox} : {})},
@@ -267,7 +334,7 @@ export function blockedError(found, url, {lang = "en", status = 0, sandbox = nul
 }
 
 /**
- * fetch as 203c uses it: the same, except that a network on the way that blocks the request (above) throws its
+ * fetch as 203cli uses it: the same, except that a network on the way that blocks the request (above) throws its
  * ApiError instead of answering. `ours(host)`: the community's hosts and the API's; `lang()`: the client's.
  */
 export function guardFetch(fetcher, {ours, lang = () => "en", env = process.env}) {
@@ -292,7 +359,7 @@ export function guardFetch(fetcher, {ours, lang = () => "en", env = process.env}
 
 /**
  * One of the community's hosts as this computer reaches it (doctor): {host, ok, url, status?, error?}, `error` being
- * the ApiError 203c would report (network_blocked_sandbox, network_blocked_cdn, unreachable). The API's root, at the
+ * the ApiError 203cli would report (network_blocked_sandbox, network_blocked_cdn, unreachable). The API's root, at the
  * same path as the client's API, without a token.
  */
 export async function probeHost(client, host, {timeout_ms = 10_000} = {}) {
@@ -310,13 +377,76 @@ export async function probeHost(client, host, {timeout_ms = 10_000} = {}) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// The community moved (the user, 2026-11-20: from cardenza.203.io/community to stage.203.io). The address it left answers
+// 203cli with `{"code": "moved", "api": "<the API where it is now>"}` (HTTP 410; any status counts): the client goes
+// there, says so in one line, keeps it in ~/.config/203cli/api.json (the move and its time) and asks again, once. Later
+// runs go straight there, whatever named the old address (the default, COMMUNITY_API or --api). The token only ever goes
+// to the community's own hosts: a move is followed to https on 203.io (or from a local stack to another local one).
+
+/** ~/.config/203cli/api.json: {moves: {<old API>: {api: <new API>, at: <ISO time>}}}. */
+export const movesFile = (env = process.env) => path.join(configDir(env), "api.json");
+
+function readMoves(env = process.env) {
+  try {
+    const value = JSON.parse(fs.readFileSync(movesFile(env), "utf8"));
+    return value && typeof value.moves === "object" && value.moves ? value.moves : {};
+  } catch { return {}; }
+}
+
+/** Where a move from `from` to `next` (the answer's `api`) goes: the new API's base, or null (not one of ours, or no move). */
+export function movedApi(from, next) {
+  let a, b;
+  try { a = new URL(from); b = new URL(String(next)); } catch { return null; }
+  const loopback = host => ["localhost", "127.0.0.1", "[::1]"].includes(host);
+  const ours = host => host === "203.io" || host.endsWith(".203.io");
+  const ok = (b.protocol === "https:" && ours(b.hostname)) || (loopback(a.hostname) && loopback(b.hostname) && /^https?:$/.test(b.protocol));
+  if (!ok || b.username || b.password || b.search || b.hash) return null;
+  const to = (b.origin + b.pathname).replace(/\/+$/, "");
+  return to === String(from).replace(/\/+$/, "") ? null : to;
+}
+
+/** The API to use for `api`: where the community moved, when a move from it was remembered (a chain, at most 3). */
+export function rememberedApi(api, env = process.env) {
+  let current = String(api).replace(/\/+$/, "");
+  const moves = readMoves(env);
+  for (let i = 0; i < 3; i++) {
+    const to = moves[current]?.api ? movedApi(current, moves[current].api) : null;
+    if (!to) break;
+    current = to;
+  }
+  return current;
+}
+
+/** The move kept for later runs (best effort: a read-only home asks the old address again next time). */
+export function rememberMove(from, to, {env = process.env, now = new Date()} = {}) {
+  const file = movesFile(env);
+  try {
+    const moves = readMoves(env);
+    moves[from] = {api: to, at: now.toISOString()};
+    fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
+    const fresh = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(fresh, JSON.stringify({moves}, null, 1) + "\n", {mode: 0o600});
+    fs.renameSync(fresh, file);
+    return file;
+  } catch { return null; }
+}
+
+/** The one line a move is told with (stderr). */
+export function moveLine({from, to, file}, lang = "en") {
+  return lang === "zh"
+    ? `203cli：203 社区搬家了，从 ${from} 到 ${to}；203cli 以后都用新地址${file ? `（记在 ${file}）` : ""}。`
+    : `203cli: the 203 community moved from ${from} to ${to}; 203cli uses the new address from now on${file ? ` (kept in ${file})` : ""}.`;
+}
+
 export class Client {
-  constructor({api = process.env.COMMUNITY_API || DEFAULT_API, token, fetch: fetcher = globalThis.fetch, lang = defaultLang(), env = process.env} = {}) {
-    this.api = api.replace(/\/+$/, "");
+  constructor({api = process.env.COMMUNITY_API || DEFAULT_API, token, fetch: fetcher = globalThis.fetch, lang = defaultLang(), env = process.env,
+    onMove = move => process.stderr.write(moveLine(move, this.lang) + "\n")} = {}) {
+    this.api = rememberedApi(api, env);
     this.token = token === undefined ? loadToken(this.api) : token;
-    const apiHost = hostOf(this.api);
     this.env = env;
-    this.fetch = guardFetch(fetcher, {ours: host => host === apiHost || COMMUNITY_HOSTS.includes(host), lang: () => this.lang, env});
+    this.onMove = onMove;
+    this.fetch = guardFetch(fetcher, {ours: host => host === hostOf(this.api) || COMMUNITY_HOSTS.includes(host), lang: () => this.lang, env});
     this.lang = /^zh/i.test(lang || "") ? "zh" : "en";
     // This run's trusted-publishing credential (login --github-oidc), renewed before it ends.
     const run = token === undefined && !process.env.COMMUNITY_TOKEN ? loadRunCredential(this.api) : null;
@@ -334,17 +464,37 @@ export class Client {
   }
 
   /** Accept-Language for every request, uploads too. */
-  langHeaders() { return {"Accept-Language": this.lang === "zh" ? "zh-CN,zh;q=0.9" : "en", "User-Agent": "203c/" + CLI_VERSION}; }
+  langHeaders() { return {"Accept-Language": this.lang === "zh" ? "zh-CN,zh;q=0.9" : "en", "User-Agent": USER_AGENT}; }
 
   async request(method, apiPath, options = {}) {
     if (this.run && options.auth !== false && Date.parse(this.run.expires_at) - Date.now() < 60_000 && oidcAvailable()) await this.renewRun();
-    try { return await this.send(method, apiPath, options); }
+    try { return await this.sendFollowing(method, apiPath, options); }
     catch (error) {
       // Ended early (revoked with its publisher, or the clock): once more with a new one.
       if (!(this.run && options.auth !== false && error instanceof ApiError && error.status === 401 && oidcAvailable())) throw error;
       await this.renewRun();
+      return await this.sendFollowing(method, apiPath, options);
+    }
+  }
+
+  /** send, and when the community answers that it moved: there, once (moved: "throw" leaves asking again to the caller). */
+  async sendFollowing(method, apiPath, options) {
+    try { return await this.send(method, apiPath, options); }
+    catch (error) {
+      if (!(error instanceof ApiError && error.code === "moved" && this.follow(error.data?.api))) throw error;
+      if (options.moved === "throw") { error.followed = true; throw error; }
       return await this.send(method, apiPath, options);
     }
+  }
+
+  /** Goes where the community moved (`next`, the answer's api): true when it did. */
+  follow(next) {
+    const from = this.api, to = movedApi(from, next);
+    if (!to) return false;
+    this.api = to;
+    const file = rememberMove(from, to, {env: this.env});
+    try { this.onMove?.({from, to, file}); } catch { /* the line is a courtesy */ }
+    return true;
   }
 
   async send(method, apiPath, {body, query, headers = {}, auth = true, raw} = {}) {
@@ -365,7 +515,8 @@ export class Client {
     const text = await response.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    if (!response.ok) {
+    // The community moved (any status): Client.sendFollowing goes there.
+    if (!response.ok || (data && typeof data === "object" && data.code === "moved")) {
       const message = data && typeof data === "object" && data.error ? data.error : `HTTP ${response.status}`;
       throw new ApiError(response.status, data?.code || "http_" + response.status, message, typeof data === "object" ? data : {});
     }
@@ -579,7 +730,7 @@ export async function publishVersion(client, {code, channel = "stable", version,
   if (published.status === "rejected") {
     const failed = (published.check?.steps ?? []).filter(step => step.status === "fail").map(step => `${step.name} (${step.target}): ${step.detail}`);
     throw new ApiError(409, "rejected", `The checks sent ${published.version} (${published.code}) back: ${failed.join("; ") || "see its check"}` +
-      ` — appeal with: 203c versions appeal ${published.code} --message "…"`, {version: published, uploaded});
+      ` — appeal with: 203cli versions appeal ${published.code} --message "…"`, {version: published, uploaded});
   }
   return {version: published, uploaded};
 }
@@ -1103,7 +1254,7 @@ export async function uploadSource(client, code, versionCode, bytes, sha256) {
 
 const b64url = bytes => Buffer.from(bytes).toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 
-/** Why no browser can be opened here (then 203c uses the device code), or null. BROWSER names one. */
+/** Why no browser can be opened here (then 203cli uses the device code), or null. BROWSER names one. */
 export function browserProblem(env = process.env, platform = process.platform) {
   if (env.BROWSER === "none") return "BROWSER=none";
   if (env.BROWSER) return null;
@@ -1128,7 +1279,7 @@ export function openBrowser(url, env = process.env) {
   });
 }
 
-const callbackPage = (title, text) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>203c</title>
+const callbackPage = (title, text) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>203cli</title>
 <style>body{font:16px system-ui,sans-serif;background:#0b0b0b;color:#eee;display:grid;place-items:center;min-height:90vh;margin:0}main{max-width:30em;padding:1em}h1{font-size:1.4em}</style>
 <main><h1>${title}</h1><p>${text}</p></main>`;
 const escapeHtml = text => String(text).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
@@ -1146,9 +1297,10 @@ export async function browserLogin(client, {name, admin = false, timeout = 300, 
   await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const redirect = `http://127.0.0.1:${server.address().port}/callback`;
   try {
+    // The OAuth client id stays "203c" (the name before the rename): the community's database knows that one.
     const checked = await client.request("GET", "/auth/authorize", {auth: false, query: {response_type: "code", client_id: "203c", redirect_uri: redirect,
       code_challenge: challenge, code_challenge_method: "S256", state, scope: admin ? "read write admin" : "read write",
-      name: (name || "203c on " + os.hostname()).slice(0, 40)}});
+      name: (name || "203cli on " + os.hostname()).slice(0, 40)}});
     say(checked.authorize_url);
     const opened = await open(checked.authorize_url);
     return await new Promise((resolve, reject) => {
@@ -1156,7 +1308,7 @@ export async function browserLogin(client, {name, admin = false, timeout = 300, 
       if (!opened) say(checked.authorize_url, {opened: false});
       let handled = false;
       server.on("request", async (req, res) => {
-        // The page goes out whole before 203c moves on (and closes the listener).
+        // The page goes out whole before 203cli moves on (and closes the listener).
         const reply = (status, title, text) => new Promise(done => {
           res.writeHead(status, {"content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer",
             "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'", connection: "close"});
@@ -1164,24 +1316,24 @@ export async function browserLogin(client, {name, admin = false, timeout = 300, 
         });
         const url = new URL(req.url, redirect);
         if (req.method !== "GET" || url.pathname !== "/callback") { res.writeHead(404); res.end(); return; }
-        // Anything without this sign-in's state is not its answer: refused, and 203c goes on waiting.
-        if (url.searchParams.get("state") !== state) { await reply(400, "Not this sign-in", "This page does not belong to the sign-in 203c is waiting for."); return; }
+        // Anything without this sign-in's state is not its answer: refused, and 203cli goes on waiting.
+        if (url.searchParams.get("state") !== state) { await reply(400, "Not this sign-in", "This page does not belong to the sign-in 203cli is waiting for."); return; }
         // Only the first answer counts: a reload must never present the code again (that revokes it).
-        if (handled) { await reply(200, "Done", "203c already has its answer. You can close this tab."); return; }
+        if (handled) { await reply(200, "Done", "203cli already has its answer. You can close this tab."); return; }
         handled = true;
         clearTimeout(timer);
         if (url.searchParams.get("error")) {
-          await reply(200, "Sign-in refused", "203c was not signed in. You can close this tab.");
+          await reply(200, "Sign-in refused", "203cli was not signed in. You can close this tab.");
           reject(new ApiError(403, "access_denied", "The sign-in was refused in the browser"));
           return;
         }
         try {
           const got = await client.request("POST", "/auth/token", {auth: false, body: {grant_type: "authorization_code", code: url.searchParams.get("code") ?? "",
             code_verifier: verifier, redirect_uri: redirect, client_id: "203c"}});
-          await reply(200, "203c is signed in", `Signed in as ${escapeHtml(got.user?.name ?? "")}. You can close this tab and go back to the terminal.`);
+          await reply(200, "203cli is signed in", `Signed in as ${escapeHtml(got.user?.name ?? "")}. You can close this tab and go back to the terminal.`);
           resolve(got);
         } catch (error) {
-          await reply(400, "Sign-in failed", escapeHtml(error.message) + ". Run 203c login again.");
+          await reply(400, "Sign-in failed", escapeHtml(error.message) + ". Run 203cli login again.");
           reject(error);
         }
       });
@@ -1197,7 +1349,7 @@ export async function browserLogin(client, {name, admin = false, timeout = 300, 
 // site's /activate, polled until approved.
 
 export async function loginStart(client, name) {
-  return await client.request("POST", "/auth/device/start", {body: {client: "cli", name: (name || "203c on " + os.hostname()).slice(0, 40)}, auth: false});
+  return await client.request("POST", "/auth/device/start", {body: {client: "cli", name: (name || "203cli on " + os.hostname()).slice(0, 40)}, auth: false});
 }
 
 export async function loginPoll(client, requestId, {wait = true, interval = 3, timeout = 600, sleep = ms => new Promise(r => setTimeout(r, ms))} = {}) {

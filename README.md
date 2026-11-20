@@ -4,14 +4,14 @@
 
 [203 community](https://cardenza.203.io/community) · [Developer guide](https://cardenza.203.io/community/develop) · [Cardenza](products/cardenza/README.md) · [NullPerator](products/nullperator/README.md) · [Mystrix](products/mystrix/README.md)
 
-**Making firmware? Install it first: it is required.** `npm install -g 203c && 203c skill install` (Node.js 18 or
+**Making firmware? Install it first: it is required.** `npm install -g 203cli && 203cli skill install` (Node.js 18 or
 later; macOS, Linux and Windows alike). Cloning this repository does not install it, and a Cardenza firmware does not
 build without it.
 
 Everything a developer, or a coding agent, needs to make firmware for 203 Systems devices and share it on the 203
 community:
 
-- **`203c`**, the community's command line: sign in, start or fork a firmware project, publish versions from a
+- **`203cli`**, the community's command line: sign in, start or fork a firmware project, publish versions from a
   laptop or from CI (trusted publishing, no stored secret), set the page, the cover and its pictures, install a firmware over a
   USB cable, answer requests, share sound packs, works and 3D models. Every answer is JSON with `--json`, every
   error says what to run next: it is the tool AI agents use.
@@ -31,43 +31,48 @@ community:
 On macOS, Linux and Windows alike, with [Node.js](https://nodejs.org) 18 or later:
 
 ```sh
-npm install -g 203c    # the 203c command
-203c skill install     # its Agent Skill, for Claude Code and Codex (run it again after every update)
+npm install -g 203cli  # the 203cli command
+203cli skill install   # its Agent Skill, for Claude Code and Codex (run it again after every update)
 ```
 
-203c says when a newer one is out (and when a firmware project's CardenzaHAL is behind its `main`): a line on stderr
-after the commands of the work, at most one check a day; `203c updates` asks now, `NO_UPDATE_NOTIFIER=1` turns it off.
+**Coming from `203c`?** It is renamed `203cli` (the same commands, flags, JSON answers and exit codes), and 203cli is the
+only CLI now: `npm install -g 203cli && 203cli skill install`, then `npm uninstall -g 203c`, and write `203cli` where
+scripts and CI say `203c`. Your sign-in carries over. Until then the old ways keep working and say so: the last `203c`
+package runs 203cli, and so does the skill's old script path (`node …/203-community/scripts/203c.mjs`).
 
-`203c` has no dependencies and no install scripts. `skill install` copies the skill into `~/.claude/skills/203-community`
+203cli says when a newer one is out (and when a firmware project's CardenzaHAL is behind its `main`): a line on stderr
+after the commands of the work, at most one check a day; `203cli updates` asks now, `NO_UPDATE_NOTIFIER=1` turns it off.
+
+`203cli` has no dependencies and no install scripts. `skill install` copies the skill into `~/.claude/skills/203-community`
 (`CLAUDE_SKILLS_DIR` to choose; `~/.codex/skills` too when Codex is there; `--dir` for another agent's folder). The USB
 cable (`flash`, `log`) is used on macOS and Linux; on Windows the website does it in Chrome or Edge, and every other
 command works as anywhere (`board`, a running firmware over USB: also on Windows, with `pip install hidapi`).
 
-From a clone instead (to read the code first, or to try a change to `203c`): `git clone
-https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203c skill install`, or run it in place
-with `node 203-CLI/scripts/203c.mjs`.
+From a clone instead (to read the code first, or to try a change to `203cli`): `git clone
+https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203cli skill install`, or run it in place
+with `node 203-CLI/scripts/203cli.mjs`.
 
 ## Use
 
 ```sh
-203c doctor                     # is everything ready?
-203c login                      # once on a computer: opens the browser, you approve on the site (remote: --no-browser)
-203c rules                      # the firmware project rules (Cardenza)
-203c new "My synth"             # a new Cardenza firmware project (CardenzaHAL and its template), or:
-203c fork V6QK28 my-synth       # start from someone's firmware (here: Cardenza Synth); init: 203.json for a project you have
+203cli doctor                   # is everything ready?
+203cli login                    # once on a computer: opens the browser, you approve on the site (remote: --no-browser)
+203cli rules                    # the firmware project rules (Cardenza)
+203cli new "My synth"           # a new Cardenza firmware project (CardenzaHAL and its template), or:
+203cli fork V6QK28 my-synth     # start from someone's firmware (here: Cardenza Synth); init: 203.json for a project you have
 python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool (Cardenza)
-203c flash --bin build/my_synth.bin   # onto your Cardenza over USB, through its Launcher
-203c log                        # what it prints
-203c board screen               # what it shows (a PNG); board info, memory, press, coredump, files: 203c help board
-203c publish --dry-run          # checks everything the community will check
-203c publish
-203c tutorial new               # how to use it: a tutorial (lessons, keys, screenshots); tutorial check, tutorial publish
-203c sync                       # later: the page, versions, requests, comments and forks in .203/community.md
-203c project diff FORK          # what a fork (魔改版) changed
-203c help start                 # what to run for what (every command takes --help)
+203cli flash --bin build/my_synth.bin  # onto your Cardenza over USB, through its Launcher
+203cli log                      # what it prints
+203cli board screen             # what it shows (a PNG); board info, memory, press, coredump, files: 203cli help board
+203cli publish --dry-run        # checks everything the community will check
+203cli publish
+203cli tutorial new             # how to use it: a tutorial (lessons, keys, screenshots); tutorial check, tutorial publish
+203cli sync                     # later: the page, versions, requests, comments and forks in .203/community.md
+203cli project diff FORK        # what a fork (魔改版) changed
+203cli help start               # what to run for what (every command takes --help)
 ```
 
-Run it from the firmware project's folder. Add `--json` for machines; `203c <command> --help --json` describes any
+Run it from the firmware project's folder. Add `--json` for machines; `203cli <command> --help --json` describes any
 command. Every command and flag: [`reference/cli.md`](reference/cli.md); the community's API:
 [`reference/api.md`](reference/api.md).
 
@@ -82,7 +87,7 @@ device's guide first, follow its rules, check with `--dry-run` and never handle 
 | | |
 |---|---|
 | [`SKILL.md`](SKILL.md) | the Agent Skill: hard rules, what to run, workflows, errors |
-| [`scripts/`](scripts) | `203c` (`scripts/203c.mjs`), zero dependencies |
+| [`scripts/`](scripts) | `203cli` (`scripts/203cli.mjs`), zero dependencies |
 | [`reference/`](reference) | `cli.md` (generated from the command table), `api.md` (the community's API), `parity.md` (each page of the site and its command), `firmware-project.md` (the firmware project rules, CardenzaHAL's `docs/FIRMWARE-PROJECT.md`), `tutorial-format.md` (the tutorial format) |
 | [`products/`](products) | one development guide per device |
 | [`tests/`](tests) | `npm test`: the CLI against stand-in APIs and a demo Launcher on a pseudo-terminal, the local checks, the documents |

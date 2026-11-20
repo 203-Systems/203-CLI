@@ -1,4 +1,4 @@
-// 203c board's transport: the development channel of a firmware on CardenzaHAL (CardenzaHAL docs/usb-dev.md), the HAL's system
+// 203cli board's transport: the development channel of a firmware on CardenzaHAL (CardenzaHAL docs/usb-dev.md), the HAL's system
 // command 0x45 over the system channel the firmware's USB already has (no task or buffer in the firmware until a computer asks).
 // A request is [id, op, args]; its answer is one or more messages carrying the same id, counted by seq (14 bits, from 0,
 // wrapping), the last flagged LAST (or ERROR: its payload is the reason). Here: the bytes both ways, an answer put back
@@ -7,7 +7,7 @@
 //          answer  F0 24 45 id seq_lo seq_hi flags <payload, packed> F7 (payload at most 48 bytes)
 //   HID    report 0xCB, 63 bytes: request [0x45, id, op, length, args (length of them, at most 52, raw)]; answer [0xC5, id,
 //          seq_lo, seq_hi, flags, length, payload (at most 57)]. On hidraw (and hidapi) a report is 64 bytes, its ID first.
-// Where the bytes go (found as restart.mjs finds the firmware; Node has no MIDI or HID API and 203c no dependencies):
+// Where the bytes go (found as restart.mjs finds the firmware; Node has no MIDI or HID API and 203cli no dependencies):
 //   Linux    ALSA raw MIDI (/dev/snd/midiC<card>D<n>, SysEx), else hidraw (/dev/hidrawN): a file descriptor kept open for
 //            the whole command and polled (Node has no readiness event for a character device).
 //   macOS    CoreMIDI through python3's ctypes (COREMIDI_PRELUDE), one bridge process for the whole command: SysEx bytes in on
@@ -423,7 +423,7 @@ export function fileLink(file, kind) {
 
 // The bridges: python3 holds the device for the whole command. Its first line on stdout is JSON, {"ready": true, "name"} or
 // {"error"}; then each line is hex: bytes the device sent ("!" and a reason when it failed). Lines of hex on its stdin are
-// sent to the device. It ignores Ctrl-C (203c sends CANCEL through it first) and ends when its stdin closes.
+// sent to the device. It ignores Ctrl-C (203cli sends CANCEL through it first) and ends when its stdin closes.
 const BRIDGE_HEAD = String.raw`
 import json, signal, sys
 signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -568,9 +568,9 @@ export function windowsPython() {
 // Finding the board and opening the channel
 
 const RELINK_HINT = "Linux: raw MIDI is the seat user's or the audio group's (sudo usermod -aG audio $USER, then log in again); close what holds the device's MIDI port " +
-  "(a 203c log, a DAW, a web page with Web MIDI) and run it again";
+  "(a 203cli log, a DAW, a web page with Web MIDI) and run it again";
 export const REBUILD_HINT = "Rebuild the firmware with a current CardenzaHAL (update the HAL submodule to its main branch: git -C components/CardenzaHAL pull origin main, " +
-  "or the project's own way, e.g. make hal-update), install it with 203c flash --bin build/<project>.bin, then run this again";
+  "or the project's own way, e.g. make hal-update), install it with 203cli flash --bin build/<project>.bin, then run this again";
 
 /** The ways to this computer's Cardenza running a firmware: [{via, where, open(): link}] ([] when there is none), or a CliError. */
 export function boardLinks({platform = process.platform} = {}) {
@@ -580,7 +580,7 @@ export function boardLinks({platform = process.platform} = {}) {
     if (platform === "darwin") {
       return found.candidates.map(way => ({via: "coremidi", where: "CoreMIDI", name: found.name, open: () => {
         const python = macPython();
-        if (!python) throw new CliError("python_missing", "203c board reaches a firmware's MIDI on macOS with python3 (CoreMIDI)", {exit: EXIT.refused, hint: "xcode-select --install"});
+        if (!python) throw new CliError("python_missing", "203cli board reaches a firmware's MIDI on macOS with python3 (CoreMIDI)", {exit: EXIT.refused, hint: "xcode-select --install"});
         return bridgeLink([python], COREMIDI_BRIDGE, {kind: "sysex", via: way.via});
       }}));
     }
@@ -589,12 +589,12 @@ export function boardLinks({platform = process.platform} = {}) {
   if (platform === "win32") {
     return [{via: "hidapi", where: "hidapi", name: "Cardenza", open: () => {
       const python = windowsPython();
-      if (!python) throw new CliError("hidapi_missing", "203c board reaches a firmware on Windows through Python's hidapi, and there is no python here", {exit: EXIT.refused,
+      if (!python) throw new CliError("hidapi_missing", "203cli board reaches a firmware on Windows through Python's hidapi, and there is no python here", {exit: EXIT.refused,
         hint: "Install Python 3 (python.org), then pip install hidapi; or use macOS or Linux"});
       return bridgeLink(python, HIDAPI_BRIDGE, {kind: "hid", via: "hidapi"});
     }}];
   }
-  throw new CliError("unsupported_platform", `203c board reaches a device over USB on macOS, Linux and Windows, not ${platform}`, {exit: EXIT.refused});
+  throw new CliError("unsupported_platform", `203cli board reaches a device over USB on macOS, Linux and Windows, not ${platform}`, {exit: EXIT.refused});
 }
 
 /**
@@ -612,7 +612,7 @@ export async function openBoard({links = null, platform = process.platform, time
     try { link = await way.open(); } catch (error) {
       if (error instanceof CliError) throw error;
       if (error.code === "no_hidapi") {
-        throw new CliError("hidapi_missing", "203c board reaches a firmware on Windows through Python's hidapi package, which is not installed", {exit: EXIT.refused,
+        throw new CliError("hidapi_missing", "203cli board reaches a firmware on Windows through Python's hidapi package, which is not installed", {exit: EXIT.refused,
           hint: "pip install hidapi, then run this again"});
       }
       if (error.code === "not_found") {
@@ -637,7 +637,7 @@ export async function openBoard({links = null, platform = process.platform, time
     board.identity = identity;
     if (identity.protocol < PROTOCOL) {
       await board.close();
-      throw new CliError("hal_too_old", `The firmware on ${identity.product || board.name} was built with a CardenzaHAL older than the development channel (its USB protocol is ${identity.protocol}; 203c board needs ${PROTOCOL})`, {
+      throw new CliError("hal_too_old", `The firmware on ${identity.product || board.name} was built with a CardenzaHAL older than the development channel (its USB protocol is ${identity.protocol}; 203cli board needs ${PROTOCOL})`, {
         exit: EXIT.refused, hint: REBUILD_HINT, data: {protocol: identity.protocol, product: identity.product}});
     }
     try {
@@ -657,7 +657,7 @@ export async function openBoard({links = null, platform = process.platform, time
     throw new CliError("hal_too_old", `${silent} is on USB but its firmware does not answer the HAL's system commands (IDENTIFY): its CardenzaHAL is older than the development channel, or the firmware is stuck`, {
       exit: EXIT.refused, hint: REBUILD_HINT + "; if it is a current build, restart the device and try again", data: {tried}});
   }
-  throw new CliError("firmware_unreachable", `The firmware is on USB but 203c cannot open it (${tried.join("; ")})`, {exit: EXIT.refused, hint: RELINK_HINT, data: {tried}});
+  throw new CliError("firmware_unreachable", `The firmware is on USB but 203cli cannot open it (${tried.join("; ")})`, {exit: EXIT.refused, hint: RELINK_HINT, data: {tried}});
 }
 
 /**
@@ -677,13 +677,13 @@ export async function withoutChannel(platform = process.platform, {ms = 1200} = 
     try { version = await launcherVersion(port, ms); } catch (error) { unasked.push(`${port}: ${error.code === "port_unavailable" ? error.message : error.code || error.message}`); continue; }
     if (version !== null) {
       return new CliError("board_in_launcher", `The Cardenza on ${port} is in its 203 Launcher (${version}), not running a firmware: the development channel is a firmware's`, {exit: EXIT.refused,
-        hint: "Start the firmware from the Launcher (or install a build: 203c flash --bin build/<project>.bin), then run this again", data: {port, launcher: version}});
+        hint: "Start the firmware from the Launcher (or install a build: 203cli flash --bin build/<project>.bin), then run this again", data: {port, launcher: version}});
     }
   }
   return new CliError("board_no_usb", "This firmware does not start CardenzaHAL's USB device, so the development channel is not available: add `CardenzaHAL::USB::Init();` after " +
     "`CardenzaHAL::Init()` in app_main (usb/usb.h), rebuild, flash", {exit: EXIT.refused,
-    hint: `It is on the serial port ${ports.join(", ")} (USB-Serial-JTAG)${unasked.length ? ` (not asked: ${unasked.join("; ")})` : ""}; 203c log still reads its console there. ` +
-      "After the change: build, 203c flash --bin build/<project>.bin, then run this again", data: {ports}});
+    hint: `It is on the serial port ${ports.join(", ")} (USB-Serial-JTAG)${unasked.length ? ` (not asked: ${unasked.join("; ")})` : ""}; 203cli log still reads its console there. ` +
+      "After the change: build, 203cli flash --bin build/<project>.bin, then run this again", data: {ports}});
 }
 
 /** The 203 Launcher's version on a serial port (it answers `version` with "Launcher …"), or null when nothing says so in `ms`. */

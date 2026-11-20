@@ -85,7 +85,7 @@ const ok = result => { assert.equal(result.code, 0, result.stderr || result.stdo
 test("firmware images add: the gallery, then the description (with its reference); a picture it has is skipped; checks first", async () => {
   const dry = ok(await cli(["firmware", "images", "add", CODE, "docs/home.png", "--caption", "The home screen", "--dry-run"]));
   assert.equal(dry.status, "dry_run");
-  assert.match(dry.plan[0], /add docs\/home\.png \(240x135 PNG.*to the gallery.*"The home screen"/);
+  assert.match(dry.plan[0], /add docs[\\/]home\.png \(240x135 PNG.*to the gallery.*"The home screen"/);
   const added = ok(await cli(["firmware", "images", "add", CODE, "docs/home.png", "--caption", "The home screen"]));
   assert.equal(added.status, "added");
   assert.equal(fw.images.length, 1);
@@ -147,7 +147,7 @@ test("firmware edit --description-file: its local pictures go up once and become
   fs.writeFileSync(path.join(work, "docs/page.md"), "# Pocket Tracker\n\nThe grid:\n\n![The grid](seq.png) ![](./flow.png)\n\nAnd ![a photo](https://github.com/a.png).\n");
   const before = fw.description_images.length;
   const dry = ok(await cli(["firmware", "edit", CODE, "--description-file", "docs/page.md", "--dry-run"]));
-  assert.ok(dry.plan.some(step => /upload docs\/seq\.png .*into the description/.test(step)), JSON.stringify(dry.plan));
+  assert.ok(dry.plan.some(step => /upload docs[\\/]seq\.png .*into the description/.test(step)), JSON.stringify(dry.plan));
   assert.ok(dry.warnings.some(w => w.code === "remote_pictures"));
   ok(await cli(["firmware", "edit", CODE, "--description-file", "docs/page.md"]));
   const seq = fw.description_images.find(x => x.sha256 === crypto.createHash("sha256").update(fs.readFileSync(path.join(work, "docs/seq.png"))).digest("hex"));

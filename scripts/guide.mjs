@@ -164,6 +164,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   the simulator version (Play) of a version        {P} sim build --json   then   {P} sim upload VCODE build-web/site --json   ({P} help sim)
   set the cover picture                            {P} firmware cover K7M2QX cover.png --json
   change the page (summary, description, links)    {P} firmware edit K7M2QX --summary "…" --source-url https://github.com/… --json
+  write how to use it (a tutorial, lessons)        {P} tutorial new --json, then {P} tutorial publish --dry-run --json   ({P} help tutorials)
   see why a version was sent back                  {P} versions check VCODE --json
   try a build on your Cardenza (USB cable)         {P} flash --bin build/<project>.bin --json   then   {P} log --json
   look inside it running: screen, keys, memory, SD {P} board info --json, board screen, board press …   ({P} help board)
@@ -179,7 +180,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   what is left of today's limits                   {P} quotas --json
   change your name or bio                          {P} me edit --name "…" --bio "…" --json
 
-Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices board requests launchers sandbox admin)`},
+Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover pictures tutorials sounds projects works models signin errors devices board requests launchers sandbox admin)`},
 
   new: {title: "A new firmware for the Cardenza: make, build, try, publish, listen", text: `
 1. {P} new "My firmware" --summary "What it does" --json     a folder with CardenzaHAL (git submodule) and its template,
@@ -368,6 +369,7 @@ What people see first: the cover (16:9 picture) and the summary (≤ 100 charact
   - a description (Markdown) for people deciding to install: what it is, 3-6 features, what it needs, how to start
     (aim for 800 characters, at most 3000; the manual goes in its tutorial): docs/description.md, {P} help description
   - 3-5 different screenshots in the gallery ({P} board screen; help pictures): 203c publish needs them
+  - how to use it (keys, menus, settings) as a tutorial, not in the description: {P} tutorial new, then tutorial publish (help tutorials)
   - one category tag: instrument, groovebox, tool, network or game (--tags groovebox,synth)
   - the source: --source-url https://github.com/… and --clone-url https://github.com/….git
   - release notes on every stable version
@@ -412,6 +414,34 @@ firmware has already (the same file) is not sent again; pictures in code are lef
   "images": ["docs/home.png", {"file": "docs/seq.png", "caption": "The sequencer"}]
 publish makes the gallery exactly that, in that order (adds what is missing, sets the captions given, removes the rest);
 --dry-run says what it would change. A trusted-publishing run (CI) changes no pictures: the owner does.`},
+
+  tutorials: {title: "Tutorials (教程): how to use a firmware, in the one tutorial format", text: `
+A firmware's page has a 教程 / Tutorials tab: its owner's tutorials (official) first, then other people's. A tutorial is
+a guide written in the tutorial format (reference/tutorial-format.md, the Cardenza Learn guide's: lessons of short
+steps, each step a sentence or two, the keys it asks for lit on a drawing of the board, a screenshot of the screen),
+or a link to one elsewhere (https only; it opens through a page that says you are leaving the community).
+Description or tutorial: the description says in a few lines what the firmware is and why one would want it, with
+pictures; how to use it (key tables, menus, every setting) is a tutorial, and the description links to the tab.
+
+The file (JSON, at most 200 KB; no comments, no trailing commas):
+  {"format": "203-tutorial/1", "firmware": "K7M2QX", "languages": ["zh", "en"],
+   "title": {"zh": "上手", "en": "Getting started"}, "summary": {…},
+   "lessons": [{"title": {…}, "lead": {…}, "steps": [
+     {"say": {"zh": "按 {{key:fn}}：打开菜单。", "en": "Press {{key:fn}}: the menu opens."}, "keys": ["fn"], "image": "shots/menu.png"}]}]}
+One language ("languages": ["en"]): every text may be a plain string. 1-30 lessons, 1-30 steps each (300 in all), a
+step's words at most 280 wide (a Chinese character counts 2). In a step's words: {{key:fn}} (a key cap; fn+s: pressed
+together), **bold**, *italic*, \`code\`, [words](https://…); nothing else (no HTML, no line breaks). Keys are the caps'
+names (esc 1 … del, tab q … \\, fn shift a … ' ok, ctrl opt alt z … / space, home; enter up down left right). A step's
+"image" is a PNG, JPEG or WebP file (≤ 2 MB) relative to the file: publish uploads it and sends image:<id>.
+
+{P} tutorial new --json                       docs/tutorial.json to start from (203.json's firmware; --languages en)
+{P} tutorial check --json                     every error with its line and column (the community's own checks)
+{P} tutorial publish --dry-run --json         then without --dry-run: uploads the pictures it lacks (once, by SHA-256),
+                                             adds your tutorial or changes it (one each a firmware); your file stays as written
+{P} tutorial link CODE https://… --title "…" --json    a link (up to 5 of yours a firmware)
+{P} tutorial list CODE --json    {P} tutorial show CODE ID --out docs/tutorial.json    {P} tutorial rm CODE ID --yes --json
+{P} tutorial hide CODE ID --reason "…" --json  (your firmware: hide someone's tutorial; --off shows it again)
+On the site: the tab's 写教程 / Write a tutorial (an editor that checks while you type) and 添加链接 / Add a link.`},
 
   sounds: {title: "Sound packs (official firmware only; the section may not be open yet)", text: `
 {P} firmware list --official --json            → the official firmware's code (e.g. CardenzaSynth)

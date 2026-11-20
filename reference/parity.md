@@ -44,6 +44,21 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 | "⋯" owner: edit, delete | `firmware edit CODE …`, `firmware delete CODE --yes` |
 | "⋯" admin: feature, official, hide, delete | `admin feature firmware CODE`, `admin official CODE`, `admin hide|unhide|delete firmware CODE` |
 
+## Tutorials (tutorials.js: a firmware's 教程 tab, a tutorial's page, the editor)
+
+| Site | 203c |
+|---|---|
+| The 教程 / Tutorials tab (`/<CODE>/tutorials`: the official ones first, then others' with their author) | `tutorial list CODE --json` |
+| Every firmware with tutorials (`/tutorials`) | `tutorial list --all --target cardenza --json` |
+| A guide (`/<CODE>/t/<id>`: lessons, steps, the board with the step's keys, the screen) | `tutorial show CODE ID --json` (`document`); its file: `--out docs/tutorial.json` |
+| A link's leaving page | `tutorial show CODE ID --json` (`url`) |
+| 写教程 / Write a tutorial (the editor: the file's text, its errors with their lines as one types, the preview, pictures) | `tutorial new`, `tutorial check --json` (the same checks, the same errors), `tutorial publish --dry-run --json`, then `tutorial publish --json` (pictures uploaded once by SHA-256) |
+| Change your tutorial (编辑) | change the file, `tutorial publish --json` (one guide each a firmware: it changes yours) |
+| 添加链接 / Add a link | `tutorial link CODE https://… --title "…" --json` |
+| Delete your tutorial | `tutorial rm CODE ID --yes --json` |
+| Hide one on your firmware (the owner, an admin) | `tutorial hide CODE ID --reason "…" --json` (`--off` shows it again) |
+| The format (`/tutorials/format`) | `reference/tutorial-format.md`, `help tutorials` |
+
 ## Making and changing a firmware (firmware-forms.js)
 
 | Site | 203c |

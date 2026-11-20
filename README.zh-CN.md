@@ -48,6 +48,7 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # HAL 的编译工具�
 203c board screen               # 看它显示的画面（PNG）；board info、memory、press、coredump、files：203c help board
 203c publish --dry-run          # 先按社区的检查全部检查一遍
 203c publish
+203c tutorial new               # 怎么用：写成教程（一课课、按键、截图）；tutorial check、tutorial publish
 203c sync                       # 之后：页面、版本、需求、评论和魔改版，写进 .203/community.md
 203c project diff FORK          # 某个魔改版改了什么
 203c help start                 # 想做什么就运行什么（每个命令都能加 --help）

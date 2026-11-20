@@ -531,6 +531,19 @@ export async function uploadPicture(client, code, bytes, mime, {caption = "", pl
   }
 }
 
+// A tutorial's picture (COMMUNITY.md "Tutorials"): the author's own for a firmware, a signed upload checked on done; one that
+// did not go up is removed again. → the TutorialImage.
+export async function uploadTutorialPicture(client, code, bytes, mime) {
+  const made = await client.post(`/firmware/${enc(code)}/tutorial-images`, {mime, size: bytes.length});
+  try {
+    await put(client, made.upload, bytes);
+    return await client.post(`/firmware/${enc(code)}/tutorial-images/${enc(made.image.id)}/done`);
+  } catch (error) {
+    await client.post(`/firmware/${enc(code)}/tutorial-images/${enc(made.image.id)}/delete`).catch(() => {});
+    throw error;
+  }
+}
+
 // A version: a draft, each device's BIN to its upload ticket, then publish.
 export async function publishVersion(client, {code, channel = "stable", version, bins, notices, notes, source_commit, source_url,
   wait = true, poll_seconds = 5, timeout_seconds = 1200, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
@@ -968,6 +981,29 @@ op("version_appeal", "Appeal a version the checks sent back (a false positive): 
 op("feedback", "Send feedback about the community itself (a bug or an idea)", {kind: s("bug or idea", {enum: ["bug", "idea"]}), title: s("1-120 characters"),
   message: s("1-2000 characters"), page: s("Where on the site")}, ["kind", "title", "message"], (c, x) => c.post("/feedback", x), {write: true});
 op("my_feedback", "Your appeals and feedback, with their status and our reply", {page}, [], (c, x) => c.get("/me/feedback", {page: x.page}));
+
+// Tutorials (COMMUNITY.md "Tutorials"): a guide (the tutorial format, reference/tutorial-format.md) or a link, the firmware's
+// owner's first; the author's own pictures for a firmware.
+const tutorialId = s("A tutorial's id (8 characters; tutorials_list lists them)");
+op("tutorials_list", "A firmware's tutorials (the owner's, official, first; hidden ones only for their author, the owner and admins)", {code, page}, ["code"],
+  (c, x) => c.get(`/firmware/${enc(x.code)}/tutorials`, pick(x, ["page"])));
+op("tutorial_show", "A tutorial: a guide's whole document (its source for its author), or a link", {code, id: tutorialId}, ["code", "id"],
+  (c, x) => c.get(`/firmware/${enc(x.code)}/tutorials/${enc(x.id)}`));
+op("tutorial_create", "Add a tutorial: a guide (document: the file's text, checked as reference/tutorial-format.md says; one per author and firmware) or a link (title, url; up to 5)",
+  {code, document: s("A guide: the tutorial file's text (JSON)"), title: s("A link: 2-60 wide"), url: s("A link: https://…")}, ["code"],
+  (c, x) => c.post(`/firmware/${enc(x.code)}/tutorials`, pick(x, ["document", "title", "url"])), {write: true});
+op("tutorial_edit", "Change your tutorial: a guide's document, or a link's title or url", {code, id: tutorialId, document: s("The tutorial file's text"),
+  title: s("A link's title"), url: s("A link's address")}, ["code", "id"],
+  (c, x) => c.post(`/firmware/${enc(x.code)}/tutorials/${enc(x.id)}/edit`, pick(x, ["document", "title", "url"])), {write: true});
+op("tutorial_delete", "Delete a tutorial (its author, an admin)", {code, id: tutorialId}, ["code", "id"],
+  (c, x) => c.post(`/firmware/${enc(x.code)}/tutorials/${enc(x.id)}/delete`), {write: true});
+op("tutorial_hide", "Hide a tutorial or show it again (the firmware's owner, an admin; the author is told)", {code, id: tutorialId, on: b("true: hide it; false: show it"),
+  reason: s("Why (shown to its author)")}, ["code", "id", "on"],
+  (c, x) => c.post(`/firmware/${enc(x.code)}/tutorials/${enc(x.id)}/hide`, pick(x, ["on", "reason"])), {write: true});
+op("tutorial_images", "Your pictures for a firmware's tutorials (id, sha256, whether a tutorial uses it)", {code}, ["code"],
+  (c, x) => c.get(`/firmware/${enc(x.code)}/tutorial-images`));
+op("tutorials_all", "Firmware that have tutorials, the most downloaded first, each with its first 3", {target: s("A device: firmware with a build for it"),
+  q: s("Words in a firmware's name or a tutorial's title"), page}, [], (c, x) => c.get("/tutorials", pick(x, ["target", "q", "page"])));
 
 // Requests (public) and the developer tracker (the firmware's owner, or an admin)
 op("requests_list", "Requests under a firmware", {code, sort: s("top or new"), page}, ["code"],

@@ -14,6 +14,7 @@ import {inbox, link} from "./feedback.mjs";
 import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff, sync} from "./project-view.mjs";
 import {skillInstall} from "./skill.mjs";
 import {updatesCommand} from "./updates.mjs";
+import {tutorialNew, tutorialCheck, tutorialPublish, tutorialLink, tutorialList, tutorialShow, tutorialRm, tutorialHide} from "./tutorial.mjs";
 import path from "node:path";
 
 const B = help => ({bool: true, help});
@@ -166,6 +167,35 @@ cmd("firmware images prune CODE", "Remove the description's pictures its text no
   flags: {...DRY, ...YES}, run: prunePictures, write: true, topic: "pictures", examples: ["firmware images prune K7M2QX --dry-run --json", "firmware images prune K7M2QX --yes --json"]});
 cmd("firmware checklist CODE", "What a firmware's page has and lacks (cover, pictures, summary, description, links, notes), with the command for each", {group: "Publishing",
   run: checklist, topic: "page", examples: ["firmware checklist K7M2QX --json"]});
+// Tutorials (教程, COMMUNITY.md "Tutorials"): how to use a firmware, lessons of short steps in one format
+// (reference/tutorial-format.md), on its page's 教程 tab; or a link to a tutorial elsewhere.
+const TUTORIAL = {group: "Tutorials", topic: "tutorials"};
+const TUTORIAL_FILE = "The tutorial file (default docs/tutorial.json of the project, the folder of 203.json)";
+cmd("tutorial new [FILE]", "Start a tutorial file (default docs/tutorial.json): the format with one lesson of two steps to write over, for 203.json's firmware", {...TUTORIAL,
+  offline: true, flags: {languages: V("zh|en|zh,en", "The languages every text is written in (default zh,en)"), title: V("TEXT", "The tutorial's title (2-60 wide)"),
+    firmware: V("CODE", "The firmware it is for (default 203.json's code)"), force: B("Write over the file when it exists"), ...DRY},
+  run: tutorialNew, examples: ["tutorial new --json", 'tutorial new docs/tutorial.json --languages en --title "Getting started" --firmware K7M2QX --json']});
+cmd("tutorial check [FILE]", "Check a tutorial file as the community will: the format (fields, languages, lengths, markup, key names) and its local pictures; every error with its line and column", {...TUTORIAL,
+  offline: true, flags: {firmware: V("CODE", "The firmware it is for: \"firmware\" in the file must be this one")},
+  run: tutorialCheck, examples: ["tutorial check --json", "tutorial check docs/tutorial.json"]});
+cmd("tutorial publish [FILE]", "Publish your tutorial of a firmware (one each): checks it, uploads its local pictures it lacks (once, by SHA-256), adds it or changes yours; safe to run again", {...TUTORIAL,
+  flags: {firmware: V("CODE", "The firmware (default: \"firmware\" in the file, else 203.json's code)"), ...DRY},
+  run: tutorialPublish, write: true, examples: ["tutorial publish --dry-run --json", "tutorial publish docs/tutorial.json --firmware K7M2QX --json"]});
+cmd("tutorial link CODE URL", "Add a link to a tutorial elsewhere (a video, a blog; https only, up to 5 of yours a firmware); the same URL again changes its title", {...TUTORIAL,
+  flags: {title: V("TEXT", "What it is (2-60 wide, plain text)"), ...DRY}, need: ["title"],
+  run: tutorialLink, write: true, examples: ['tutorial link K7M2QX https://www.bilibili.com/video/BV1xx411c7mD --title "Video: the first ten minutes" --json']});
+cmd("tutorial list [CODE]", "A firmware's tutorials (the official ones, its owner's, first), with ids and pages; --all: every firmware that has tutorials", {...TUTORIAL,
+  flags: {all: B("Every firmware with tutorials, the most downloaded first"), target: V("DEVICE", "With --all: firmware for this device"), q: V("WORDS", "With --all: search words"), ...PAGE},
+  run: tutorialList, examples: ["tutorial list K7M2QX --json", "tutorial list --all --target cardenza --json"]});
+cmd("tutorial show CODE ID", "A tutorial: a guide's lessons and steps (its file as written, for its author), or a link's address; --out saves a guide's file", {...TUTORIAL,
+  flags: {out: V("PATH", "Save the guide's file there (to change it and publish again)"), force: B("Write over --out when it exists")},
+  run: tutorialShow, examples: ["tutorial show K7M2QX 7ces8nvr --json", "tutorial show K7M2QX 7ces8nvr --out docs/tutorial.json"]});
+cmd("tutorial rm CODE ID", "Delete your tutorial (admins: any)", {...TUTORIAL, flags: YES, confirm: true, run: tutorialRm, write: true,
+  examples: ["tutorial rm K7M2QX 7ces8nvr --yes --json"]});
+cmd("tutorial hide CODE ID", "Hide a tutorial on your firmware (its owner, an admin; its author is told), or --off to show it again", {...TUTORIAL,
+  flags: {off: B("Show it again"), reason: V("TEXT", "Why (its author reads it)")}, run: tutorialHide, write: true,
+  examples: ['tutorial hide K7M2QX 7ces8nvr --reason "Another firmware\'s keys" --json', "tutorial hide K7M2QX 7ces8nvr --off --json"]});
+
 cmd("versions simulator CODE VCODE", "Upload a version's simulator version (the same as sim upload VCODE DIR)", {group: "Publishing",
   flags: {dir: V("PATH", "The folder of the web build"), "no-wait": B("Do not wait for its check"),
     timeout: V("SECONDS", "How long to wait for the checker (default 600: it runs every few minutes)", {type: "number"}), poll: V("SECONDS", "How often to ask (default 5)", {type: "number"}), ...DRY},
@@ -695,6 +725,7 @@ export const ALIASES = {
   checkout: "clone", "git-clone": "clone", remix: "fork", "based-on": "firmware based-on", lineage: "firmware based-on", spec: "rules", guide: "rules",
   quota: "quotas", limits: "quotas", update: "updates", upgrade: "updates", outdated: "updates", lookup: "firmware lookup", archive: "source upload",
   simulator: "sim", emulator: "sim", wasm: "sim build", web: "sim build", play: "sim check",
+  tutorials: "tutorial", manual: "tutorial", lessons: "tutorial",
 };
 
 export function findCommand(words) {

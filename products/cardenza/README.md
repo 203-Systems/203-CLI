@@ -169,6 +169,22 @@ People who are not developers decide on the page whether to install it, so it re
   (CI) cannot change pictures, so it never fails for them: it warns (`gallery_short`, an annotation on the run) and the
   owner adds them once.
 
+## Tutorials
+
+How to use a firmware (its keys, menus and settings) goes in a **tutorial** on its community page (the 教程 /
+Tutorials tab), not in the description: lessons of short steps in the Cardenza Learn guide's format, each step's
+keys lit on a drawing of the board and its screenshot in the board's display. The format, with every rule the
+community enforces: [reference/tutorial-format.md](../../reference/tutorial-format.md). Key names are the caps'
+names below (`fn`, `ok`, `;`, `home`, `fn+s` for keys pressed together); a step's screenshot can come from the
+device itself: `203c board screen --out docs/shots/menu.png`.
+
+```sh
+203c tutorial new                      # docs/tutorial.json for 203.json's firmware (--languages en for English only)
+203c tutorial check                    # every error with its line and column
+203c tutorial publish --dry-run        # then without --dry-run: pictures uploaded once, your tutorial added or changed
+203c tutorial link CODE https://… --title "Video: the first ten minutes"   # a tutorial elsewhere
+```
+
 ## Hardware reference
 
 What each part does and where it is in the HAL (header, functions, README section):

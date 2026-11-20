@@ -82,6 +82,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | write the description | `help description` (the guide): for people deciding to install, not a manual: what it is, 3–6 features, what it needs, how to start; aim for 800 characters, at most 3000; in `docs/description.md` (`publish.description_file`) |
 | put pictures in the description | `firmware images add CODE flow.png --description --json`, then `![words](image:ID)` in the text; or name local files in the description file (`![](docs/shot.png)`): `--description-file` uploads them (`help pictures`) |
 | improve the page (summary, description, links, tags) | `firmware checklist CODE --json`, then the `fix` commands it lists |
+| write how to use a firmware (a manual: keys, menus, settings) | a tutorial, not the description: `tutorial new --json` (docs/tutorial.json), write its lessons in the format of `reference/tutorial-format.md`, `tutorial check --json` (every error with its line and column), `tutorial publish --dry-run --json`, then `tutorial publish --json`; a link to one elsewhere: `tutorial link CODE URL --title "…" --json` (`help tutorials`) |
 | start a firmware project / its 203.json | `rules`, then `init --json` (writes 203.json from CMake, version.txt, git, LICENSE) |
 | change someone's firmware | `fork CODE DIR --json` (clones it and writes 203.json with `forked_from`; the same as `fork CODE --clone DIR`), build in DIR, then `publish --dry-run --json` inside DIR |
 | record what your firmware was made from | `firmware based-on CODE ORIGIN --version LABEL --json` |
@@ -95,9 +96,10 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | an admin action (`admin …`) | an admin sign-in has the admin scope: `login --admin --json` (exit 4 `admin_scope_required` says so) |
 | anything else | `help start`, `help <topic>`, `<command> --help --json` |
 
-Topics: `help start|new|project|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|description|cover|pictures|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
+Topics: `help start|new|project|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|description|cover|pictures|tutorials|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
 Every command with its flags: `reference/cli.md`; every endpoint: `reference/api.md`; what the site does and the
-command for each: `reference/parity.md`; the firmware project rules: `reference/firmware-project.md` (`203c rules`).
+command for each: `reference/parity.md`; the firmware project rules: `reference/firmware-project.md` (`203c rules`); the
+tutorial format: `reference/tutorial-format.md`.
 
 **Official firmware.** An official firmware that has an owner (`owner` in `firmware show`) is that person's firmware:
 they publish its versions with 203c like any of theirs (yours if it is yours: `firmware mine` lists it). Only an
@@ -248,6 +250,10 @@ Tell the user the firmware code (the Launcher installs it), the version code, th
   --source-url https://github.com/me/my-synth --clone-url https://github.com/me/my-synth.git --json
 # docs/description.md: the guide's template filled in (help description: what it is, 3–6 features, needs, get started;
 # aim for 800 characters). It may name local pictures, ![The grid](grid.png): they go up as the description's (once)
+# The description says in a few lines what it is; how to use it (keys, menus, settings) is a tutorial (the 教程 tab):
+203c tutorial new --json                      # docs/tutorial.json: lessons of short steps, keys, screenshots
+203c tutorial check --json                    # the community's own checks: every error with its line and column
+203c tutorial publish --dry-run --json        # then without --dry-run (its pictures go up once; your file stays as written)
 ```
 
 ### 4. Share a sound pack, a project or a work (official firmware only)

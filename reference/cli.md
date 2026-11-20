@@ -564,6 +564,89 @@ Remove a version's source archive (sign-in with write) Needs `--yes`.
 
     203c source delete K7M2QX V3X9PA --yes --json
 
+## Tutorials
+
+### `203c tutorial new [FILE]`
+
+Start a tutorial file (default docs/tutorial.json): the format with one lesson of two steps to write over, for 203.json's firmware
+
+- `--languages zh|en|zh,en` The languages every text is written in (default zh,en)
+- `--title TEXT` The tutorial's title (2-60 wide)
+- `--firmware CODE` The firmware it is for (default 203.json's code)
+- `--force` Write over the file when it exists
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c tutorial new --json
+    203c tutorial new docs/tutorial.json --languages en --title "Getting started" --firmware K7M2QX --json
+
+### `203c tutorial check [FILE]`
+
+Check a tutorial file as the community will: the format (fields, languages, lengths, markup, key names) and its local pictures; every error with its line and column
+
+- `--firmware CODE` The firmware it is for: "firmware" in the file must be this one
+
+    203c tutorial check --json
+    203c tutorial check docs/tutorial.json
+
+### `203c tutorial publish [FILE]`
+
+Publish your tutorial of a firmware (one each): checks it, uploads its local pictures it lacks (once, by SHA-256), adds it or changes yours; safe to run again (sign-in with write)
+
+- `--firmware CODE` The firmware (default: "firmware" in the file, else 203.json's code)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c tutorial publish --dry-run --json
+    203c tutorial publish docs/tutorial.json --firmware K7M2QX --json
+
+### `203c tutorial link CODE URL`
+
+Add a link to a tutorial elsewhere (a video, a blog; https only, up to 5 of yours a firmware); the same URL again changes its title (sign-in with write)
+
+- `--title TEXT` What it is (2-60 wide, plain text) (required)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c tutorial link K7M2QX https://www.bilibili.com/video/BV1xx411c7mD --title "Video: the first ten minutes" --json
+
+### `203c tutorial list [CODE]`
+
+A firmware's tutorials (the official ones, its owner's, first), with ids and pages; --all: every firmware that has tutorials
+
+- `--all` Every firmware with tutorials, the most downloaded first
+- `--target DEVICE` With --all: firmware for this device
+- `--q WORDS` With --all: search words
+- `--page N` Page, from 1 (24 a page)
+
+    203c tutorial list K7M2QX --json
+    203c tutorial list --all --target cardenza --json
+
+### `203c tutorial show CODE ID`
+
+A tutorial: a guide's lessons and steps (its file as written, for its author), or a link's address; --out saves a guide's file
+
+- `--out PATH` Save the guide's file there (to change it and publish again)
+- `--force` Write over --out when it exists
+
+    203c tutorial show K7M2QX 7ces8nvr --json
+    203c tutorial show K7M2QX 7ces8nvr --out docs/tutorial.json
+
+### `203c tutorial rm CODE ID`
+
+Delete your tutorial (admins: any) (sign-in with write) Needs `--yes`.
+
+- `--yes` Yes, do it (it cannot be undone)
+
+    203c tutorial rm K7M2QX 7ces8nvr --yes --json
+
+### `203c tutorial hide CODE ID`
+
+Hide a tutorial on your firmware (its owner, an admin; its author is told), or --off to show it again (sign-in with write)
+
+- `--off` Show it again
+- `--reason TEXT` Why (its author reads it)
+
+    203c tutorial hide K7M2QX 7ces8nvr --reason "Another firmware's keys" --json
+    203c tutorial hide K7M2QX 7ces8nvr --off --json
+
 ## Simulator
 
 ### `203c sim build [DIR]`
@@ -2018,6 +2101,7 @@ Every API operation with its JSON schema (for programs)
 - `203c help cover` — Covers
 - `203c help description` — Writing the description: short, for people deciding to install (the guide, its template and an example)
 - `203c help pictures` — Pictures: the gallery above the description (3-5 screenshots), and pictures in the description
+- `203c help tutorials` — Tutorials (教程): how to use a firmware, in the one tutorial format
 - `203c help sounds` — Sound packs (official firmware only; the section may not be open yet)
 - `203c help projects` — Projects (official firmware only)
 - `203c help works` — Works (official firmware only)

@@ -61,6 +61,7 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool 
 203c board screen               # what it shows (a PNG); board info, memory, press, coredump, files: 203c help board
 203c publish --dry-run          # checks everything the community will check
 203c publish
+203c tutorial new               # how to use it: a tutorial (lessons, keys, screenshots); tutorial check, tutorial publish
 203c sync                       # later: the page, versions, requests, comments and forks in .203/community.md
 203c project diff FORK          # what a fork (魔改版) changed
 203c help start                 # what to run for what (every command takes --help)
@@ -82,7 +83,7 @@ device's guide first, follow its rules, check with `--dry-run` and never handle 
 |---|---|
 | [`SKILL.md`](SKILL.md) | the Agent Skill: hard rules, what to run, workflows, errors |
 | [`scripts/`](scripts) | `203c` (`scripts/203c.mjs`), zero dependencies |
-| [`reference/`](reference) | `cli.md` (generated from the command table), `api.md` (the community's API), `parity.md` (each page of the site and its command), `firmware-project.md` (the firmware project rules, CardenzaHAL's `docs/FIRMWARE-PROJECT.md`) |
+| [`reference/`](reference) | `cli.md` (generated from the command table), `api.md` (the community's API), `parity.md` (each page of the site and its command), `firmware-project.md` (the firmware project rules, CardenzaHAL's `docs/FIRMWARE-PROJECT.md`), `tutorial-format.md` (the tutorial format) |
 | [`products/`](products) | one development guide per device |
 | [`tests/`](tests) | `npm test`: the CLI against stand-in APIs and a demo Launcher on a pseudo-terminal, the local checks, the documents |
 | [`AGENTS.md`](AGENTS.md) | for changing this repository |

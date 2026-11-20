@@ -6,30 +6,33 @@ from the **203 community**, where anyone can publish one.
 
 Community device id: **`cardenza`** (the default device of `203c publish`). Status: open to everyone.
 
-## The recommended way
+## How to make one
 
-1. **Read the rules**: [`reference/firmware-project.md`](../../reference/firmware-project.md) (`203c rules` prints
+1. **Install 203c (required)**: `npm install -g 203c && 203c skill install` (Node.js 18 or later; macOS, Linux and
+   Windows alike). Every step below uses it, and a firmware on CardenzaHAL does not build without it: the HAL's build
+   stops and says how to install it. Cloning this repository does not install it.
+2. **Read the rules**: [`reference/firmware-project.md`](../../reference/firmware-project.md) (`203c rules` prints
    it). They are CardenzaHAL's
    [`docs/FIRMWARE-PROJECT.md`](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/FIRMWARE-PROJECT.md)
    ([简体中文](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/FIRMWARE-PROJECT.zh-CN.md)): dependencies,
    the project's files and `203.json`, the HAL rules, builds for the board and the browser, what the community
    checks, versions and channels, forks, publishing from CI, what never to commit. Follow them; this page only says
    where to start.
-2. **Build on [CardenzaHAL](https://github.com/203-Systems/CardenzaHAL)**, the Cardenza's hardware layer (an ESP-IDF
+3. **Build on [CardenzaHAL](https://github.com/203-Systems/CardenzaHAL)**, the Cardenza's hardware layer (an ESP-IDF
    component, added as a git submodule at `components/CardenzaHAL`). It gives you the keys and key lights, the
    display, audio out and the microphone, the SD card, the Func (HOME) button, IR and USB (MIDI, audio, HID), and the
    native ESP-IDF handles behind them. Reach the hardware only through it: that is what makes the same source build
    for the browser simulator, and what the community's checks expect. Missing something? Open an issue or a pull
    request on CardenzaHAL rather than writing a driver into your firmware.
-3. **Start a project**: `203c new "My firmware" --summary "…"` makes it from
+4. **Start a project**: `203c new "My firmware" --summary "…"` makes it from
    [`examples/template`](https://github.com/203-Systems/CardenzaHAL/tree/main/examples/template) (the HAL as a submodule,
    the board's defaults, a partition table that keeps the Launcher, `version.txt`, `CHANGELOG.md`, `203.json` and the
    release workflow), named; it builds as it is. A project you have already: `203c init` writes its `203.json`.
    **Or change a firmware that exists**: `203c fork CODE my-firmware` clones its source and records where it comes
    from. The official groovebox, [CardenzaSynth](https://github.com/203-Systems/CardenzaSynth) (Cardenza Synth,
    code `V6QK28`), is the largest example of a firmware on the HAL.
-4. **Build** with the HAL's tool, for the board and for the browser, and try it on a Cardenza (below).
-5. **Publish** with `203c` (below); after the first version, let CI publish every push and tag (`203c link`), and read
+5. **Build** with the HAL's tool, for the board and for the browser, and try it on a Cardenza (below).
+6. **Publish** with `203c` (below); after the first version, let CI publish every push and tag (`203c link`), and read
    what users ask for with `203c sync` (`.203/community.md`: requests, comments, forks) before each change.
 
 ## Toolchain

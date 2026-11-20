@@ -4,8 +4,12 @@
 
 [203 community](https://cardenza.203.io/community) · [Developer guide](https://cardenza.203.io/community/develop) · [Cardenza](products/cardenza/README.md) · [NullPerator](products/nullperator/README.md) · [Mystrix](products/mystrix/README.md)
 
-Everything a developer, or a coding agent, needs to make firmware for 203 Systems devices the recommended way and
-share it on the 203 community:
+**Making firmware? Install it first: it is required.** `npm install -g 203c && 203c skill install` (Node.js 18 or
+later; macOS, Linux and Windows alike). Cloning this repository does not install it, and a Cardenza firmware does not
+build without it.
+
+Everything a developer, or a coding agent, needs to make firmware for 203 Systems devices and share it on the 203
+community:
 
 - **`203c`**, the community's command line: sign in, start or fork a firmware project, publish versions from a
   laptop or from CI (trusted publishing, no stored secret), set the page and the cover, install a firmware over a

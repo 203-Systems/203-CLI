@@ -4,6 +4,8 @@
 
 [203 社区](https://cardenza.203.io/community) · [开发指引](https://cardenza.203.io/community/develop) · [鸣片](products/cardenza/README.md) · [零序](products/nullperator/README.md) · [魔矩](products/mystrix/README.md)
 
+**要做固件？先装它，它是必须的。** `npm install -g 203c && 203c skill install`（Node.js 18 或更新；macOS、Linux、Windows 都一样）。只克隆这个仓库不算安装；没装它，鸣片固件编译不了。
+
 给 203 Systems 的设备做固件、并分享到 203 社区，开发者（或者 AI 编程助手）需要的东西都在这里：
 
 - **`203c`**：社区的命令行。登录、新建或魔改（fork）固件项目、在电脑上或 CI 里发布版本（可信发布，不存任何密钥）、设置固件页和封面、用 USB 线刷固件、回复需求、分享音色包、作品和 3D 模型。加 `--json` 时每个回答都是 JSON，每个错误都写明下一步该运行什么：这就是给 AI 用的工具。

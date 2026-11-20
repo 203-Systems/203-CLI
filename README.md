@@ -35,6 +35,9 @@ npm install -g 203c    # the 203c command
 203c skill install     # its Agent Skill, for Claude Code and Codex (run it again after every update)
 ```
 
+203c says when a newer one is out (and when a firmware project's CardenzaHAL is behind its `main`): a line on stderr
+after the commands of the work, at most one check a day; `203c updates` asks now, `NO_UPDATE_NOTIFIER=1` turns it off.
+
 `203c` has no dependencies and no install scripts. `skill install` copies the skill into `~/.claude/skills/203-community`
 (`CLAUDE_SKILLS_DIR` to choose; `~/.codex/skills` too when Codex is there; `--dir` for another agent's folder). The USB
 cable (`flash`, `log`) is used on macOS and Linux; on Windows the website does it in Chrome or Edge, and every other

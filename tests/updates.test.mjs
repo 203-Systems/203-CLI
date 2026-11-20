@@ -259,6 +259,7 @@ before(async () => {
   server = http.createServer((req, res) => {
     requests.push(req.url);
     if (hang) return;   // never answers
+    if (req.url === "/api/") { res.writeHead(200, {"content-type": "application/json"}); return res.end(JSON.stringify({version: 2, limits: {}})); }
     if (req.url === "/npm/203c/latest") { res.writeHead(200, {"content-type": "application/json"}); return res.end(JSON.stringify({name: "203c", version: latest})); }
     if (/^\/gh\/repos\/203-Systems\/CardenzaHAL\/compare\//.test(req.url)) { res.writeHead(200, {"content-type": "application/json"}); return res.end(JSON.stringify({status: "ahead", ahead_by: 7})); }
     res.writeHead(404); res.end("{}");
@@ -276,7 +277,7 @@ test("203c: a command of the work ends with the notices on stderr; stdout and th
   const r = await cli(["rules"], {cwd: p.fw});
   assert.equal(r.code, 0, r.stderr);
   assert.match(r.stdout, /CardenzaHAL/);
-  assert.doesNotMatch(r.stdout, /is out|behind its main/);
+  assert.doesNotMatch(r.stdout, /99\.0\.0 is out|7 commits behind/, "the notices are not in stdout");
   assert.ok(r.stderr.includes(NOTICE + "\n"), r.stderr);
   assert.match(r.stderr, /203c: CardenzaHAL in this project \(components\/CardenzaHAL\) is 7 commits behind its main: git submodule update --remote components\/CardenzaHAL/);
   // --json: stdout is the answer alone.
@@ -357,4 +358,34 @@ test("203c updates: both answers (--json), --quiet: only the notices or nothing,
   const away = await cli(["updates", "--quiet"], {env: {C203_NPM_REGISTRY: "http://127.0.0.1:9"}});
   assert.equal(away.code, 0);
   assert.equal(away.stdout, "");
+});
+
+test("doctor: asks now, in CI too, and lists both (cli, hal, the warnings with their commands); not with the user's own switch", async () => {
+  const p = project("fw-doctor");
+  const doctor = env => cli(["--api", base + "/api", "doctor", "--json"], {cwd: p.fw, env});
+  const before = requests.length;
+  const d = await doctor({CI: "true"});
+  assert.ok(d.json, d.stdout + d.stderr);
+  assert.ok(requests.length > before, "asked in CI: doctor is asked for");
+  assert.equal(d.json.updates.cli.latest, "99.0.0");
+  assert.equal(d.json.updates.hal.behind, 7);
+  const byName = Object.fromEntries(d.json.checks.map(c => [c.name, c]));
+  assert.equal(byName.cli.ok, false);
+  assert.match(byName.cli.detail, /99\.0\.0 is out/);
+  assert.equal(byName.hal.ok, false);
+  assert.match(byName.hal.detail, /^components\/CardenzaHAL [0-9a-f]{7}: 7 commits behind its main$/);
+  const warned = Object.fromEntries(d.json.warnings.map(w => [w.code, w]));
+  assert.deepEqual(warned.cli_outdated.next, ["npm install -g 203c", "203c skill install"]);
+  assert.deepEqual(warned.hal_behind.next, ["git submodule update --remote components/CardenzaHAL", "git add components/CardenzaHAL"]);
+  assert.doesNotMatch(d.stderr, /is out/, "not said a second time");
+  // Text: the lines and the commands.
+  const t = await cli(["--api", base + "/api", "doctor"], {cwd: p.fw});
+  assert.match(t.stdout, /^- cli +203c \S+ \(99\.0\.0 is out\)$/m);
+  assert.match(t.stdout, /^! CardenzaHAL in this project \(components\/CardenzaHAL\) is 7 commits behind its main\n {4}Update it, build and test, then commit the new pointer\n {4}→ git submodule update --remote components\/CardenzaHAL$/m);
+  // The user's own switch: not asked, said so.
+  const quiet = requests.length;
+  const off = await doctor({C203_NO_UPDATE_CHECK: "1"});
+  assert.deepEqual(off.json.updates, {off: "C203_NO_UPDATE_CHECK"});
+  assert.equal(off.json.checks.find(c => c.name === "updates").detail, "not checked: C203_NO_UPDATE_CHECK is set");
+  assert.equal(requests.filter(u => !u.startsWith("/api")).length, requests.slice(0, quiet).filter(u => !u.startsWith("/api")).length, "npm and GitHub not asked");
 });

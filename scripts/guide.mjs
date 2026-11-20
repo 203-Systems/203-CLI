@@ -149,6 +149,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   You want to …                                   Run
   make a new firmware for a Cardenza (start here)  {P} new "My firmware" --summary "…" --json   ({P} help new: build, try, publish)
   check that everything works (sign-in, API, quota) {P} doctor --json
+  is 203c, or this project's CardenzaHAL, outdated? {P} updates --json   (the commands of the work say so on stderr)
   sign in (needed for everything else)             {P} login --json   (opens the browser; remote: help signin)
   see your firmware and their codes                {P} firmware mine --json
   publish a firmware version (new or existing)     {P} publish --bin build/app.bin --name "My synth" --summary "…" --dry-run --json

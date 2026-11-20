@@ -27,6 +27,9 @@ npm install -g 203c    # 203c 命令
 203c skill install     # 它的 Agent Skill，给 Claude Code 和 Codex（每次更新后再运行一次）
 ```
 
+有新版 203c（或者固件项目里的 CardenzaHAL 落后于它的 `main`）时，203c 会在做事的命令结束后往 stderr 打一行提示，
+每天最多查一次；`203c updates` 立刻查，`NO_UPDATE_NOTIFIER=1` 关掉。
+
 `203c` 没有任何依赖，也没有安装脚本。`skill install` 把 Skill 复制到 `~/.claude/skills/203-community`（`CLAUDE_SKILLS_DIR` 可改；装了 Codex 时也放进 `~/.codex/skills`；`--dir` 指定别的 AI 的目录）。USB 线（`flash`、`log`）在 macOS 和 Linux 上用；Windows 上用网站（Chrome 或 Edge），其他命令哪里都一样（`board`：通过 USB 查看正在运行的固件，Windows 上也能用，先 `pip install hidapi`）。
 
 也可以从克隆安装（先看代码，或者试改 `203c`）：`git clone https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203c skill install`，或者直接 `node 203-CLI/scripts/203c.mjs` 运行。

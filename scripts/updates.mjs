@@ -50,10 +50,17 @@ export function compareVersions(a, b) {
 
 const set = value => value !== undefined && value !== "" && !/^(0|false|no|off)$/i.test(String(value));
 
-/** Why nothing is asked by itself here ("CI", …), or null: CI, GITHUB_ACTIONS, NO_UPDATE_NOTIFIER, C203_NO_UPDATE_CHECK. */
-export function automaticOff(env = process.env) {
+/** The user's own switch, or null: C203_NO_UPDATE_CHECK=1, NO_UPDATE_NOTIFIER (doctor honours these, not CI). */
+export function optedOut(env = process.env) {
   if (set(env.C203_NO_UPDATE_CHECK)) return "C203_NO_UPDATE_CHECK";
   if (set(env.NO_UPDATE_NOTIFIER)) return "NO_UPDATE_NOTIFIER";
+  return null;
+}
+
+/** Why nothing is asked by itself here ("CI", …), or null: the opt-outs, GITHUB_ACTIONS, CI. */
+export function automaticOff(env = process.env) {
+  const own = optedOut(env);
+  if (own) return own;
   if (set(env.GITHUB_ACTIONS)) return "GITHUB_ACTIONS";
   if (set(env.CI)) return "CI";
   return null;
@@ -146,8 +153,9 @@ function localCheck(hal, {timeout, env}) {
     child.on("close", code => {
       if (code === 0 || code === null || !err.trim()) return resolve(null);
       // Its explanation and what to run (its first three lines; the files it lists after them are left out).
-      const text = err.trim().split(/\r?\n/).slice(0, 3).map(l => l.trim()).join(" ").replace(/^check_submodule:\s*/, "").replace(/\s+/g, " ");
-      resolve({text, not_on_main: /not on upstream main/.test(text)});
+      const lines = err.trim().split(/\r?\n/).slice(0, 3).map(l => l.trim());
+      const text = lines.join(" ").replace(/^check_submodule:\s*/, "").replace(/\s+/g, " ");
+      resolve({text, not_on_main: /not on upstream main/.test(text), fix: lines.find(l => /^git -C /.test(l)) ?? null});
     });
   });
 }
@@ -219,10 +227,15 @@ export async function checkUpdates({from = process.cwd(), fresh = false, env = p
   const [c, h, l] = await Promise.all([cliCheck, halCheck, local]);
   if (changed) writeState(file, state, now);
 
-  const notices = [];
+  // Each notice: {code, notice (the line shown), message and hint (doctor's words), next (the commands)}.
+  const items = [];
+  const say = (code, notice, {message = notice, hint = null, next = []} = {}) => items.push({code, notice, message, ...(hint ? {hint} : {}), next});
   const outdated = !!c.latest && compareVersions(current, c.latest) === -1;
   const cli = {current, latest: c.latest, outdated, checked: c.checked};
-  if (outdated) notices.push(`203c ${c.latest} is out (you have ${current}): ${UPDATE_CLI}`);
+  if (outdated) {
+    say("cli_outdated", `203c ${c.latest} is out (you have ${current}): ${UPDATE_CLI}`, {message: `203c ${c.latest} is out (you have ${current})`,
+      hint: "Update the command, then its Agent Skill", next: ["npm install -g 203c", "203c skill install"]});
+  }
   let halOut = null;
   if (hal) {
     // The path to type: from here when here is in the repository, else (a build's folder too: cwd null) from its top,
@@ -238,17 +251,18 @@ export async function checkUpdates({from = process.cwd(), fresh = false, env = p
     halOut = {path: shown, dir: hal.dir, commit: hal.commit, repo: hal.repo, status: h?.status ?? null, behind: h?.behind ?? null,
       checked: h?.checked ?? (hal.repo ? "failed" : "skipped"), local: localText};
     if (h?.status === "ahead" && h.behind > 0) {
-      notices.push(`CardenzaHAL in this project (${q}) is ${h.behind} commit${h.behind === 1 ? "" : "s"} behind its main: ` +
-        `${gitC} submodule update --remote ${q}, build and test, then commit the new pointer (${gitC} add ${q})`);
+      const behind = `CardenzaHAL in this project (${q}) is ${h.behind} commit${h.behind === 1 ? "" : "s"} behind its main`;
+      say("hal_behind", `${behind}: ${gitC} submodule update --remote ${q}, build and test, then commit the new pointer (${gitC} add ${q})`,
+        {message: behind, hint: "Update it, build and test, then commit the new pointer", next: [`${gitC} submodule update --remote ${q}`, `${gitC} add ${q}`]});
     }
-    if (localText) notices.push(`CardenzaHAL in this project (${q}) is not a clean copy of upstream main: ${localText}`);
+    if (localText) say("hal_not_clean", `CardenzaHAL in this project (${q}) is not a clean copy of upstream main: ${localText}`, {next: l.fix ? [l.fix] : []});
     else if (["behind", "diverged"].includes(h?.status) && !l?.not_on_main) {
       // GitHub says so where check_submodule.py did not run (no Python) or did not see it.
-      notices.push(`CardenzaHAL in this project (${q}) is on ${hal.commit.slice(0, 7)}, a commit its main does not have: ` +
+      say("hal_off_main", `CardenzaHAL in this project (${q}) is on ${hal.commit.slice(0, 7)}, a commit its main does not have: ` +
         "change the HAL in its own clone, push it to its main, then point the submodule at main");
     }
   }
-  return {cli, hal: halOut, notices};
+  return {cli, hal: halOut, notices: items.map(i => i.notice), items};
 }
 
 /**

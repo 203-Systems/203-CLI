@@ -13,8 +13,9 @@ import {doctor} from "../scripts/publish.mjs";
 import {run} from "./fixtures.mjs";
 
 const API = "https://cardenza.203.io/community/api";
-const NO_SANDBOX = {};
-const CLAUDE = {CLAUDE_CODE_REMOTE: "true"};
+// (Update checks off: doctor would ask npm and GitHub with the test process's own home.)
+const NO_SANDBOX = {C203_NO_UPDATE_CHECK: "1"};
+const CLAUDE = {CLAUDE_CODE_REMOTE: "true", C203_NO_UPDATE_CHECK: "1"};
 
 // What Claude Code's cloud proxy answers for a host its allowlist lacks.
 const denied = () => new Response("Host not in allowlist", {status: 403, headers: {"x-deny-reason": "host_not_allowed", "content-type": "text/plain"}});

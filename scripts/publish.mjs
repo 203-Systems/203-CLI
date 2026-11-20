@@ -16,6 +16,7 @@ import {PROJECT_FILE, LEGACY_FILE, NAME_RULE, nameOk, checkProject, cloneUrlOf, 
 import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
 import {CliError, EXIT, maybeSandbox} from "./guide.mjs";
 import {skillState} from "./skill.mjs";
+import {checkUpdates, optedOut} from "./updates.mjs";
 import {EMSDK_HINT, describeSim, explainBuild, findHal, findProject, halScript, readSimDir, runBuild, sameBuild, simLine, simState, toolchain,
   uploadSim, waitSim, playUrl} from "./sim.mjs";
 import {
@@ -177,7 +178,13 @@ export async function doctor(ctx) {
   const check = (name, ok, detail, extra = {}) => checks.push({name, ok, detail, ...extra});
   const node = Number(process.versions.node.split(".")[0]);
   check("node", node >= 18, `Node ${process.versions.node}${node >= 18 ? "" : " (203c needs Node 18 or newer)"}`);
-  check("cli", true, `203c ${CLI_VERSION}`);
+  const cli = {name: "cli", ok: true, detail: `203c ${CLI_VERSION}`};
+  checks.push(cli);
+  // A newer 203c, this project's CardenzaHAL behind its main (updates.mjs): asked now, whatever the day's answer (only the
+  // user's own switch stops it, not CI), through the client (its sandbox's network), waited for at the end.
+  const updatesOff = optedOut(ctx.client.env ?? process.env);
+  const updating = updatesOff ? null : checkUpdates({from: ctx.cwd ?? process.cwd(), cwd: ctx.cwd ?? process.cwd(), fresh: true,
+    env: ctx.client.env ?? process.env, fetch: ctx.client.fetch}).catch(() => null);
   // The Agent Skill beside it (npm installs the command only: 203c skill install puts the skill where agents read it).
   const skill = skillState();
   check("skill", skill.ok, skill.detail, {optional: true});
@@ -249,9 +256,26 @@ export async function doctor(ctx) {
   const tools = toolchain();
   for (const [name, tool] of Object.entries(tools)) check(name, tool.ok, `${tool.detail} (for simulator versions)`, {optional: true});
   if (!tools.emscripten.ok) r.warn("sim_toolchain", "Emscripten is not installed: publish cannot build simulator versions (Play) of CardenzaHAL firmware here", {hint: EMSDK_HINT});
+  const updates = updating ? await updating : null;
+  if (updatesOff) check("updates", true, `not checked: ${updatesOff} is set`, {optional: true});
+  else if (updates) {
+    if (updates.cli.outdated) Object.assign(cli, {ok: false, optional: true, detail: `203c ${CLI_VERSION} (${updates.cli.latest} is out)`});
+    else if (!updates.cli.latest) cli.detail += " (npm did not answer: not checked for a newer one)";
+    const hal = updates.hal;
+    if (hal) {
+      const at = `${hal.path} ${hal.commit.slice(0, 7)}`;
+      const codes = updates.items.map(i => i.code);
+      const detail = codes.includes("hal_behind") ? `${at}: ${hal.behind} commit${hal.behind === 1 ? "" : "s"} behind its main`
+        : codes.includes("hal_not_clean") ? `${at}: not a clean copy of upstream main` : codes.includes("hal_off_main") ? `${at}: on a commit its main does not have`
+        : ["identical", "ahead"].includes(hal.status) ? `${at}: at its main` : `${at}: not compared with its main (${hal.repo ? "GitHub did not answer" : "not on GitHub"})`;
+      check("hal", !codes.some(c => c.startsWith("hal_")), detail, {optional: true});
+    }
+    for (const item of updates.items) r.warn(item.code, item.message, {hint: item.hint ?? undefined, next: item.next});
+  }
   if (ctx.pendingLogin) r.warn("login_pending", "A sign-in waits for the user's approval", {hint: `Approve ${ctx.pendingLogin.user_code} at ${ctx.pendingLogin.verify_url}`, next: [ctx.run(["login", "--wait"])]});
   const signedIn = !!account;
   const json = {ok: !r.problems.length, signed_in: signedIn, cli: CLI_VERSION, node: process.versions.node, api: ctx.api, api_version: info?.version ?? null, sandbox,
+    updates: updatesOff ? {off: updatesOff} : updates ? {cli: updates.cli, hal: updates.hal, notices: updates.notices} : null,
     lang: ctx.client.lang, token: {source: ctx.tokenSource, ...(masked ? {masked} : {})},
     me: account ? {id: account.id, name: account.name, role: account.role, scopes: account.scopes, credential: account.credential ?? null} : null,
     quotas, problems: r.problems.map(clean), warnings: r.warnings.map(clean), checks,

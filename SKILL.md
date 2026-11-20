@@ -40,7 +40,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 1. **Always add `--json`.** The answer is JSON on stdout; an error is one JSON line on stderr (its last line; `login`
    may print one `{"status":"waiting",…}` line before it while it waits). `--help --json` describes any command as JSON.
 2. **Run `doctor` first** (`203c doctor --json`): it says whether you are signed in and what to do if not.
-   Every command but `login`, `logout`, `help`, `doctor`, `rules` and `ops` needs the sign-in (exit 4 without it), except what
+   Every command but `login`, `logout`, `help`, `doctor`, `rules`, `updates` and `ops` needs the sign-in (exit 4 without it), except what
    goes over a USB cable: `flash`, `log`, `board` and `devices recover` work signed out (signing in is for Wi-Fi: sending to a bound device), and `new`.
    On a person's own terminal a command that needs the sign-in starts it by itself (the browser, once on a computer).
 3. **Before anything that publishes or uploads, run it with `--dry-run` first.** It checks the files and values the way the server will and prints the plan. Go on only when it says `"ready": true`.
@@ -58,6 +58,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 |---|---|
 | make a new firmware for a Cardenza (from nothing) | `new "NAME" --summary "…" --json`, then workflow 0 |
 | check that everything works | `doctor --json` |
+| is 203c, or this project's CardenzaHAL, out of date? | `updates --json` (below: "Update notices") |
 | sign in | `login --json` (opens the browser; the user approves on the site; it waits up to 5 minutes) — no browser: the user runs `login --with-token` (a personal token from the site) — remote: `login --no-browser --json` → give the user `verify_url` and `user_code` → `login --wait --json` |
 | see your firmware and their codes | `firmware mine --json` |
 | install a firmware on a device over a USB cable (线刷; no sign-in, no bound device; macOS / Linux) | `flash CODE --dry-run --json`, then `flash CODE --json` (the device on and on a cable, in its Launcher or running a firmware: 203c restarts a running firmware into its Launcher first; `--bin build/app.bin` for a local build, `--port PORT` when there are several) |
@@ -319,8 +320,28 @@ With `--json` an error is one JSON line on stderr (the last line):
 All codes: `help errors` (trusted publishing: `oidc_untrusted`, `oidc_channel`, `oidc_invalid`, `oidc_unavailable`,
 `publish_only`). Environment: `COMMUNITY_TOKEN` (a token; not needed in GitHub Actions), `COMMUNITY_API` (default
 `https://cardenza.203.io/community/api`, the live copy until community.203.io exists), `COMMUNITY_LANG` (`zh` or `en`: the language of what the server writes; `--lang`
-on any command). What people wrote comes as they wrote it. Answer the user in their language (with a
+on any command), `NO_UPDATE_NOTIFIER` / `C203_NO_UPDATE_CHECK` (no update notices), `C203_NPM_REGISTRY` (an npm
+mirror for the notices). What people wrote comes as they wrote it. Answer the user in their language (with a
 Chinese-speaking user pass `--lang zh`).
+
+## Update notices
+
+The commands of the work (`sim`, `flash`, `log`, `board`, `new`, `fork`, `clone`, `init`, `link`, `publish`, `rules`,
+`source`, `sync`) end with a line on stderr when something is out of date, and the firmware's build prints the same
+as a CMake warning (CardenzaHAL's `cmake/require_203c.cmake`); `doctor` lists them, `updates --json` asks now:
+
+- `203c: 203c X is out (you have Y): npm install -g 203c && 203c skill install`: run both, then go on (the
+  skill is a copy of the command: update it with it). `doctor` says it as `cli_outdated`.
+- `203c: CardenzaHAL in this project (components/CardenzaHAL) is N commits behind its main: git submodule update
+  --remote components/CardenzaHAL, …`: update it as a change of its own: the command, build and test (on the device if
+  one is attached), then commit the new pointer alone (`git add components/CardenzaHAL`). Mid-task, finish the task
+  first, or tell the user. `hal_behind`.
+- `… is not a clean copy of upstream main: …` (the HAL's `check_submodule.py`): restore it as the line says; a HAL
+  change goes upstream (`203c rules`: Using the HAL). `hal_not_clean`, `hal_off_main`.
+
+Never in the way: npm and GitHub are asked at most once a day (`~/.config/203c/updates.json`), for at most 1.5 s,
+silently when they do not answer; nothing goes to stdout or into an exit code. Off in CI (`CI`, `GITHUB_ACTIONS`) and
+with `NO_UPDATE_NOTIFIER=1` or `C203_NO_UPDATE_CHECK=1` (doctor too). `updates --quiet` prints only the notices.
 
 ## Running in a sandboxed agent (Claude Code on the web, Codex cloud…)
 

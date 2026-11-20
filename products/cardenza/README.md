@@ -86,6 +86,17 @@ On a board: install your build through the Launcher, the way users get it, and r
 203c log --until "ready" --seconds 30 --json  # a test: exit 0 at the line, 1 at a panic or when it never comes
 ```
 
+### Update notices
+
+`203c` and the build say when an update is out, once a day at most: a newer `203c` ("203c X is out (you have Y):
+npm install -g 203c && 203c skill install") and this project's CardenzaHAL behind its `main` ("CardenzaHAL in this
+project (components/CardenzaHAL) is N commits behind its main: git submodule update --remote components/CardenzaHAL,
+build and test, then commit the new pointer"), or not a clean copy of it. `203c` prints them on stderr after `sim`,
+`flash`, `log`, `board`, `new`, `fork`, `publish`, `rules` and the other commands of the work; `idf.py build`,
+`cardenza.py build` and the web build print them as a CMake warning; `203c doctor` and `cardenza.py doctor` list them;
+`203c updates` asks now. They never change an answer or an exit code, and stay silent offline. Off in CI and with
+`NO_UPDATE_NOTIFIER=1` (or `C203_NO_UPDATE_CHECK=1`).
+
 ### Look inside a running firmware: `203c board`
 
 A firmware on CardenzaHAL answers a computer's questions about itself over USB, without a line of its own and at no

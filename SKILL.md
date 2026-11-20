@@ -1,6 +1,6 @@
 ---
 name: 203-community
-description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203c, and make firmware for 203 devices the recommended way (a guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203c rules, 203.json). Use it to start a Cardenza firmware from CardenzaHAL's template (new), try it on the user's device over USB (flash through the Launcher, log), publish versions from a laptop or CI (trusted publishing) with simulator versions and source archives, create or fork firmware and clone their source, bind a project to its firmware or move it (link), set the cover and page, read what the community has about the project's firmware for planning (sync: page, versions, requests, comments, forks; project diff) and keep the tracker, see why the checks sent a version back and appeal it, share sound packs, projects, works and 3D models, send firmware over Wi-Fi, search and comment, and, for admins, moderate.
+description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203c, and make firmware for 203 devices the recommended way (a guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203c rules, 203.json). Use it to start a Cardenza firmware from CardenzaHAL's template (new), try it on the user's device over USB (flash through the Launcher, log, board), publish versions from a laptop or CI (trusted publishing) with simulator versions and source archives, create or fork firmware and clone their source, bind a project to its firmware or move it (link), set the cover and page, read what the community has about the project's firmware for planning (sync: page, versions, requests, comments, forks; project diff) and keep the tracker, see why the checks sent a version back and appeal it, share sound packs, projects, works and 3D models, send firmware over Wi-Fi, search and comment, and, for admins, moderate.
 ---
 
 # 203 community
@@ -41,7 +41,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
    may print one `{"status":"waiting",…}` line before it while it waits). `--help --json` describes any command as JSON.
 2. **Run `doctor` first** (`203c doctor --json`): it says whether you are signed in and what to do if not.
    Every command but `login`, `logout`, `help`, `doctor`, `rules` and `ops` needs the sign-in (exit 4 without it), except what
-   goes over a USB cable: `flash`, `log` and `devices recover` work signed out (signing in is for Wi-Fi: sending to a bound device), and `new`.
+   goes over a USB cable: `flash`, `log`, `board` and `devices recover` work signed out (signing in is for Wi-Fi: sending to a bound device), and `new`.
    On a person's own terminal a command that needs the sign-in starts it by itself (the browser, once on a computer).
 3. **Before anything that publishes or uploads, run it with `--dry-run` first.** It checks the files and values the way the server will and prints the plan. Go on only when it says `"ready": true`.
 4. **Never guess a code.** Codes are 6 characters (e.g. `K7M2QX`). Get them from `firmware mine --json`, `firmware list --official --json` or `search WORDS --json`.
@@ -62,6 +62,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | see your firmware and their codes | `firmware mine --json` |
 | install a firmware on a device over a USB cable (线刷; no sign-in, no bound device; macOS / Linux) | `flash CODE --dry-run --json`, then `flash CODE --json` (the device on and on a cable, in its Launcher or running a firmware: 203c restarts a running firmware into its Launcher first; `--bin build/app.bin` for a local build, `--port PORT` when there are several) |
 | read a device's log over the USB cable (no sign-in; macOS / Linux) | `log --json` (20 s; a running firmware's console, else the serial port); a test: `log --until "ready" --seconds 30 --json` (exit 0 at the line; 1 `device_crashed` at a panic, `log_timeout`) |
+| look inside the firmware running on the user's Cardenza (no sign-in): what it is, memory and tasks, its screen, keys, last crash, SD card | `board info --json`, `board memory --json`, `board screen --out shot.png --json` (then look at the PNG), `board press down ok --json` (cap names; arrows are `; . , /`), `board coredump --elf build/<project>.elf --json`, `board files ls --json` (`help board`). It needs a firmware built with a current CardenzaHAL that calls `CardenzaHAL::USB::Init()`: `hal_too_old` and `board_no_usb` say what to change |
 | everything the community has about this project's firmware, for planning (203.json here) | `sync --json`, then read `.203/community.md` (the page, versions and notes, requests and comments with replies, merges, forks; new ones marked) |
 | what users asked for and said since the last look | `inbox --json`, or `project feedback --new --json`; a request in full: `dev read CODE N --json` |
 | the page, the versions, the forks (魔改版) | `project show --json`, `project versions --json`, `project forks --json` |
@@ -117,6 +118,7 @@ python3 components/CardenzaHAL/tools/cardenza.py doctor # what this computer lac
 python3 components/CardenzaHAL/tools/cardenza.py build  # the preferred build: checks, then idf.py build; --web: the browser version too
 203c flash --bin build/pocket_metronome.bin --json      # onto the user's Cardenza over USB, through its Launcher (never idf.py flash)
 203c log --until "ready" --seconds 30 --json            # did it start? (its log; device_crashed: decode the backtrace with the ELF)
+203c board screen --out shot.png --json                 # what it shows (look at the PNG); board press …, board memory: help board
 203c login --json                                       # once on a computer (the user approves in the browser)
 203c publish --dry-run --json   then   203c publish --json   # ask the user first; commit 203.json (its code)
 203c link --json                                        # this GitHub repository publishes from CI (trusted publishing)

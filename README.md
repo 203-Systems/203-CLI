@@ -38,7 +38,7 @@ npm install -g 203c    # the 203c command
 `203c` has no dependencies and no install scripts. `skill install` copies the skill into `~/.claude/skills/203-community`
 (`CLAUDE_SKILLS_DIR` to choose; `~/.codex/skills` too when Codex is there; `--dir` for another agent's folder). The USB
 cable (`flash`, `log`) is used on macOS and Linux; on Windows the website does it in Chrome or Edge, and every other
-command works as anywhere.
+command works as anywhere (`board`, a running firmware over USB: also on Windows, with `pip install hidapi`).
 
 From a clone instead (to read the code first, or to try a change to `203c`): `git clone
 https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203c skill install`, or run it in place
@@ -55,6 +55,7 @@ with `node 203-CLI/scripts/203c.mjs`.
 python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool (Cardenza)
 203c flash --bin build/my_synth.bin   # onto your Cardenza over USB, through its Launcher
 203c log                        # what it prints
+203c board screen               # what it shows (a PNG); board info, memory, press, coredump, files: 203c help board
 203c publish --dry-run          # checks everything the community will check
 203c publish
 203c sync                       # later: the page, versions, requests, comments and forks in .203/community.md

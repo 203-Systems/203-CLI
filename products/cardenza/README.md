@@ -65,6 +65,29 @@ On a board: install your build through the Launcher, the way users get it, and r
 203c log --until "ready" --seconds 30 --json  # a test: exit 0 at the line, 1 at a panic or when it never comes
 ```
 
+### Look inside a running firmware: `203c board`
+
+A firmware on CardenzaHAL answers a computer's questions about itself over USB, without a line of its own and at no
+cost until asked: the HAL's development channel
+([`docs/usb-dev.md`](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/usb-dev.md)). `203c board` is the
+computer's side, signed out like `flash` and `log` (macOS and Linux; Windows with `pip install hidapi`):
+
+```sh
+203c board info --json                 # name, version, code, build, ELF SHA-256, HAL commit, Launcher, chip, reset reason
+203c board memory                      # heaps (internal, PSRAM, DMA) and tasks: stack left, CPU
+203c board partitions                  # the flash table, app images, NVS use, the running slot
+203c board screen --out shot.png       # the next frame as a PNG: check what you drew
+203c board press down down ok          # keys as by a finger (cap names, up/down/left/right, fn+s, home)
+203c board coredump --out crash.elf --elf build/<project>.elf   # the last crash, its backtrace decoded
+203c board files ls CardenzaSynth      # the SD card: ls, get, put, rm, mkdir, mv
+```
+
+Two things it needs: the firmware is **built with a current CardenzaHAL** (an older one says `hal_too_old`: update the
+submodule, build, flash), and it **starts the HAL's USB device**: `CardenzaHAL::USB::Init();` after
+`CardenzaHAL::Init()` in `app_main` (`usb/usb.h`). The template does not call it, so such a firmware is only a serial
+port (USB-Serial-JTAG) and `203c board` says `board_no_usb`; `203c log` still reads its console there. With the
+device in its 203 Launcher there is no firmware to ask (`board_in_launcher`). `203c help board` has every command.
+
 `idf.py flash` writes the whole flash and **erases the 203 Launcher** with every firmware it installed. While
 developing, the HAL's [`tools/cardenza_flash.py`](https://github.com/203-Systems/CardenzaHAL/blob/main/tools/cardenza_flash.py)
 refuses to do that and writes only the app into one of the Launcher's slots (`--app-into <label>`). A firmware that
@@ -113,6 +136,25 @@ What each part does and where it is in the HAL (header, functions, README sectio
 | IR | transmitter on GPIO44 (NEC, 38 kHz) |
 | USB | the chip's USB PHY: USB-Serial-JTAG, or the HAL's composite device (MIDI 1.0, Audio 2.0 both ways, HID), VID 0x0203 |
 | Pins | [`board/pins.h`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/pins.h) is the source; the HAL README's "Hardware resource ownership" lists which peripheral the HAL owns |
+
+### Keys and their legends
+
+Each cap has its key's character in black, its shifted character in yellow, and on four keys a yellow triangle: the
+arrows. Key numbers are the HAL's (`y * 14 + x + 1`, row 0 at the top; `203c board press` takes the cap names).
+
+| Keys | Caps, left to right (character, shifted character, arrow) |
+|---|---|
+| 1-14 | esc · 1 ! · 2 @ · 3 # · 4 $ · 5 % · 6 ^ · 7 & · 8 * · 9 ( · 0 ) · - _ · = + · del (←) |
+| 15-28 | tab · Q W E R T Y U I O P · [ { · ] } · \ \| |
+| 29-42 | fn · shift (⇧) · A S D F G H J K L · ; : ▲ · ' " · ok (enter) |
+| 43-56 | ctrl · opt · alt · Z X C V B N M · , < ◀ · . > ▼ · / ? ▶ · space (␣) |
+| HOME | the side key left of the screen (GPIO0): opens the HAL's system menu in any firmware |
+
+The arrows are `;` `.` `,` `/` (up, down, left, right, keys 40, 54, 53, 55). In text input they type their
+characters, so there the arrows are fn + those keys; lists, menus and games may take them alone, as the 203 Launcher
+does. ok confirms, esc goes back. Never invent other arrow keys (no HJKL, IJKL or WASD). CardenzaHAL adds this table as
+`keyboard/legends.h` (`kKeyUp`, `kKeyDown`, `kKeyLeft`, `kKeyRight`, `kKeyOk`, `kKeyEsc` …): use those names where your
+HAL has it, the numbers above with an older one.
 
 Files:
 

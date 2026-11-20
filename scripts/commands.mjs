@@ -7,6 +7,8 @@ import {CHANNELS, ENGINES, LICENSES} from "./checks.mjs";
 import {recoverDevice} from "./recover.mjs";
 import {flashDevice} from "./flash.mjs";
 import {deviceLog} from "./devlog.mjs";
+import {boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardPress, boardKeys, boardCoredump,
+  filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv} from "./board.mjs";
 import {newProject} from "./scaffold.mjs";
 import {inbox, link} from "./feedback.mjs";
 import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff, sync} from "./project-view.mjs";
@@ -66,7 +68,7 @@ function cmd(usage, summary, spec = {}) {
   for (const token of usage.split(" ")) {
     const optional = token.startsWith("[");
     const name = token.replace(/[[\]]/g, "");
-    if (/^[a-z][a-z-]*$/.test(name) && !params.length) words.push(name);
+    if (/^[a-z][a-z0-9-]*$/.test(name) && !params.length) words.push(name);
     else params.push({name: name.replace("...", ""), optional, variadic: name.endsWith("..."),
       type: /^V?CODE$|^FORK$|^PARENT$/.test(name) ? "code" : /^(N|VOTE|DEVICE|COMMENT|NUMBER)$/.test(name.replace("...", "")) ? "int" : "text"});
   }
@@ -499,6 +501,40 @@ cmd("devices update-launcher DEVICE", "Upgrade the device's 203 Launcher to the 
   flags: {channel: PUBLISH_FLAGS.channel, "no-wait": B("Do not follow it")},
   op: "device_update_launcher", write: true, topic: "devices", args: ctx => ({device: ctx.args.DEVICE, channel: ctx.flags.channel, wait: !ctx.flags.no_wait}),
   examples: ["devices update-launcher 3 --json", "devices update-launcher 3 --no-wait --json"]});
+
+// The development channel of a running firmware on CardenzaHAL (its docs/usb-dev.md), over the USB cable: no sign-in (`anyone`),
+// like flash and log. macOS and Linux over its MIDI (Linux: else its HID); Windows through python's hidapi.
+const BOARD = {group: "Board (a running firmware over USB)", anyone: true, topic: "board"};
+cmd("board info", "What the firmware on the cable is: name, version, community code, build, ELF SHA-256, CardenzaHAL commit, Launcher, chip, uptime and reset reason", {...BOARD,
+  run: boardInfo, examples: ["board info", "board info --json"]});
+cmd("board partitions", "The flash: every partition (offsets and sizes in hex), app images and how full, NVS entries used, the running one, free flash", {...BOARD,
+  run: boardPartitions, examples: ["board partitions", "board partitions --json"]});
+cmd("board memory", "Heaps (internal, PSRAM, DMA: free, least free, largest block) and tasks (core, priority, stack left, CPU)", {...BOARD,
+  flags: {window: V("MS", "How long CPU per task is measured, 10-2550 ms (default 500)", {type: "int"})}, run: boardMemory, examples: ["board memory", "board memory --window 2000 --json"]});
+cmd("board storage", "The SD card: mounted, its size, the file system's size and free space", {...BOARD, run: boardStorage, examples: ["board storage --json"]});
+cmd("board status", "The display, keys down, the system menu, USB and the presence service", {...BOARD, run: boardStatus, examples: ["board status --json"]});
+cmd("board i2c", "Every device that answers on the shared I2C bus (the codec, the expansion port's)", {...BOARD, run: boardI2c, examples: ["board i2c --json"]});
+cmd("board screen", "A screenshot: the firmware's next frame as a PNG (prints its path)", {...BOARD,
+  flags: {out: V("FILE.png", "Where to write it (default cardenza-<date>-<time>.png in the current folder)")}, run: boardScreen,
+  examples: ["board screen", "board screen --out menu.png --json"]});
+cmd("board press KEY...", "Press keys as a finger would, one after another (fn+s: together): esc, 1, q, fn, ok, space, up/down/left/right (; . , /), home …", {...BOARD,
+  flags: {hold: V("MS", "How long each is held (default 100)", {type: "int"}), gap: V("MS", "The pause after each (default 100)", {type: "int"})},
+  run: boardPress, examples: ["board press down down ok", "board press fn+s", "board press home --json", "board press esc --hold 1500"]});
+cmd("board keys [STEP...]", "Keys down and up step by step (KEY:down, KEY:up, a number: milliseconds to wait); none: the keys held from the computer", {...BOARD,
+  run: boardKeys, examples: ["board keys fn:down s:down 200 s:up fn:up", "board keys --json"]});
+cmd("board coredump", "The last crash's core dump: whether there is one, its task and backtrace; --out saves it, --elf decodes the backtrace, --erase erases it", {...BOARD,
+  flags: {out: V("FILE", "Save the dump (for esp-coredump info_corefile -c FILE ELF)"), elf: V("FILE", "The firmware's ELF (build/<project>.elf): decode the backtrace with xtensa-esp32s3-elf-addr2line"),
+    erase: B("Erase the dump afterwards (after --out saved it)")},
+  run: boardCoredump, examples: ["board coredump", "board coredump --out crash.elf --elf build/my_synth.elf --json", "board coredump --out crash.elf --erase"]});
+cmd("board files ls [PATH]", "The files in a folder of the SD card (default its root; paths are from the card's root, a leading / or /sdcard/ is dropped)", {...BOARD, run: filesLs, examples: ["board files ls", "board files ls CardenzaSynth/Projects --json"]});
+cmd("board files get PATH [LOCAL]", "Copy a file from the SD card here (LOCAL: a file or folder; default its name in the current folder)", {...BOARD, run: filesGet,
+  examples: ["board files get CardenzaSynth/Logs/log.txt", "board files get CardenzaSynth/Projects/DEMO.ccproj backup/ --json"]});
+cmd("board files put LOCAL [PATH]", "Copy a file onto the SD card (PATH: the file, or a folder it goes into; default its name at the root)", {...BOARD, run: filesPut,
+  examples: ["board files put kick.wav CardenzaSynth/Samples/", "board files put song.ccproj CardenzaSynth/Projects/song.ccproj --json"]});
+cmd("board files rm PATH", "Remove a file (or an empty folder) from the SD card", {...BOARD, run: filesRm, examples: ["board files rm CardenzaSynth/Samples/old.wav --json"]});
+cmd("board files mkdir PATH", "Make a folder on the SD card", {...BOARD, run: filesMkdir, examples: ["board files mkdir CardenzaSynth/Samples/drums --json"]});
+cmd("board files mv FROM TO", "Rename or move a file or folder on the SD card", {...BOARD, run: filesMv, examples: ["board files mv Samples/a.wav Samples/kick.wav --json"]});
+
 cmd("me edit", "Change your name, bio or avatar", {group: "People",
   flags: {name: V("NAME", "2-24 letters, digits, CJK, _ - . (single spaces inside)"), bio: V("TEXT", "Up to 300 characters"), "bio-file": V("PATH", "The bio from a file"),
     avatar: V("a01..a24", "One of the site's avatars")}, run: editMe, write: true, examples: ['me edit --name "Lin" --bio "Makes grooveboxes for the Cardenza" --json']});

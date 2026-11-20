@@ -93,7 +93,7 @@ all of them) as JSON.
 | `port_unavailable` | 1 | flash: the port cannot be opened (no permission, another program has it, not a serial port) | Linux: the dialout group; close serial monitors and the website's page; check `--port` |
 | `port_failed` | 3 | flash: the port failed while it was used (unplugged) | plug it in again and run it again |
 | `no_launcher` | 1 | flash: no 203 Launcher answered on the port (another device's port, or the Launcher in USB Drive mode) | leave USB Drive (its home screen) or give the right `--port`, then run it again |
-| `firmware_unreachable` | 1 | flash / devices recover: the device runs a firmware and 203c cannot ask it to restart (Linux: no permission for its MIDI or HID; macOS: no python3 for CoreMIDI) | Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in) |
+| `firmware_unreachable` | 1 | flash / devices recover / board: the device runs a firmware and 203c cannot reach it (Linux: no permission for its MIDI or HID, or another program has its MIDI port; macOS: no python3 for CoreMIDI) | Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in) |
 | `no_launcher_port` | 3 | flash / devices recover: the firmware was asked to restart and no serial port came up | plug the cable in again and run it again; a firmware that does not take the command: press HOME and choose Back to Launcher (no such menu: hold FN while plugging it in) |
 | `launcher_countdown` | 3 | flash: the restarted Launcher started the firmware again before 203c reached it (twice) | press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows |
 | `launcher_busy` | 3 | flash: the Launcher is in a menu | go back to its home screen, then run it again |
@@ -104,11 +104,22 @@ all of them) as JSON.
 | `not_an_app` | 1 | flash --bin: not an application image (a merged image, bootloader, ELF …) | give build/<project>.bin; a Launcher comes back with `devices recover` |
 | `launcher_image` | 1 | flash: the code or the file is a launcher, which the Launcher does not install this way | give the firmware's build/<project>.bin; the Launcher updates itself; `devices recover` restores the official Launcher |
 | `download_only` | 1 | flash: the device takes a UF2 file copied onto it (Mystrix), no Launcher | `versions download VCODE --target …` and copy it onto the device |
-| `unsupported_platform` | 1 | flash and log: the USB cable is used on macOS and Linux only | on Windows: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file); the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi) |
+| `unsupported_platform` | 1 | flash and log: the USB cable is used on macOS and Linux only (board: also Windows, through python's hidapi) | on Windows: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file); the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi) |
 | `launcher_full` | 1 | flash: no room on the device for the file (the Launcher names what to delete) | delete that, or other software, on the device; then run it again |
 | `device_crashed` | 1 | log: the device printed a panic, an abort or a restart | read log_tail; decode the backtrace with the build's ELF (xtensa-esp32s3-elf-addr2line -pfiaC -e build/<project>.elf …) |
 | `log_timeout` | 1 | log --until: no line matched before --seconds ran out | read log_tail: the firmware did not print it (or starts slower: a longer --seconds) |
-| `python_missing` | 1 | log on macOS: python3 is needed for CoreMIDI | xcode-select --install |
+| `python_missing` | 1 | log and board on macOS: python3 is needed for CoreMIDI | xcode-select --install |
+| `board_not_found` | 1 | board: no Cardenza on USB (no firmware with CardenzaHAL's USB device, and no serial port either) | plug it in with a data cable (not a charging-only one), turn it on, start the firmware |
+| `board_no_usb` | 1 | board: the firmware does not start CardenzaHAL's USB device (only its serial port is there, as with the template), so it has no development channel | add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main, rebuild, flash; `log` reads its console meanwhile |
+| `board_in_launcher` | 1 | board: the device is in its 203 Launcher, not running a firmware | start the firmware from the Launcher (or `flash --bin` a build), run it again |
+| `hal_too_old` | 1 | board: the firmware's CardenzaHAL is older than the development channel (IDENTIFY says protocol 1, or no answer to HELLO) | rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again |
+| `dev_channel_off` | 1 | board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off | turn it on in its sdkconfig, build and install it again |
+| `hidapi_missing` | 1 | board on Windows: python's hidapi package (or python) is missing | `pip install hidapi` |
+| `board_refused` | 1 | board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …) | read `error` and `hint` |
+| `board_busy` | 3 | board: the firmware's development channel has 8 requests queued | wait a moment, run it again |
+| `board_timeout` | 3 | board: the device stopped answering, or part of an answer was lost more than once | run it again; if it keeps happening, read its log (`log`) |
+| `board_lost` | 3 | board: the device went away (restarted, unplugged) | plug it in, let the firmware start, run it again |
+| `board_protocol` | 1 | board: the firmware's answer is not what this 203c reads | update 203c (`npm install -g 203c`); else report it |
 | `dir_not_empty` | 1 | new: the folder is there and not empty | give another DIR |
 | `git_missing` | 1 | new, project diff: git is not installed | install git |
 | `not_a_repository` | 1 | project diff local: this folder is not a git repository | compare two versions or a fork instead, or git init |
@@ -1477,6 +1488,128 @@ Upgrade the device's 203 Launcher to the newest for it (我的设备's 升级启
     203c devices update-launcher 3 --json
     203c devices update-launcher 3 --no-wait --json
 
+## Board (a running firmware over USB)
+
+### `203c board info`
+
+What the firmware on the cable is: name, version, community code, build, ELF SHA-256, CardenzaHAL commit, Launcher, chip, uptime and reset reason
+
+    203c board info
+    203c board info --json
+
+### `203c board partitions`
+
+The flash: every partition (offsets and sizes in hex), app images and how full, NVS entries used, the running one, free flash
+
+    203c board partitions
+    203c board partitions --json
+
+### `203c board memory`
+
+Heaps (internal, PSRAM, DMA: free, least free, largest block) and tasks (core, priority, stack left, CPU)
+
+- `--window MS` How long CPU per task is measured, 10-2550 ms (default 500)
+
+    203c board memory
+    203c board memory --window 2000 --json
+
+### `203c board storage`
+
+The SD card: mounted, its size, the file system's size and free space
+
+    203c board storage --json
+
+### `203c board status`
+
+The display, keys down, the system menu, USB and the presence service
+
+    203c board status --json
+
+### `203c board i2c`
+
+Every device that answers on the shared I2C bus (the codec, the expansion port's)
+
+    203c board i2c --json
+
+### `203c board screen`
+
+A screenshot: the firmware's next frame as a PNG (prints its path)
+
+- `--out FILE.png` Where to write it (default cardenza-<date>-<time>.png in the current folder)
+
+    203c board screen
+    203c board screen --out menu.png --json
+
+### `203c board press KEY...`
+
+Press keys as a finger would, one after another (fn+s: together): esc, 1, q, fn, ok, space, up/down/left/right (; . , /), home …
+
+- `--hold MS` How long each is held (default 100)
+- `--gap MS` The pause after each (default 100)
+
+    203c board press down down ok
+    203c board press fn+s
+    203c board press home --json
+    203c board press esc --hold 1500
+
+### `203c board keys [STEP...]`
+
+Keys down and up step by step (KEY:down, KEY:up, a number: milliseconds to wait); none: the keys held from the computer
+
+    203c board keys fn:down s:down 200 s:up fn:up
+    203c board keys --json
+
+### `203c board coredump`
+
+The last crash's core dump: whether there is one, its task and backtrace; --out saves it, --elf decodes the backtrace, --erase erases it
+
+- `--out FILE` Save the dump (for esp-coredump info_corefile -c FILE ELF)
+- `--elf FILE` The firmware's ELF (build/<project>.elf): decode the backtrace with xtensa-esp32s3-elf-addr2line
+- `--erase` Erase the dump afterwards (after --out saved it)
+
+    203c board coredump
+    203c board coredump --out crash.elf --elf build/my_synth.elf --json
+    203c board coredump --out crash.elf --erase
+
+### `203c board files ls [PATH]`
+
+The files in a folder of the SD card (default its root; paths are from the card's root, a leading / or /sdcard/ is dropped)
+
+    203c board files ls
+    203c board files ls CardenzaSynth/Projects --json
+
+### `203c board files get PATH [LOCAL]`
+
+Copy a file from the SD card here (LOCAL: a file or folder; default its name in the current folder)
+
+    203c board files get CardenzaSynth/Logs/log.txt
+    203c board files get CardenzaSynth/Projects/DEMO.ccproj backup/ --json
+
+### `203c board files put LOCAL [PATH]`
+
+Copy a file onto the SD card (PATH: the file, or a folder it goes into; default its name at the root)
+
+    203c board files put kick.wav CardenzaSynth/Samples/
+    203c board files put song.ccproj CardenzaSynth/Projects/song.ccproj --json
+
+### `203c board files rm PATH`
+
+Remove a file (or an empty folder) from the SD card
+
+    203c board files rm CardenzaSynth/Samples/old.wav --json
+
+### `203c board files mkdir PATH`
+
+Make a folder on the SD card
+
+    203c board files mkdir CardenzaSynth/Samples/drums --json
+
+### `203c board files mv FROM TO`
+
+Rename or move a file or folder on the SD card
+
+    203c board files mv Samples/a.wav Samples/kick.wav --json
+
 ## People
 
 ### `203c me edit`
@@ -1820,5 +1953,6 @@ Every API operation with its JSON schema (for programs)
 - `203c help sim` — Simulator versions (Play)
 - `203c help launchers` — Launchers: only the official 203 Launcher
 - `203c help devices` — Installing firmware on a device: over a USB cable (no sign-in) or sent over Wi-Fi
+- `203c help board` — A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203c board)
 - `203c help requests` — Requests and the developer tracker
 - `203c help admin` — Admins

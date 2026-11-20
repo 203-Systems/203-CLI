@@ -86,7 +86,7 @@ export const ERROR_CODES = [
   ["port_unavailable", 1, "flash: the port cannot be opened (no permission, another program has it, not a serial port)", "Linux: the dialout group; close serial monitors and the website's page; check `--port`"],
   ["port_failed", 3, "flash: the port failed while it was used (unplugged)", "plug it in again and run it again"],
   ["no_launcher", 1, "flash: no 203 Launcher answered on the port (another device's port, or the Launcher in USB Drive mode)", "leave USB Drive (its home screen) or give the right `--port`, then run it again"],
-  ["firmware_unreachable", 1, "flash / devices recover: the device runs a firmware and 203c cannot ask it to restart (Linux: no permission for its MIDI or HID; macOS: no python3 for CoreMIDI)", "Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in)"],
+  ["firmware_unreachable", 1, "flash / devices recover / board: the device runs a firmware and 203c cannot reach it (Linux: no permission for its MIDI or HID, or another program has its MIDI port; macOS: no python3 for CoreMIDI)", "Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in)"],
   ["no_launcher_port", 3, "flash / devices recover: the firmware was asked to restart and no serial port came up", "plug the cable in again and run it again; a firmware that does not take the command: press HOME and choose Back to Launcher (no such menu: hold FN while plugging it in)"],
   ["launcher_countdown", 3, "flash: the restarted Launcher started the firmware again before 203c reached it (twice)", "press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows"],
   ["launcher_busy", 3, "flash: the Launcher is in a menu", "go back to its home screen, then run it again"],
@@ -97,11 +97,22 @@ export const ERROR_CODES = [
   ["not_an_app", 1, "flash --bin: not an application image (a merged image, bootloader, ELF …)", "give build/<project>.bin; a Launcher comes back with `devices recover`"],
   ["launcher_image", 1, "flash: the code or the file is a launcher, which the Launcher does not install this way", "give the firmware's build/<project>.bin; the Launcher updates itself; `devices recover` restores the official Launcher"],
   ["download_only", 1, "flash: the device takes a UF2 file copied onto it (Mystrix), no Launcher", "`versions download VCODE --target …` and copy it onto the device"],
-  ["unsupported_platform", 1, "flash and log: the USB cable is used on macOS and Linux only", "on Windows: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file); the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi)"],
+  ["unsupported_platform", 1, "flash and log: the USB cable is used on macOS and Linux only (board: also Windows, through python's hidapi)", "on Windows: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file); the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi)"],
   ["launcher_full", 1, "flash: no room on the device for the file (the Launcher names what to delete)", "delete that, or other software, on the device; then run it again"],
   ["device_crashed", 1, "log: the device printed a panic, an abort or a restart", "read log_tail; decode the backtrace with the build's ELF (xtensa-esp32s3-elf-addr2line -pfiaC -e build/<project>.elf …)"],
   ["log_timeout", 1, "log --until: no line matched before --seconds ran out", "read log_tail: the firmware did not print it (or starts slower: a longer --seconds)"],
-  ["python_missing", 1, "log on macOS: python3 is needed for CoreMIDI", "xcode-select --install"],
+  ["python_missing", 1, "log and board on macOS: python3 is needed for CoreMIDI", "xcode-select --install"],
+  ["board_not_found", 1, "board: no Cardenza on USB (no firmware with CardenzaHAL's USB device, and no serial port either)", "plug it in with a data cable (not a charging-only one), turn it on, start the firmware"],
+  ["board_no_usb", 1, "board: the firmware does not start CardenzaHAL's USB device (only its serial port is there, as with the template), so it has no development channel", "add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main, rebuild, flash; `log` reads its console meanwhile"],
+  ["board_in_launcher", 1, "board: the device is in its 203 Launcher, not running a firmware", "start the firmware from the Launcher (or `flash --bin` a build), run it again"],
+  ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the development channel (IDENTIFY says protocol 1, or no answer to HELLO)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again"],
+  ["dev_channel_off", 1, "board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off", "turn it on in its sdkconfig, build and install it again"],
+  ["hidapi_missing", 1, "board on Windows: python's hidapi package (or python) is missing", "`pip install hidapi`"],
+  ["board_refused", 1, "board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …)", "read `error` and `hint`"],
+  ["board_busy", 3, "board: the firmware's development channel has 8 requests queued", "wait a moment, run it again"],
+  ["board_timeout", 3, "board: the device stopped answering, or part of an answer was lost more than once", "run it again; if it keeps happening, read its log (`log`)"],
+  ["board_lost", 3, "board: the device went away (restarted, unplugged)", "plug it in, let the firmware start, run it again"],
+  ["board_protocol", 1, "board: the firmware's answer is not what this 203c reads", "update 203c (`npm install -g 203c`); else report it"],
   ["dir_not_empty", 1, "new: the folder is there and not empty", "give another DIR"],
   ["git_missing", 1, "new, project diff: git is not installed", "install git"],
   ["not_a_repository", 1, "project diff local: this folder is not a git repository", "compare two versions or a fork instead, or git init"],
@@ -148,6 +159,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   change the page (summary, description, links)    {P} firmware edit K7M2QX --summary "…" --source-url https://github.com/… --json
   see why a version was sent back                  {P} versions check VCODE --json
   try a build on your Cardenza (USB cable)         {P} flash --bin build/<project>.bin --json   then   {P} log --json
+  look inside it running: screen, keys, memory, SD {P} board info --json, board screen, board press …   ({P} help board)
   everything about this project's firmware (an AI) {P} sync --json   (.203/community.md: page, versions, requests, comments, forks)
   what users asked for and said since last time    {P} inbox --json   ({P} help project)
   compare a fork (魔改版) with this project          {P} project forks --json   then   {P} project diff FORK --patch
@@ -160,7 +172,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   what is left of today's limits                   {P} quotas --json
   change your name or bio                          {P} me edit --name "…" --bio "…" --json
 
-Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices requests launchers admin)`},
+Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices board requests launchers admin)`},
 
   new: {title: "A new firmware for the Cardenza: make, build, try, publish, listen", text: `
 1. {P} new "My firmware" --summary "What it does" --json     a folder with CardenzaHAL (git submodule) and its template,
@@ -477,6 +489,34 @@ A device that no longer starts (恢复刷机, the website's /recover; no bound d
 It erases the whole internal flash (installed firmware, Launcher settings, Wi-Fi, its sign-in); the SD card is not touched.
 The device in download mode: in its Launcher esptool resets it there; a running CardenzaHAL firmware (no port) is restarted
 into it by 203c; else (Cardenza) hold HOME while plugging the USB cable in.`},
+
+  board: {title: "A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203c board)", text: `
+A firmware on CardenzaHAL that starts USB answers these over the HAL's development channel (CardenzaHAL docs/usb-dev.md),
+without a line of its own and at no cost until asked. No sign-in. The firmware must be built with a current CardenzaHAL
+(hal_too_old otherwise: update the HAL submodule, build, {P} flash --bin build/<project>.bin). The device on the cable,
+running the firmware (not in its Launcher). macOS and Linux over its MIDI (Linux: ALSA raw MIDI, else hidraw; macOS:
+CoreMIDI through python3); Windows through python's hidapi (pip install hidapi).
+
+{P} board info --json                     name, version, code, build time, ELF SHA-256, CardenzaHAL commit, Launcher, chip, reset reason
+{P} board partitions                      the flash table: offsets and sizes, app images, NVS entries used, the running one, free flash
+{P} board memory --window 2000            heaps (internal, PSRAM, DMA) and tasks: stack left, CPU over 2 s
+{P} board storage | status | i2c --json   the SD card; display, keys, system menu, USB; the I2C bus
+{P} board screen --out shot.png           the next frame as a PNG (240 × 135; prints the path)
+{P} board press down down ok              keys pressed as by a finger: cap names (esc 1 q fn shift opt alt ok space del …),
+                                          up down left right (the arrows on ; . , /), home (the side key); fn+s together;
+                                          --hold MS, --gap MS; 10-57 or k1-k57 are the HAL's key numbers
+{P} board keys fn:down s:down 200 s:up fn:up    step by step (a number: ms to wait); keys held are let go 10 s later
+{P} board coredump --out crash.elf --elf build/<project>.elf    the last crash: task, backtrace decoded
+                                          (xtensa-esp32s3-elf-addr2line on PATH: ESP-IDF's export); --erase after
+{P} board files ls CardenzaSynth          the SD card: ls, get PATH [LOCAL], put LOCAL [PATH], rm, mkdir, mv FROM TO
+                                          (paths from the card's root; a progress line on a terminal)
+A test with screenshots: {P} flash --bin …, {P} log --until "ready" --seconds 30, then board press … and board screen.
+Only a serial port there? board_no_usb: the firmware does not start CardenzaHAL's USB device (the template does not): add
+CardenzaHAL::USB::Init(); after CardenzaHAL::Init() in app_main, rebuild, flash ({P} log reads its console meanwhile);
+board_in_launcher: the device is in its 203 Launcher, start the firmware.
+Ctrl-C stops a transfer (the device is told to stop; an upload is aborted). Errors: board_not_found, firmware_unreachable
+(Linux: the audio group, or close what holds its MIDI port: a {P} log, a DAW), hal_too_old, dev_channel_off,
+board_refused (the firmware's reason), board_busy, board_timeout, board_lost.`},
 
   requests: {title: "Requests and the developer tracker", text: `
 {P} inbox --json                                          everything new about this project's firmware (203.json) since

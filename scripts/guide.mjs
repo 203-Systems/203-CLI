@@ -317,7 +317,8 @@ in the common case; flags win over it; it writes "code" back after the first pub
     "forked_from": {"code": "V6QK28", "version": "0.3.0"},   // null for an original
     "publish_source": true,               // attach a source archive (git archive of the commit) to every version
     "publish": {"channel": "stable", "bins": {"cardenza": "build/my_synth.bin"}, "notes_file": "CHANGELOG.md",
-                "cover": "docs/cover.png", "description_file": "README.md"}
+                "cover": "docs/cover.png", "description_file": "README.md",      // its local pictures go up too
+                "images": ["docs/home.png", {"file": "docs/seq.png", "caption": "The sequencer"}]}   // the gallery
   }
 - A "code" that is someone else's firmware (you cloned theirs): publish makes your fork of it first, rewrites "code"
   and "forked_from", and says so ("fork" in --json). A "forked_from" without "code": the new firmware is its fork.
@@ -348,7 +349,8 @@ A version sent back keeps its label for 30 days: publish the fix as the next lab
 What people see first: the cover (16:9 picture) and the summary (≤ 100 characters). A good page has:
   - a summary that says what it does (not just the name): "Four-track groovebox: drums, Juno, DX7, sampler"
   - a cover: {P} firmware cover CODE cover.png (PNG/JPEG/WebP, 16:9, e.g. 1280x720, ≤ 2 MB); a stable version needs one
-  - a description (Markdown): what it is, how to use it, the keys; --description-file docs/page.md
+  - pictures shown large above the description, like a store page's: {P} firmware images add CODE shot.png (help pictures)
+  - a description (Markdown): what it is, how to use it, the keys; --description-file docs/page.md (its pictures go up too)
   - one category tag: instrument, groovebox, tool, network or game (--tags groovebox,synth)
   - the source: --source-url https://github.com/… and --clone-url https://github.com/….git
   - release notes on every stable version
@@ -362,6 +364,26 @@ Without a picture of its own a fork shows its original's, marked Fork (魔改版
 screen after boot of its web build; else a plain grey cover. A stable version needs one of them: publish stops with
 cover_required (give --cover cover.png, or send the web build); --without-cover only when the user wants none.
 Beta and dev versions (CI's builds) never need one. The checklist says what shows now: {P} firmware checklist CODE --json`},
+
+  pictures: {title: "Pictures: the gallery above the description, and pictures in the description", text: `
+A firmware's page shows its gallery large above the description (like a store page: the picture chosen, then a strip
+of thumbnails; nothing when there are none), and the description places pictures of its own where its text says.
+PNG, JPEG or WebP up to 2 MB each, a caption of at most 60 characters; at most 9 in the gallery, 20 in the description.
+{P} firmware images add CODE home.png --caption "The home screen" --json       the gallery (in the order added)
+{P} firmware images add CODE flow.png --description --json                    the description's: prints ![](image:ID)
+{P} firmware images list CODE --json        both, with ids, captions and whether the description uses each
+{P} firmware images order CODE ID ID … --json    {P} firmware images edit CODE ID --caption "…" --place gallery|description
+{P} firmware images remove CODE ID --yes --json  {P} firmware images prune CODE --dry-run --json (the description's unused)
+In the description: ![words](image:ID) (any of its pictures, gallery or description). The pictures of one line stand
+side by side, as high as each other (up to 3); a picture on a line of its own as wide as the text; the words (else
+the picture's caption) under it. Pictures from other sites are not loaded: they show as links.
+From files: --description-file README.md (and 203.json's publish.description_file) uploads the local pictures it names
+(![words](docs/shot.png), relative to the file) as the description's and sends image:ID instead; a picture the
+firmware has already (the same file) is not sent again; pictures in code are left alone, and one that cannot go up
+(missing, a GIF, over 2 MB) stays as written with a warning. 203.json's publish.images is the gallery:
+  "images": ["docs/home.png", {"file": "docs/seq.png", "caption": "The sequencer"}]
+publish makes the gallery exactly that, in that order (adds what is missing, sets the captions given, removes the rest);
+--dry-run says what it would change. A trusted-publishing run (CI) changes no pictures: the owner does.`},
 
   sounds: {title: "Sound packs (official firmware only; the section may not be open yet)", text: `
 {P} firmware list --official --json            → the official firmware's code (e.g. CardenzaSynth)

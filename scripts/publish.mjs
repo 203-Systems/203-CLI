@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {ApiError, CLI_VERSION, DEFAULT_API, uploadCover, uploadSource, tokenFile} from "./lib.mjs";
+import {ApiError, CLI_VERSION, DEFAULT_API, uploadCover, uploadPicture, uploadSource, tokenFile} from "./lib.mjs";
 import {PROJECT_FILE, LEGACY_FILE, NAME_RULE, nameOk, checkProject, cloneUrlOf, cmakeProjectName, findProjectFile, gitTagVersion, licenseOf, manifestOf, remotePage,
   versionTxt, writeProject} from "./project.mjs";
 import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
@@ -19,7 +19,7 @@ import {EMSDK_HINT, describeSim, explainBuild, findHal, findProject, halScript, 
   uploadSim, waitSim, playUrl} from "./sim.mjs";
 import {
   CHANNELS, DEFAULT_TARGET, DEVICES, UF2_DEVICES, FIRMWARE_CATEGORIES, LICENSES, LIMITS, changelogEntry, changelogTop, compareVersions, findAppImages, gitInfo,
-  httpsUrl, inspectBin, inspectCover, inspectPack, inspectWork, modelType, nearest, nextVersion, normalizeChannel, normalizeCode, normalizeTags,
+  httpsUrl, imageInfo, inspectBin, inspectCover, inspectPack, inspectWork, modelType, nearest, nextVersion, normalizeChannel, normalizeCode, normalizeTags,
   isPlaceholder, resolveCommit, sha256, shorten, size, summaryRepeatsName, versionLabel, versionsDisagree,
 } from "./checks.mjs";
 
@@ -273,7 +273,7 @@ async function usedToday(ctx, limits) {
 // The project file: 203.json (COMMUNITY.md "The project file 203.json"; project.mjs), or the earlier
 // 203c.json. {data (publish's keys), project (203.json as written), dir, file, legacy}.
 
-const MANIFEST_KEYS = ["firmware", "name", "summary", "description", "description_file", "tags", "source_url", "clone_url", "cover", "channel", "version",
+const MANIFEST_KEYS = ["firmware", "name", "summary", "description", "description_file", "tags", "source_url", "clone_url", "cover", "images", "channel", "version",
   "notes", "notes_file", "bins", "bin", "notices", "commit", "private", "launcher", "project", "sim", "license", "$schema", "comment"];
 
 function loadManifest(ctx) {
@@ -523,6 +523,366 @@ export async function setCover(ctx) {
   return {json: updated, text: `The cover of ${updated.name} (${code}) is set: ${updated.cover?.url}\nPage: ${firmwareUrl(ctx, code)}`};
 }
 
+// ---------------------------------------------------------------------------------------------
+// Pictures (COMMUNITY.md "Pictures"): the gallery shown large above the description (Firmware.images, at most 9, in
+// its owner's order) and the description's own (Firmware.description_images, at most 20): the description places any
+// of them with ![words](image:<id>). PNG, JPEG or WebP up to 2 MB, a caption of at most 60 characters each.
+
+export const GALLERY_MAX = 9, TEXT_PICTURES_MAX = 20;
+const PICTURE_BYTES = 2 * 1024 * 1024;
+const PICTURE_ID = /^[2-9a-hjkmnp-z]{8}$/i;
+// A picture in Markdown: ![words](address "title"), the address maybe in <…>.
+const PICTURE_REF = /!\[([^\]\n]{0,200})\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"\n]*")?\s*\)/g;
+const reference = id => `![](image:${id})`;
+const picturesOf = fw => [...(fw?.images ?? []).map(x => ({...x, place: "gallery"})), ...(fw?.description_images ?? []).map(x => ({...x, place: "description"}))];
+const usesPicture = (text, id) => new RegExp(`!\\[[^\\]\\n]*\\]\\(\\s*image:${id}\\s*\\)`, "i").test(text ?? "");
+
+/** A local picture checked as the server checks it: {bytes, mime, rel, width, height, sha, describe}, or null with a problem. */
+function planPicture(ctx, r, file, {base = ctx.cwd, flag = "IMAGE"} = {}) {
+  const local = readLocal(ctx, r, file, {what: "The picture", flag, base});
+  if (!local) return null;
+  const info = imageInfo(local.bytes);
+  const name = path.basename(local.rel);
+  if (!info) {
+    const head = Buffer.from(local.bytes.subarray(0, 8)).toString("latin1");
+    const what = /^GIF8/.test(head) ? "a GIF" : /^\s*<(svg|\?xml)/i.test(head) ? "an SVG" : "not a PNG, JPEG or WebP picture";
+    r.problem("wrong_file", `${name} is ${what}`, {field: flag, hint: "A picture is a PNG, JPEG or WebP file up to 2 MB (save a GIF's frame or an SVG as PNG)"});
+    return null;
+  }
+  if (local.bytes.length > PICTURE_BYTES) {
+    r.problem("too_large", `${name} is ${size(local.bytes.length)}: a picture is at most 2 MB`, {field: flag, hint: "Save it smaller (JPEG or WebP; 1920 pixels wide is plenty)"});
+    return null;
+  }
+  return {bytes: local.bytes, mime: info.mime, rel: local.rel, width: info.width, height: info.height, sha: sha256(local.bytes),
+    describe: `${local.rel} (${info.width ?? "?"}x${info.height ?? "?"} ${info.mime.split("/")[1].toUpperCase()}, ${size(local.bytes.length)})`};
+}
+
+/** A caption checked as the server checks it (one line, at most 60 characters). */
+function captionOf(r, value, flag = "caption") {
+  if (value === undefined || value === null) return undefined;
+  const text = String(value).replace(/\s+/g, " ").trim();
+  if ([...text].length > 60) {
+    r.problem("invalid", `The caption is ${[...text].length} characters: at most 60`, {field: flag, exit: EXIT.usage, hint: `Shorten it: "${[...text].slice(0, 59).join("")}…"`});
+  }
+  return text;
+}
+
+const pictureRow = (fw, x) => ({id: x.id, place: x.place, caption: x.caption ?? "", width: x.width ?? null, height: x.height ?? null, sha256: x.sha256 ?? null,
+  url: x.url, reference: reference(x.id), in_description: usesPicture(fw.description, x.id)});
+
+export async function listPictures(ctx) {
+  const code = ctx.args.CODE;
+  const fw = await ctx.client.get("/firmware/" + enc(code));
+  const rows = picturesOf(fw).map(x => pictureRow(fw, x));
+  const gallery = rows.filter(x => x.place === "gallery"), text = rows.filter(x => x.place === "description");
+  const line = x => `  ${x.id}  ${String(x.width ?? "?")}x${String(x.height ?? "?")}  ${x.caption || "(no caption)"}${x.in_description ? "  · in the description" : ""}`;
+  return {json: {firmware: {code: fw.code, name: fw.name, url: firmwareUrl(ctx, fw.code)}, gallery, description: text,
+    room: {gallery: GALLERY_MAX - gallery.length, description: TEXT_PICTURES_MAX - text.length}},
+  text: [`${fw.name} (${fw.code}) — ${firmwareUrl(ctx, fw.code)}`,
+    `Gallery, above the description (${gallery.length} / ${GALLERY_MAX}):`, ...(gallery.length ? gallery.map(line) : ["  none"]),
+    `The description's own (${text.length} / ${TEXT_PICTURES_MAX}):`, ...(text.length ? text.map(line) : ["  none"]),
+    "Put one in the description: ![words](image:<id>) (a line of pictures stands side by side)."].join("\n")};
+}
+
+export async function addPictures(ctx) {
+  const r = newReport(ctx);
+  const code = ctx.args.CODE, o = ctx.flags;
+  const files = [].concat(ctx.args.IMAGE ?? []).filter(Boolean);
+  const place = o.description ? "description" : "gallery";
+  if (!files.length) throw ctx.usage("Give the pictures: firmware images add CODE IMAGE… (PNG, JPEG or WebP up to 2 MB each)", {hint: "--description puts them in the description instead of the gallery"});
+  if (o.caption !== undefined && files.length > 1) {
+    throw ctx.usage("One --caption is for one picture: add pictures with captions one at a time", {next: files.slice(0, 2).map(f => ctx.run(["firmware", "images", "add", code, f, "--caption", "<one line>"]))});
+  }
+  const caption = captionOf(r, o.caption);
+  const fw = await firmwareFor(ctx, r, code, {need: "edit"});
+  const have = picturesOf(fw);
+  const plans = [], skipped = [];
+  for (const file of files) {
+    const plan = planPicture(ctx, r, file);
+    if (!plan) continue;
+    const there = have.find(x => x.sha256 === plan.sha) ?? plans.find(x => x.sha === plan.sha);
+    if (there) { skipped.push({file: plan.rel, id: there.id ?? null, place: there.place ?? place, why: "already there"}); continue; }
+    plans.push(plan);
+  }
+  const count = have.filter(x => x.place === place).length;
+  const most = place === "gallery" ? GALLERY_MAX : TEXT_PICTURES_MAX;
+  if (fw && count + plans.length > most) {
+    r.problem("conflict", `${place === "gallery" ? "The gallery" : "The description"} has ${count} pictures: ${plans.length} more would be over ${most}`, {field: place === "gallery" ? "images" : "description_images",
+      hint: "Remove some first (firmware images list shows them)", next: [ctx.run(["firmware", "images", "list", code])]});
+  }
+  for (const plan of plans) r.step(`add ${plan.describe} to ${place === "gallery" ? "the gallery (above the description)" : "the description's pictures"}${caption ? ` with the caption "${caption}"` : ""}`);
+  for (const x of skipped) ctx.note(`${x.file} is already there (${x.id}, ${x.place})`);
+  if (o.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  const added = [];
+  let updated = fw;
+  for (const plan of plans) {
+    ctx.say(`Uploading ${plan.rel} (${size(plan.bytes.length)})…`);
+    const done = await uploadPicture(ctx.client, code, plan.bytes, plan.mime, {caption: caption ?? "", place});
+    updated = done.firmware;
+    added.push({file: plan.rel, id: done.id, place, reference: reference(done.id)});
+  }
+  const refs = added.filter(x => x.place === "description");
+  return {json: {status: added.length ? "added" : "already_there", firmware: {code, name: updated.name, url: firmwareUrl(ctx, code)}, added, skipped,
+    gallery: (updated.images ?? []).map(x => x.id), description_images: (updated.description_images ?? []).map(x => x.id)},
+  text: [added.length ? `Added ${added.length} picture${added.length > 1 ? "s" : ""} to ${updated.name} (${code}): ${firmwareUrl(ctx, code)}` : `Nothing new: ${skipped.length > 1 ? "they are" : "it is"} there already.`,
+    ...added.map(x => `  ${x.id}  ${x.file}${x.place === "description" ? `  → ${x.reference}` : ""}`),
+    ...skipped.map(x => `  ${x.id ?? "-"}  ${x.file} (already there)`),
+    refs.length ? "Put them in the description where they belong (a line of pictures stands side by side)." : ""].filter(Boolean).join("\n")};
+}
+
+// A picture of this firmware by its id (any case), or a not_found problem naming the list.
+function pictureFor(ctx, r, fw, id, code) {
+  const x = fw ? picturesOf(fw).find(y => y.id === String(id).toLowerCase()) : null;
+  if (fw && !x) {
+    r.problem("not_found", `${fw.name} (${code}) has no picture ${id}`, {field: "ID", hint: "Its pictures: firmware images list " + code, next: [ctx.run(["firmware", "images", "list", code])]});
+  }
+  return x;
+}
+
+export async function editPicture(ctx) {
+  const r = newReport(ctx);
+  const code = ctx.args.CODE, o = ctx.flags;
+  const caption = captionOf(r, o.caption);
+  if (caption === undefined && o.place === undefined) throw ctx.usage("Nothing to change: give --caption TEXT (\"\": none) or --place gallery|description");
+  const fw = await firmwareFor(ctx, r, code, {need: "edit"});
+  const x = pictureFor(ctx, r, fw, ctx.args.ID, code);
+  const body = {};
+  if (x && caption !== undefined && caption !== (x.caption ?? "")) body.caption = caption;
+  if (x && o.place !== undefined && o.place !== x.place) {
+    body.place = o.place;
+    if (o.place === "gallery" && (fw.images ?? []).length >= GALLERY_MAX) {
+      r.problem("conflict", `The gallery has ${GALLERY_MAX} pictures, the most`, {field: "images", hint: "Remove one first", next: [ctx.run(["firmware", "images", "list", code])]});
+    }
+    if (o.place === "description" && (fw.description_images ?? []).length >= TEXT_PICTURES_MAX) {
+      r.problem("conflict", `The description has ${TEXT_PICTURES_MAX} pictures, the most`, {field: "description_images", hint: "Remove one first", next: [ctx.run(["firmware", "images", "prune", code, "--dry-run"])]});
+    }
+    if (o.place === "description" && !usesPicture(fw.description, x.id)) {
+      r.warn("not_in_description", `${x.id} is not in the description: out of the gallery it shows nowhere until the description puts it somewhere`, {hint: `Add ${reference(x.id)} to the description`});
+    }
+  }
+  if (x) r.step(Object.keys(body).length ? `change ${Object.keys(body).join(" and ")} of ${x.id}` : `nothing differs on ${x.id}`);
+  if (o.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  const updated = Object.keys(body).length ? await ctx.op("firmware_image_edit", {code, id: x.id, ...body}) : fw;
+  const now = picturesOf(updated).find(y => y.id === x.id);
+  return {json: {status: Object.keys(body).length ? "changed" : "unchanged", picture: pictureRow(updated, now), firmware: {code, name: updated.name}},
+    text: `${x.id}: ${now.place === "gallery" ? "in the gallery" : "in the description"}, ${now.caption ? `"${now.caption}"` : "no caption"}`};
+}
+
+export async function removePictures(ctx) {
+  const r = newReport(ctx);
+  const code = ctx.args.CODE;
+  const ids = [].concat(ctx.args.ID ?? []).map(id => String(id).toLowerCase());
+  const fw = await firmwareFor(ctx, r, code, {need: "edit"});
+  const have = picturesOf(fw);
+  const doomed = [], gone = [];
+  for (const id of ids) {
+    if (!PICTURE_ID.test(id)) { r.problem("usage", `${id} is not a picture's id (8 characters)`, {field: "ID", exit: EXIT.usage, next: [ctx.run(["firmware", "images", "list", code])]}); continue; }
+    const x = have.find(y => y.id === id);
+    if (x) { if (!doomed.includes(x)) doomed.push(x); } else gone.push(id);
+  }
+  for (const x of doomed) {
+    r.step(`remove ${x.id} (${x.place}${x.caption ? `: "${x.caption}"` : ""})`);
+    if (usesPicture(fw?.description, x.id)) {
+      r.warn("in_description", `The description puts ${x.id} in its text: there it will show nothing`, {hint: "Take its ![…](image:" + x.id + ") out of the description"});
+    }
+  }
+  if (ctx.flags.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  if (!doomed.length) return {json: {status: "already_deleted", ids: gone}, text: `Already gone: ${gone.join(", ")}`};
+  if (!ctx.flags.yes && !(ctx.interactive && await ctx.confirm(`Remove ${doomed.length} picture${doomed.length > 1 ? "s" : ""} of ${fw.name}?`))) {
+    throw new CliError("needs_confirmation", `This removes ${doomed.map(x => x.id).join(", ")} from ${fw.name} (${code})`, {exit: EXIT.confirm,
+      hint: "Add --yes if the user wants them removed", next: [ctx.cmd({add: {yes: true}})]});
+  }
+  let updated = fw;
+  for (const x of doomed) {
+    try { updated = await ctx.op("firmware_image_delete", {code, id: x.id}); } catch (error) {
+      if (!(error instanceof ApiError && error.code === "not_found")) throw error;
+      gone.push(x.id);
+    }
+  }
+  return {json: withAdvice({status: "removed", removed: doomed.map(x => x.id), already_gone: gone, firmware: {code, name: updated.name},
+    gallery: (updated.images ?? []).map(x => x.id), description_images: (updated.description_images ?? []).map(x => x.id)}, r),
+  text: `Removed ${doomed.map(x => x.id).join(", ")} from ${updated.name} (${code}).` + (r.warnings.length ? "\n" + adviceText(r).trimEnd() : "")};
+}
+
+export async function orderPictures(ctx) {
+  const r = newReport(ctx);
+  const code = ctx.args.CODE;
+  const ids = [].concat(ctx.args.ID ?? []).map(id => String(id).toLowerCase());
+  const fw = await firmwareFor(ctx, r, code, {need: "edit"});
+  const gallery = (fw?.images ?? []).map(x => x.id);
+  for (const id of ids) {
+    if (fw && !gallery.includes(id)) {
+      const elsewhere = (fw.description_images ?? []).some(x => x.id === id);
+      r.problem("not_found", elsewhere ? `${id} is a picture of the description, not of the gallery (the description's text orders them)` : `The gallery has no picture ${id}`, {field: "ID",
+        hint: elsewhere ? `Into the gallery: firmware images edit ${code} ${id} --place gallery` : "The gallery's ids: firmware images list " + code, next: [ctx.run(["firmware", "images", "list", code])]});
+    }
+  }
+  if (new Set(ids).size !== ids.length) r.problem("usage", "An id is given twice", {field: "ID", exit: EXIT.usage});
+  // The ones given first, in that order; the others after them, as they were.
+  const order = [...ids, ...gallery.filter(id => !ids.includes(id))];
+  const same = order.join() === gallery.join();
+  r.step(same ? "the gallery is in this order already" : `order the gallery: ${order.join(", ")}`);
+  if (ctx.flags.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  const updated = same ? fw : await ctx.op("firmware_images_order", {code, ids: order});
+  return {json: {status: same ? "unchanged" : "ordered", gallery: (updated.images ?? []).map(x => x.id), firmware: {code, name: updated.name}},
+    text: `${updated.name}'s gallery: ${(updated.images ?? []).map(x => x.id).join(", ") || "none"}`};
+}
+
+export async function prunePictures(ctx) {
+  const r = newReport(ctx);
+  const code = ctx.args.CODE;
+  const fw = await firmwareFor(ctx, r, code, {need: "edit"});
+  const unused = (fw?.description_images ?? []).filter(x => !usesPicture(fw.description, x.id));
+  for (const x of unused) r.step(`remove ${x.id}${x.caption ? ` ("${x.caption}")` : ""}: the description does not put it anywhere`);
+  if (fw && !unused.length) r.step("every picture of the description is in its text: nothing to remove");
+  if (ctx.flags.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  if (!unused.length) return {json: {status: "unchanged", removed: []}, text: "Nothing to remove: the description uses every one of its pictures."};
+  if (!ctx.flags.yes && !(ctx.interactive && await ctx.confirm(`Remove ${unused.length} picture${unused.length > 1 ? "s" : ""} the description does not use?`))) {
+    throw new CliError("needs_confirmation", `This removes ${unused.map(x => x.id).join(", ")} from ${fw.name} (${code}): its description does not use them`, {exit: EXIT.confirm,
+      hint: "Add --yes if the user wants them removed", next: [ctx.cmd({add: {yes: true}})]});
+  }
+  let updated = fw;
+  for (const x of unused) updated = await ctx.op("firmware_image_delete", {code, id: x.id});
+  return {json: {status: "removed", removed: unused.map(x => x.id), description_images: (updated.description_images ?? []).map(x => x.id)},
+    text: `Removed ${unused.map(x => x.id).join(", ")}: the description did not use them.`};
+}
+
+// ---------------------------------------------------------------------------------------------
+// Pictures from files: a page text's local pictures (--description-file, 203.json's description_file) and 203.json's
+// publish.images (the gallery).
+
+/**
+ * A description's local pictures (![words](docs/shot.png), relative to `dir`, or with a leading / to `root`, the project):
+ * each one the firmware has (the same SHA-256, any place) becomes its image:<id>; each other one goes up as a
+ * description picture. Answers {text (the known ones as image:<id>, the new ones as image:new-<n>), uploads: [{plan,
+ * token}], remote}; the problems and plan in r.
+ */
+function planTextPictures(ctx, r, text, {dir, fw, root = ctx.cwd, flag = "description-file"}) {
+  const empty = {text, uploads: [], remote: 0};
+  if (typeof text !== "string" || !text.includes("![")) return empty;
+  const have = picturesOf(fw);
+  const byPath = new Map();
+  const uploads = [];
+  let remote = 0;
+  // Code (fenced or inline) is shown as written, pictures and all: only the text around it is read.
+  const out = text.split(/(```[\s\S]*?```|`[^`\n]*`)/).map((part, i) => i % 2 ? part : part.replace(PICTURE_REF, (all, words, address) => {
+    if (/^image:/i.test(address)) return all;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(address) || address.startsWith("#")) { if (/^https?:/i.test(address)) remote++; return all; }
+    let rel;
+    try { rel = decodeURIComponent(address); } catch { rel = address; }
+    // Relative to the text's file; a leading / from the project (as a repository's README names them).
+    const abs = path.resolve(rel.startsWith("/") ? root : dir, rel.replace(/^\/+/, ""));
+    let id = byPath.get(abs);
+    if (id === undefined) {
+      // A picture that cannot go up (missing, a GIF, too large) does not stop the page: it stays as written (the page
+      // shows its words), and a warning says why.
+      const scratch = newReport(ctx);
+      const plan = planPicture(ctx, scratch, abs, {flag});
+      if (!plan) {
+        const why = scratch.problems[0];
+        r.warn("picture_skipped", `The description names ${path.relative(ctx.cwd, abs) || abs}: ${why ? why.error.replace(/ \(looked at[^)]*\)/, "") : "it cannot go up"}; it stays as written`,
+          {hint: why?.hint ?? "A PNG, JPEG or WebP file up to 2 MB"});
+        byPath.set(abs, null);
+        return all;
+      }
+      const there = have.find(x => x.sha256 === plan.sha) ?? uploads.find(u => u.plan.sha === plan.sha)?.found;
+      if (there) id = there.id;
+      else {
+        id = "new-" + (uploads.length + 1);
+        uploads.push({plan, token: id, found: {id}});
+        r.step(`upload ${plan.describe} into the description (as image:<its id>)`);
+      }
+      byPath.set(abs, id);
+    }
+    return id === null ? all : `![${words}](image:${id})`;
+  })).join("");
+  const count = (fw?.description_images ?? []).length;
+  if (uploads.length && count + uploads.length > TEXT_PICTURES_MAX) {
+    r.problem("conflict", `The description would have ${count + uploads.length} pictures: at most ${TEXT_PICTURES_MAX}`, {field: "description_images",
+      hint: fw ? `Remove the ones it no longer uses: firmware images prune ${fw.code} --dry-run` : "Use fewer pictures", next: fw ? [ctx.run(["firmware", "images", "prune", fw.code, "--dry-run"])] : []});
+  }
+  if (remote) {
+    r.warn("remote_pictures", `The description names ${remote} picture${remote > 1 ? "s" : ""} on other sites: the page shows ${remote > 1 ? "them" : "it"} as a link (it loads pictures from the community only)`,
+      {hint: "Save them in the project (e.g. docs/) and name the files: 203c uploads them"});
+  }
+  return {text: out, uploads, remote};
+}
+
+/** Where a page text's pictures are: beside its file (--description-file, description_file), else the current folder. */
+const textDir = (ctx, file, base) => typeof file === "string" && file ? path.dirname(path.resolve(base ?? ctx.cwd, file)) : ctx.cwd;
+
+/** Uploads a description's new pictures; answers the text with their ids. */
+async function sendTextPictures(ctx, code, plan) {
+  let text = plan.text;
+  for (const u of plan.uploads) {
+    ctx.say(`Uploading ${u.plan.rel} into the description (${size(u.plan.bytes.length)})…`);
+    const done = await uploadPicture(ctx.client, code, u.plan.bytes, u.plan.mime, {place: "description"});
+    text = text.split(`](image:${u.token})`).join(`](image:${done.id})`);
+  }
+  return text;
+}
+
+/**
+ * 203.json's publish.images, the gallery as it should be: ["docs/a.png", {"file": "docs/b.png", "caption": "…"}]. Each
+ * file the firmware has (the same SHA-256) is kept (a caption given is set; one in the description moves up); each other
+ * one goes up; the gallery's others are removed; then the order. Answers the steps to take, or null (nothing to do).
+ */
+function planGallery(ctx, r, list, fw, {base}) {
+  if (list === undefined) return null;
+  if (!Array.isArray(list)) { r.problem("invalid", "publish.images is a list of pictures: [\"docs/a.png\", {\"file\": \"docs/b.png\", \"caption\": \"…\"}]", {field: "images", exit: EXIT.usage}); return null; }
+  if (list.length > GALLERY_MAX) r.problem("invalid", `publish.images names ${list.length} pictures: the gallery holds at most ${GALLERY_MAX}`, {field: "images", exit: EXIT.usage});
+  const have = picturesOf(fw);
+  const want = [];
+  for (const [i, entry] of list.entries()) {
+    const file = typeof entry === "string" ? entry : entry?.file;
+    if (typeof file !== "string" || !file) { r.problem("invalid", `publish.images[${i}] is a path or {"file", "caption"}`, {field: "images", exit: EXIT.usage}); continue; }
+    const caption = typeof entry === "object" && entry.caption !== undefined ? captionOf(r, entry.caption, "images") : undefined;
+    const plan = planPicture(ctx, r, file, {base, flag: "images"});
+    if (!plan) continue;
+    if (want.some(w => w.plan.sha === plan.sha)) { r.problem("invalid", `publish.images names ${plan.rel} twice`, {field: "images", exit: EXIT.usage}); continue; }
+    want.push({plan, caption, found: have.find(x => x.sha256 === plan.sha) ?? null});
+  }
+  const steps = {add: [], move: [], caption: [], remove: [], order: false};
+  for (const w of want) {
+    if (!w.found) { steps.add.push(w); r.step(`add ${w.plan.describe} to the gallery${w.caption ? ` ("${w.caption}")` : ""}`); continue; }
+    if (w.found.place === "description") { steps.move.push(w); r.step(`move ${w.found.id} (${w.plan.rel}) from the description into the gallery`); }
+    if (w.caption !== undefined && w.caption !== (w.found.caption ?? "")) { steps.caption.push(w); r.step(`caption ${w.found.id}: "${w.caption}"`); }
+  }
+  const kept = new Set(want.filter(w => w.found).map(w => w.found.id));
+  for (const x of fw?.images ?? []) {
+    if (kept.has(x.id)) continue;
+    steps.remove.push(x);
+    r.step(`remove ${x.id} from the gallery (not in publish.images)${usesPicture(fw.description, x.id) ? " (the description names it: there it will show nothing)" : ""}`);
+  }
+  const before = (fw?.images ?? []).map(x => x.id).filter(id => kept.has(id));
+  const after = want.filter(w => w.found).map(w => w.found.id);
+  steps.order = steps.add.length > 0 || steps.move.length > 0 || before.join() !== after.join();
+  if (steps.order && !steps.add.length && !steps.move.length) r.step("order the gallery as publish.images lists it");
+  steps.want = want;
+  const any = steps.add.length || steps.move.length || steps.caption.length || steps.remove.length || steps.order;
+  return any ? steps : null;
+}
+
+async function sendGallery(ctx, code, steps) {
+  let fw = null;
+  for (const x of steps.remove) fw = await ctx.client.post(`/firmware/${enc(code)}/images/${enc(x.id)}/delete`);
+  for (const w of steps.move) fw = await ctx.client.post(`/firmware/${enc(code)}/images/${enc(w.found.id)}/edit`, {place: "gallery", ...(w.caption !== undefined ? {caption: w.caption} : {})});
+  for (const w of steps.caption) if (!steps.move.includes(w)) fw = await ctx.client.post(`/firmware/${enc(code)}/images/${enc(w.found.id)}/edit`, {caption: w.caption});
+  for (const w of steps.add) {
+    ctx.say(`Uploading ${w.plan.rel} into the gallery (${size(w.plan.bytes.length)})…`);
+    const done = await uploadPicture(ctx.client, code, w.plan.bytes, w.plan.mime, {caption: w.caption ?? ""});
+    w.found = {id: done.id};
+    fw = done.firmware;
+  }
+  if (steps.order) fw = await ctx.client.post(`/firmware/${enc(code)}/images/order`, {ids: steps.want.map(w => w.found.id)});
+  return fw;
+}
+
 // A fork's default name: "<original> (<you>)", within the 48 characters of a firmware's name (the original's
 // name shortened, never the account's).
 function forkNameOf(original, account) {
@@ -603,9 +963,13 @@ export async function createFirmware(ctx, {fork} = {}) {
   if (o.cover) cover = await planCover(ctx, r, o.cover, null);
   r.step(`make the ${body.visibility ?? "public"} firmware "${body.name}"${body.forked_from ? " as a fork of " + body.forked_from : ""}${body.kind === "launcher" ? " (a launcher)" : ""}`);
   if (cover) r.step(`set its cover to ${cover.describe}`);
+  // The description's local pictures go up once it exists; then the description again with their ids.
+  const pictures = planTextPictures(ctx, r, body.description, {dir: textDir(ctx, o.description_file, ctx.cwd), fw: null});
+  if (body.description !== undefined) body.description = pictures.text;
   if (o.dry_run) return dryOut(ctx, r);
   if (r.problems.length) failWith(ctx, r);
   let fw = await ctx.op("firmware_create", body);
+  if (pictures.uploads.length) fw = await ctx.op("firmware_edit", {code: fw.code, description: await sendTextPictures(ctx, fw.code, pictures)});
   if (cover) fw = await uploadCover(ctx.client, fw.code, cover.bytes, cover.mime);
   return {json: withAdvice(fw, r), text: `Made ${fw.name}: code ${fw.code}\nPage: ${firmwareUrl(ctx, fw.code)}\n` + adviceText(r) +
     `Publish a version: ${ctx.run(["publish", "--firmware", fw.code, "--bin", "build/app.bin", "--dry-run"], {json: false})}`};
@@ -643,6 +1007,9 @@ export async function editFirmware(ctx) {
   if (Object.keys(channels).length) body.channels = channels;
   let cover = null;
   if (o.cover && fw) cover = await planCover(ctx, r, o.cover, fw);
+  // The description's local pictures: the ones it has as image:<id>, the others go up first (COMMUNITY.md "Pictures").
+  const pictures = fw ? planTextPictures(ctx, r, body.description, {dir: textDir(ctx, o.description_file, ctx.cwd), fw}) : {uploads: []};
+  if (fw && body.description !== undefined) body.description = pictures.text;
   if (!Object.keys(body).length && !cover && !r.problems.length) {
     throw ctx.usage("Nothing to change: give the fields to change", {hint: "e.g. --summary, --description-file, --tags, --source-url, --cover, --dev",
       next: [ctx.run(["firmware", "edit", "--help"], {json: false})]});
@@ -655,6 +1022,7 @@ export async function editFirmware(ctx) {
   }
   if (o.dry_run) return dryOut(ctx, r);
   if (r.problems.length) failWith(ctx, r);
+  if (pictures.uploads.length) body.description = await sendTextPictures(ctx, code, pictures);
   let updated = Object.keys(body).length ? await ctx.op("firmware_edit", {code, ...body}) : fw;
   if (cover) updated = await uploadCover(ctx.client, code, cover.bytes, cover.mime);
   return {json: withAdvice(updated, r), text: `Changed ${updated.name} (${code}): ${firmwareUrl(ctx, code)}\n` + adviceText(r).trimEnd()};
@@ -878,7 +1246,8 @@ export async function publish(ctx, {mode}) {
       delete pageSrc.source_url; delete pageSrc.clone_url;
     }
   }
-  const page = pageFields(ctx, r, pageSrc, {creating, name: fw?.name ?? nameGiven, base: m && Object.keys(pageSrc).some(k => o[k] === undefined) ? manifest.dir : ctx.cwd});
+  const pageBase = m && Object.keys(pageSrc).some(k => o[k] === undefined) ? manifest.dir : ctx.cwd;
+  const page = pageFields(ctx, r, pageSrc, {creating, name: fw?.name ?? nameGiven, base: pageBase});
   const priv = creating ? privacy(ctx, r, {private: o.private ?? m.private, password: o.password}, {creating: true}) : {};
   if (creating && account && page.name) await nameCollisions(ctx, r, page.name, account, {fork: fork?.made ? fork.from.code : null});
 
@@ -1080,6 +1449,13 @@ export async function publish(ctx, {mode}) {
   // changes them on the site or with their own sign-in).
   if (trusted && coverGiven.value !== undefined) ctx.note("the cover is left as it is (a trusted-publishing credential publishes versions only)");
   const cover = coverGiven.value !== undefined && account && !trusted ? await planCover(ctx, r, coverGiven.value, fw, {base: coverGiven.base}) : null;
+  // Pictures (COMMUNITY.md "Pictures"): the description's local ones go up as its own (known ones by their SHA-256), and
+  // 203.json's publish.images is the gallery. A trusted-publishing credential changes neither.
+  const textPictures = account && !trusted ? planTextPictures(ctx, r, page.description, {dir: textDir(ctx, pageSrc.description_file, pageBase), fw, root: manifest.dir}) : {uploads: []};
+  if (account && !trusted && page.description !== undefined) page.description = textPictures.text;
+  const imagesGiven = from("images");
+  if (trusted && imagesGiven.value !== undefined) ctx.note("the gallery is left as it is (a trusted-publishing credential publishes versions only)");
+  const gallery = account && !trusted ? planGallery(ctx, r, imagesGiven.value, fw, {base: imagesGiven.base}) : null;
   let pageChanges = fw ? Object.fromEntries(Object.entries(page).filter(([k, v]) => !samePageValue(v, fw[k]))) : {};
   if (trusted && Object.keys(pageChanges).length) {
     ctx.note(`the page's ${Object.keys(pageChanges).join(", ")} ${Object.keys(pageChanges).length > 1 ? "differ" : "differs"} from ${path.basename(manifest.file ?? "the flags")}: left as they are ` +
@@ -1195,6 +1571,7 @@ export async function publish(ctx, {mode}) {
     fw = await ctx.client.post("/firmware", {...page, ...priv, ...(channels ? {channels} : {}), ...(kind === "launcher" && !fork ? {kind} : {}),
       ...(fork?.made ? {forked_from: fork.forked_from} : {})});
     fwCode = fw.code;
+    if (textPictures.uploads.length) fw = await ctx.client.post(`/firmware/${enc(fwCode)}/edit`, {description: await sendTextPictures(ctx, fwCode, textPictures)});
     ctx.say(`  code ${fw.code}${fork?.made ? ` (a fork of ${fork.from.name} ${fork.from.code})` : ""}`);
     if (fork) fork.code = fw.code;
   }
@@ -1205,11 +1582,13 @@ export async function publish(ctx, {mode}) {
     if (bound && bound !== fw.code) { git(["config", "203c.firmware", fw.code], {cwd: ctx.cwd}); ctx.note(`this clone now publishes to ${fw.code} (git config 203c.firmware)`); }
   }
   if (!creating) {
+    if (textPictures.uploads.length && pageChanges.description !== undefined) pageChanges.description = await sendTextPictures(ctx, fwCode, textPictures);
     const edit = {...pageChanges};
     if (channel !== "stable" && !fw.channels?.[channel]) edit.channels = {[channel]: true};
     if (Object.keys(edit).length) { ctx.say(`Updating ${fw.name}'s page (${Object.keys(edit).join(", ")})…`); fw = await ctx.client.post(`/firmware/${enc(fwCode)}/edit`, edit); }
   }
   if (cover) { ctx.say(`Uploading the cover (${size(cover.bytes.length)})…`); fw = await uploadCover(ctx.client, fwCode, cover.bytes, cover.mime); }
+  if (gallery) { ctx.say("Setting the gallery (publish.images)…"); fw = (await sendGallery(ctx, fwCode, gallery)) ?? fw; }
   let version, uploaded = [], simUploaded = false, sourceUploaded = null;
   if (done) version = done;
   else if (resume?.kind === "checking") version = resume.version;
@@ -1267,6 +1646,8 @@ export async function publish(ctx, {mode}) {
     fork: fork ? {from: fork.from, version: fork.version, code: fwCode, made: fork.made, why: fork.why} : null,
     source: archive ? {commit: archive.commit, files: archive.inspected.entries, size: archive.bytes.length, sha256: archive.sha256, uploaded: !!sourceUploaded} : null,
     version: compactVersion(version), uploaded,
+    pictures: {description_uploaded: textPictures.uploads.length, gallery: gallery ? {added: gallery.add.length, moved: gallery.move.length,
+      captioned: gallery.caption.length, removed: gallery.remove.length, ordered: gallery.order} : null},
     simulator, urls: {firmware: firmwareUrl(ctx, fwCode), version: versionUrl(ctx, version.code), ...(simulator.play_url ? {play: simulator.play_url} : {})},
     install: `In the Launcher: Code ${fwCode} installs the newest ${channel}; ${version.code} installs exactly ${label}`,
     warnings: r.warnings.map(clean), notes: ctx.notes, checklist: list,
@@ -1627,6 +2008,8 @@ function checklistOf(ctx, fw, newestStable) {
     {item: "a summary that says what it does (≤ 100 characters)", ok: !!fw.summary && !summaryRepeatsName(fw.summary, fw.name), fix: run("edit", code, "--summary", "<one line: what it does>")},
     {item: "a cover (a 16:9 picture; a stable version needs one)", ok: !!(fw.cover || fw.inherited_cover || fw.screen), before_stable: fw.kind !== "launcher",
       fix: run("cover", code, "cover.png"), ...(coverNow ? {now: coverNow, better: run("cover", code, "cover.png")} : {})},
+    // The gallery (COMMUNITY.md "Pictures"): shown large above the description; nothing shows without it.
+    {item: "pictures above the description (screenshots or photos of it running)", ok: (fw.images ?? []).length > 0, fix: run("images", "add", code, "docs/home.png", "--caption", "<what it shows>")},
     {item: `a description of 80 characters or more (what it is, how to use it, the keys)${(fw.description ?? "").trim() && (fw.description ?? "").trim().length < 80 ? `: it has ${(fw.description ?? "").trim().length}` : ""}`,
       ok: (fw.description ?? "").trim().length >= 80, fix: run("edit", code, "--description-file", "docs/page.md")},
     {item: "a category tag (" + FIRMWARE_CATEGORIES.join(", ") + ")", ok: (fw.tags ?? []).some(t => FIRMWARE_CATEGORIES.includes(t)), fix: run("edit", code, "--tags", "groovebox")},

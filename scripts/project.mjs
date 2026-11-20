@@ -11,7 +11,7 @@ export const PROJECT_FILE = "203.json";
 export const LEGACY_FILE = "203c.json";
 export const KEYS = ["format", "name", "code", "version", "author", "summary", "tags", "devices", "source", "license", "forked_from",
   "publish_source", "publish", "description_file"];
-export const PUBLISH_KEYS = ["channel", "bins", "bin", "notes_file", "cover", "description_file", "notices", "sim", "project", "private", "launcher"];
+export const PUBLISH_KEYS = ["channel", "bins", "bin", "notes_file", "cover", "description_file", "images", "notices", "sim", "project", "private", "launcher"];
 const ORDER = ["$schema", "format", "name", "code", "version", "author", "summary", "tags", "devices", "source", "license", "forked_from",
   "publish_source", "publish"];
 
@@ -85,6 +85,16 @@ export function checkProject(data) {
   if (data.publish !== undefined) {
     if (!data.publish || typeof data.publish !== "object" || Array.isArray(data.publish)) add("publish", "203.json: \"publish\" is an object");
     else for (const key of Object.keys(data.publish)) if (!PUBLISH_KEYS.includes(key)) add("publish", `203.json: unknown key publish.${key}`, "publish takes: " + PUBLISH_KEYS.join(", "));
+    // The gallery (COMMUNITY.md "Pictures"): at most 9, each a path or {"file", "caption"}.
+    const images = data.publish && typeof data.publish === "object" ? data.publish.images : undefined;
+    if (images !== undefined) {
+      const entry = x => typeof x === "string" ? !!x.trim() : !!x && typeof x === "object" && !Array.isArray(x) && typeof x.file === "string" && !!x.file.trim() &&
+        Object.keys(x).every(k => ["file", "caption"].includes(k)) && (x.caption === undefined || (typeof x.caption === "string" && [...x.caption].length <= 60));
+      if (!Array.isArray(images) || images.length > 9 || !images.every(entry)) {
+        add("publish", "203.json: publish.images is the gallery: up to 9 pictures, each a path or {\"file\": \"docs/a.png\", \"caption\": \"≤ 60 characters\"}",
+          "e.g. \"images\": [\"docs/home.png\", {\"file\": \"docs/seq.png\", \"caption\": \"The sequencer\"}]");
+      }
+    }
   }
   return problems;
 }
@@ -111,7 +121,7 @@ export function manifestOf(data, {legacy = false} = {}) {
   if (data.name) out.name = data.name;
   for (const key of ["summary", "tags", "license", "version"]) if (data[key] !== undefined && data[key] !== null) out[key] = data[key];
   if (data.source) { out.source_url = data.source; const clone = cloneUrlOf(data.source); if (clone) out.clone_url = clone; }
-  for (const key of ["channel", "bins", "bin", "notes_file", "cover", "description_file", "notices", "sim", "project", "private", "launcher"]) {
+  for (const key of ["channel", "bins", "bin", "notes_file", "cover", "description_file", "images", "notices", "sim", "project", "private", "launcher"]) {
     if (p[key] !== undefined) out[key] = p[key];
   }
   if (data.description_file !== undefined && out.description_file === undefined) out.description_file = data.description_file;

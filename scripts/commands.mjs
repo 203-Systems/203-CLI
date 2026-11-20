@@ -2,7 +2,7 @@
 // operation of lib.mjs, or a function of publish.mjs). The parser, --help, unknown-flag suggestions and
 // reference/cli.md all come from this table. Part of the Agent Skill skill/203-community.
 import {doctor, publish, createFirmware, editFirmware, setCover, checklist, dryRunUpload, init, forkFirmware, cloneFirmware, editMe,
-  simBuild, simUpload, simCheck, basedOn, sourceUpload, sourceCheck} from "./publish.mjs";
+  simBuild, simUpload, simCheck, basedOn, sourceUpload, sourceCheck, listPictures, addPictures, editPicture, removePictures, orderPictures, prunePictures} from "./publish.mjs";
 import {CHANNELS, ENGINES, LICENSES} from "./checks.mjs";
 import {recoverDevice} from "./recover.mjs";
 import {flashDevice} from "./flash.mjs";
@@ -26,7 +26,7 @@ const FORCE = {force: B("Go on despite a quality warning (only when that is real
 const FIRMWARE_FIELDS = {
   name: V("NAME", "The firmware's name, 1-64 characters"),
   summary: V("TEXT", "The cover blurb, 1-100 characters: what it does (not just the name)"),
-  description: V("TEXT", "The page text (Markdown)"), "description-file": V("PATH", "The page text from a Markdown file"),
+  description: V("TEXT", "The page text (Markdown)"), "description-file": V("PATH", "The page text from a Markdown file; the local pictures it names go up as the description's (help pictures)"),
   tags: V("a,b", "Up to 8 tags, comma-separated; one category: instrument, groovebox, tool, network, game", {type: "list"}),
   "source-url": V("URL", "https link to the source (e.g. the GitHub repository)"), "clone-url": V("URL", "https://….git for git clone"),
   license: V("SPDX", "The licence: an SPDX identifier (MIT, Apache-2.0, GPL-3.0-only, …) or proprietary"),
@@ -141,7 +141,24 @@ cmd("firmware edit CODE", "Change a firmware's page or settings (only the fields
 cmd("firmware cover CODE [IMAGE]", "Set a firmware's cover picture (PNG/JPEG/WebP, 16:9, ≤ 2 MB); --remove takes it away", {group: "Publishing",
   flags: {file: V("IMAGE", "The picture (the same as IMAGE)"), remove: B("Remove the cover (a fork then shows its original's, else the screen after boot shows, else the grey default)"), ...DRY, ...YES}, run: setCover, write: true, topic: "cover",
   examples: ["firmware cover K7M2QX cover.png --json", "firmware cover K7M2QX --file cover.png --dry-run --json", "firmware cover K7M2QX --remove --yes --json"]});
-cmd("firmware checklist CODE", "What a firmware's page has and lacks (cover, summary, description, links, notes), with the command for each", {group: "Publishing",
+// Pictures (COMMUNITY.md "Pictures"): the gallery shown large above the description, and the description's own.
+cmd("firmware images list CODE", "A firmware's pictures: the gallery (shown large above the description, at most 9, in order) and the description's own (at most 20), each with its id, caption, size, the reference to put in the description and whether it is there", {group: "Publishing",
+  run: listPictures, topic: "pictures", examples: ["firmware images list K7M2QX --json"]});
+cmd("firmware images add CODE IMAGE...", "Add pictures (PNG/JPEG/WebP, ≤ 2 MB each) to the gallery above the description, or with --description to the description (it prints each one's ![](image:ID) to put in the text); a picture it has already is skipped", {group: "Publishing",
+  flags: {caption: V("TEXT", "One line under the picture (≤ 60 characters; one picture only)"), description: B("Into the description (placed by its text: ![words](image:ID)), not the gallery"), ...DRY},
+  run: addPictures, write: true, topic: "pictures",
+  examples: ['firmware images add K7M2QX docs/home.png --caption "The home screen" --json', "firmware images add K7M2QX docs/seq.png docs/mix.png --dry-run --json",
+    "firmware images add K7M2QX docs/signal-flow.png --description --json"]});
+cmd("firmware images edit CODE ID", "A picture's caption (\"\": none) or place: the gallery or the description", {group: "Publishing",
+  flags: {caption: V("TEXT", "One line under the picture (≤ 60 characters; \"\" removes it)"), place: V("gallery|description", "Move it: into the gallery it goes last", {choices: ["gallery", "description"]}), ...DRY},
+  run: editPicture, write: true, topic: "pictures", examples: ['firmware images edit K7M2QX 7ces8nvr --caption "Sixteen steps a page" --json', "firmware images edit K7M2QX 7ces8nvr --place description --json"]});
+cmd("firmware images remove CODE ID...", "Remove pictures (the description keeps its words where it named one: there it shows nothing)", {group: "Publishing",
+  flags: {...DRY, ...YES}, run: removePictures, write: true, topic: "pictures", examples: ["firmware images remove K7M2QX 7ces8nvr --dry-run --json", "firmware images remove K7M2QX 7ces8nvr --yes --json"]});
+cmd("firmware images order CODE ID...", "The gallery's order: these ids first, in this order, the others after them as they were", {group: "Publishing",
+  flags: {...DRY}, run: orderPictures, write: true, topic: "pictures", examples: ["firmware images order K7M2QX q4hzuufx 7ces8nvr --json"]});
+cmd("firmware images prune CODE", "Remove the description's pictures its text no longer uses", {group: "Publishing",
+  flags: {...DRY, ...YES}, run: prunePictures, write: true, topic: "pictures", examples: ["firmware images prune K7M2QX --dry-run --json", "firmware images prune K7M2QX --yes --json"]});
+cmd("firmware checklist CODE", "What a firmware's page has and lacks (cover, pictures, summary, description, links, notes), with the command for each", {group: "Publishing",
   run: checklist, topic: "page", examples: ["firmware checklist K7M2QX --json"]});
 cmd("versions simulator CODE VCODE", "Upload a version's simulator version (the same as sim upload VCODE DIR)", {group: "Publishing",
   flags: {dir: V("PATH", "The folder of the web build"), "no-wait": B("Do not wait for its check"),
@@ -663,6 +680,7 @@ export const ALIASES = {
   signin: "login", "sign-in": "login", auth: "login", authenticate: "login", profile: "me edit", status: "doctor", check: "doctor", health: "doctor", version: "versions",
   fw: "firmware", firmwares: "firmware", sound: "sounds", project: "projects", work: "works", model: "models", post: "posts", comment: "comments",
   request: "requests", device: "devices", merge: "merges", cover: "firmware cover", list: "firmware mine", info: "doctor",
+  images: "firmware images", pictures: "firmware images", gallery: "firmware images", screenshots: "firmware images",
   checkout: "clone", "git-clone": "clone", remix: "fork", "based-on": "firmware based-on", lineage: "firmware based-on", spec: "rules", guide: "rules",
   quota: "quotas", limits: "quotas", lookup: "firmware lookup", archive: "source upload",
   simulator: "sim", emulator: "sim", wasm: "sim build", web: "sim build", play: "sim check",

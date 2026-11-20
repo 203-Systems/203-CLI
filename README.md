@@ -12,7 +12,7 @@ Everything a developer, or a coding agent, needs to make firmware for 203 System
 community:
 
 - **`203c`**, the community's command line: sign in, start or fork a firmware project, publish versions from a
-  laptop or from CI (trusted publishing, no stored secret), set the page and the cover, install a firmware over a
+  laptop or from CI (trusted publishing, no stored secret), set the page, the cover and its pictures, install a firmware over a
   USB cable, answer requests, share sound packs, works and 3D models. Every answer is JSON with `--json`, every
   error says what to run next: it is the tool AI agents use.
 - **A development guide for each product**: what to build on, the toolchain, how to try a build without breaking

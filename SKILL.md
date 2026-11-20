@@ -77,6 +77,8 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | your versions, a version's state | `versions list CODE --json` (`--channel beta`, `--target cardenza`), `versions show VCODE --json`, `versions check VCODE --json` |
 | the simulator version (Play) of a version | `sim build --json`, then `sim upload VCODE build-web/site --json`; `sim check VCODE --json` (workflow 6) |
 | set the cover picture | `firmware cover CODE cover.png --json` |
+| show screenshots large above the description (the gallery, like a store page) | `firmware images add CODE shot.png --caption "…" --json` (at most 9; `firmware images list|edit|order|remove CODE …`) |
+| put pictures in the description | `firmware images add CODE flow.png --description --json`, then `![words](image:ID)` in the text; or name local files in the description file (`![](docs/shot.png)`): `--description-file` uploads them (`help pictures`) |
 | improve the page (summary, description, links, tags) | `firmware checklist CODE --json`, then the `fix` commands it lists |
 | start a firmware project / its 203.json | `rules`, then `init --json` (writes 203.json from CMake, version.txt, git, LICENSE) |
 | change someone's firmware | `fork CODE DIR --json` (clones it and writes 203.json with `forked_from`; the same as `fork CODE --clone DIR`), build in DIR, then `publish --dry-run --json` inside DIR |
@@ -91,7 +93,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | an admin action (`admin …`) | an admin sign-in has the admin scope: `login --admin --json` (exit 4 `admin_scope_required` says so) |
 | anything else | `help start`, `help <topic>`, `<command> --help --json` |
 
-Topics: `help start|new|project|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|cover|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
+Topics: `help start|new|project|publish|sim|ci|manifest|link|fork|source|rules|channels|versions|checks|page|cover|pictures|sounds|projects|works|models|signin|errors|devices|requests|launchers|admin`.
 Every command with its flags: `reference/cli.md`; every endpoint: `reference/api.md`; what the site does and the
 command for each: `reference/parity.md`; the firmware project rules: `reference/firmware-project.md` (`203c rules`).
 
@@ -231,8 +233,10 @@ Tell the user the firmware code (the Launcher installs it), the version code, th
 # (a fork without a picture shows its original's, marked Fork: ok, with "now" and "better", the command for its own)
 203c firmware cover K7M2QX docs/cover.png --dry-run --json      # PNG/JPEG/WebP, 16:9, ≤ 2 MB
 203c firmware cover K7M2QX docs/cover.png --json
+203c firmware images add K7M2QX docs/home.png --caption "The home screen" --json   # shown large above the description
 203c firmware edit K7M2QX --description-file docs/page.md --tags groovebox,synth \
   --source-url https://github.com/me/my-synth --clone-url https://github.com/me/my-synth.git --json
+# docs/page.md may name local pictures, ![The grid](grid.png): they go up as the description's (once) and show there
 ```
 
 ### 4. Share a sound pack, a project or a work (official firmware only)

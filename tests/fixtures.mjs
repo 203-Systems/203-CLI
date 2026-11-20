@@ -129,7 +129,7 @@ export async function standInApi(routes) {
         res.writeHead(status, {"content-type": type});
         res.end(type === "application/json" ? JSON.stringify(data) : data);
       };
-      if (await routes(req, send, body) === false) send(404, {error: "Not found", code: "not_found"});
+      if (await routes(req, send, body, Buffer.concat(chunks)) === false) send(404, {error: "Not found", code: "not_found"});
     });
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));

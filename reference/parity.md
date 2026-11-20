@@ -54,6 +54,8 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203c` is the in
 | Edit: licence | `firmware edit CODE --license MIT --json`, or 203.json `license` |
 | Edit: made from ("based on") | `firmware based-on CODE ORIGIN --version 0.3.0 --json` (`none` clears it) |
 | Cover (/new's cover step, the edit page; a mod keeps its original's) | `firmware cover CODE cover.png --json` (`--remove`); `publish --cover cover.png` |
+| 图片 Pictures (/new's step, the edit page): the gallery shown large above the description, up to 9 with captions, in order | `firmware images add CODE shot.png --caption "…" --json`; `firmware images list|edit|order|remove CODE …`; 203.json `publish.images` (publish makes the gallery that list) |
+| 插入图片 in the description (the edit page, /new): pictures placed by the text, `![words](image:ID)`, up to 20 | `firmware images add CODE flow.png --description --json` (prints the reference); `--description-file` uploads the local pictures it names; `firmware images prune CODE` |
 | Release page: 这次不加封面 (a stable version without any cover) | `publish … --without-cover` (else `cover_required`) |
 | Release a version (BINs, notes, web build) | `publish …` / `versions publish CODE …` (the simulator version with it) |
 | 开发 › 自动发布 (Trusted publishing): linked repositories, add, remove | `firmware publishers list CODE`, `firmware publishers add CODE --repository OWNER/NAME --workflow FILE [--environment ENV] [--channels …]`, `firmware publishers remove CODE ID --yes`; the run signs in with `login --github-oidc --firmware CODE` |

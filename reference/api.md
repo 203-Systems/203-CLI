@@ -121,6 +121,11 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `POST /firmware/{code}/cover` | A signed upload for a new cover (PNG, JPEG or WebP, up to 2 MB; owner, admin) — body: mime, size | write | CoverUpload |
 | `POST /firmware/{code}/cover/done` | The cover is uploaded: check it, it replaces the one shown | write | Firmware |
 | `POST /firmware/{code}/cover/delete` | Remove the cover (a fork then shows its original's, else the screen after boot, else the grey default) | write | Firmware |
+| `POST /firmware/{code}/images` | A signed upload for a new picture (PNG, JPEG or WebP, up to 2 MB; place gallery, at most 9, or description, at most 20; owner, admin) — body: mime, size, caption?, place? | write | ImageUpload |
+| `POST /firmware/{code}/images/order` | The gallery in a new order (every gallery picture's id once) — body: ids | write | Firmware |
+| `POST /firmware/{code}/images/{id}/done` | The picture is uploaded: check it, it is shown after the others of its place | write | Firmware |
+| `POST /firmware/{code}/images/{id}/edit` | A picture's caption (up to 60 characters; empty: none) or place (gallery or description) — body: caption?, place? | write | Firmware |
+| `POST /firmware/{code}/images/{id}/delete` | Remove a picture (also one still being uploaded) | write | Firmware |
 | `POST /firmware/{code}/delete` | Delete a firmware (owner, admin); its forks stay — body: confirm | write | Status |
 | `GET /firmware/{code}/publishers` | Trusted publishers: the GitHub repositories whose Actions runs may publish its versions (owner, admin) | read | PublisherList |
 | `POST /firmware/{code}/publishers` | Link a trusted publisher: a GitHub repository, its workflow file and environment, the channels (owner, admin; at most 5) — body: provider?, repository, workflow?, environment?, channels? | write | 201 Publisher |

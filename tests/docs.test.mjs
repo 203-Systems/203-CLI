@@ -60,9 +60,10 @@ test("relative links in the Markdown resolve", () => {
   const markdown = repositoryFiles().filter(file => file.endsWith(".md"));
   assert.ok(markdown.length >= 8);
   for (const file of markdown) {
-    const text = read(file).replace(/```[\s\S]*?```/g, "");
+    // Code (fenced or inline) is not a link; image:<id> names a firmware's own picture on the community.
+    const text = read(file).replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
     for (const [, target] of text.matchAll(/\]\(([^)\s]+)\)/g)) {
-      if (/^(https?:|mailto:|#)/.test(target)) continue;
+      if (/^(https?:|mailto:|image:|#)/.test(target)) continue;
       const resolved = path.join(ROOT, path.dirname(file), target.split("#")[0]);
       assert.ok(fs.existsSync(resolved), `${file}: ${target}`);
     }

@@ -335,6 +335,21 @@ export async function uploadCover(client, code, bytes, mime) {
   return await client.post(`/firmware/${enc(code)}/cover/done`);
 }
 
+// A picture (COMMUNITY.md "Pictures"): a signed upload into the gallery (above the description, at most 9) or the
+// description (place "description", at most 20: its text places it, ![words](image:<id>)), then done. Answers
+// {id, firmware}: the picture's id and the Firmware after it.
+export async function uploadPicture(client, code, bytes, mime, {caption = "", place = "gallery"} = {}) {
+  const made = await client.post(`/firmware/${enc(code)}/images`, {mime, size: bytes.length, ...(caption ? {caption} : {}), ...(place !== "gallery" ? {place} : {})});
+  try {
+    await put(client, made.upload, bytes);
+    return {id: made.image.id, firmware: await client.post(`/firmware/${enc(code)}/images/${enc(made.image.id)}/done`)};
+  } catch (error) {
+    // A picture that did not go up gives its place back.
+    await client.post(`/firmware/${enc(code)}/images/${enc(made.image.id)}/delete`).catch(() => {});
+    throw error;
+  }
+}
+
 // A version: a draft, each device's BIN to its upload ticket, then publish.
 export async function publishVersion(client, {code, channel = "stable", version, bins, notices, notes, source_commit, source_url,
   wait = true, poll_seconds = 5, timeout_seconds = 1200, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
@@ -466,6 +481,23 @@ op("firmware_cover", "Set a firmware's cover from a local picture (PNG, JPEG or 
     return uploadCover(c, x.code, bytes, mime);
   }, {write: true});
 op("firmware_cover_delete", "Remove a firmware's cover (the screen after boot shows, else a plain box)", {code}, ["code"], (c, x) => c.post(`/firmware/${enc(x.code)}/cover/delete`), {write: true});
+// Pictures (COMMUNITY.md "Pictures"): the gallery above the description (Firmware.images, at most 9) and the description's
+// (Firmware.description_images, at most 20; ![words](image:<id>) in the description places one).
+const pictureId = s("A picture's id (8 characters; firmware_show lists images and description_images)");
+op("firmware_image_add", "Add a picture from a local file (PNG, JPEG or WebP, up to 2 MB) to a firmware's gallery or, place description, to its description (owner, admin)",
+  {code, file: s("Local path of the picture"), caption: s("Up to 60 characters"), place: s("gallery (default) or description", {enum: ["gallery", "description"]})},
+  ["code", "file"], async (c, x) => {
+    const bytes = readFile(x.file);
+    const mime = bytes[0] === 0x89 ? "image/png" : bytes[0] === 0xff ? "image/jpeg" : "image/webp";
+    return (await uploadPicture(c, x.code, bytes, mime, {caption: x.caption ?? "", place: x.place ?? "gallery"})).firmware;
+  }, {write: true});
+op("firmware_image_edit", "A picture's caption (\"\": none) or place (gallery or description) (owner, admin)",
+  {code, id: pictureId, caption: s("Up to 60 characters; empty: none"), place: s("gallery or description", {enum: ["gallery", "description"]})}, ["code", "id"],
+  (c, x) => c.post(`/firmware/${enc(x.code)}/images/${enc(x.id)}/edit`, pick(x, ["caption", "place"])), {write: true});
+op("firmware_image_delete", "Remove a picture (owner, admin)", {code, id: pictureId}, ["code", "id"],
+  (c, x) => c.post(`/firmware/${enc(x.code)}/images/${enc(x.id)}/delete`), {write: true});
+op("firmware_images_order", "The gallery in a new order: every gallery picture's id once (owner, admin)", {code, ids: a("Picture ids")}, ["code", "ids"],
+  (c, x) => c.post(`/firmware/${enc(x.code)}/images/order`, {ids: x.ids}), {write: true});
 op("firmware_tree", "The fork tree around a firmware", {code}, ["code"], (c, x) => c.get(`/firmware/${enc(x.code)}/tree`));
 // Trusted publishing (COMMUNITY.md "Trusted publishing"): the GitHub repositories whose Actions runs may publish a firmware's versions.
 op("publishers_list", "A firmware's trusted publishers: the GitHub repositories (workflow, environment, channels, last use) whose Actions runs publish its versions without a secret (owner, admin)",

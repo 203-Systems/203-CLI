@@ -278,7 +278,7 @@ Publish a firmware version in one go: makes the firmware if needed, uploads, wai
 - `--yes` Yes to what needs it (turn a channel on, a name someone else uses, no simulator version when it cannot be built)
 - `--summary TEXT` The cover blurb, 1-100 characters: what it does (not just the name)
 - `--description TEXT` The page text (Markdown)
-- `--description-file PATH` The page text from a Markdown file
+- `--description-file PATH` The page text from a Markdown file; the local pictures it names go up as the description's (help pictures)
 - `--tags a,b` Up to 8 tags, comma-separated; one category: instrument, groovebox, tool, network, game
 - `--cover IMAGE` A cover picture (PNG/JPEG/WebP, 16:9, ≤ 2 MB)
 - `--clone-url URL` https://….git for git clone
@@ -327,7 +327,7 @@ Make a firmware (its page); publish versions to it with publish (sign-in with wr
 - `--name NAME` The firmware's name, 1-64 characters
 - `--summary TEXT` The cover blurb, 1-100 characters: what it does (not just the name)
 - `--description TEXT` The page text (Markdown)
-- `--description-file PATH` The page text from a Markdown file
+- `--description-file PATH` The page text from a Markdown file; the local pictures it names go up as the description's (help pictures)
 - `--tags a,b` Up to 8 tags, comma-separated; one category: instrument, groovebox, tool, network, game
 - `--source-url URL` https link to the source (e.g. the GitHub repository)
 - `--clone-url URL` https://….git for git clone
@@ -352,7 +352,7 @@ Change a firmware's page or settings (only the fields given) (sign-in with write
 - `--name NAME` The firmware's name, 1-64 characters
 - `--summary TEXT` The cover blurb, 1-100 characters: what it does (not just the name)
 - `--description TEXT` The page text (Markdown)
-- `--description-file PATH` The page text from a Markdown file
+- `--description-file PATH` The page text from a Markdown file; the local pictures it names go up as the description's (help pictures)
 - `--tags a,b` Up to 8 tags, comma-separated; one category: instrument, groovebox, tool, network, game
 - `--source-url URL` https link to the source (e.g. the GitHub repository)
 - `--clone-url URL` https://….git for git clone
@@ -384,9 +384,66 @@ Set a firmware's cover picture (PNG/JPEG/WebP, 16:9, ≤ 2 MB); --remove takes i
     203c firmware cover K7M2QX --file cover.png --dry-run --json
     203c firmware cover K7M2QX --remove --yes --json
 
+### `203c firmware images list CODE`
+
+A firmware's pictures: the gallery (shown large above the description, at most 9, in order) and the description's own (at most 20), each with its id, caption, size, the reference to put in the description and whether it is there
+
+    203c firmware images list K7M2QX --json
+
+### `203c firmware images add CODE IMAGE...`
+
+Add pictures (PNG/JPEG/WebP, ≤ 2 MB each) to the gallery above the description, or with --description to the description (it prints each one's ![](image:ID) to put in the text); a picture it has already is skipped (sign-in with write)
+
+- `--caption TEXT` One line under the picture (≤ 60 characters; one picture only)
+- `--description` Into the description (placed by its text: ![words](image:ID)), not the gallery
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c firmware images add K7M2QX docs/home.png --caption "The home screen" --json
+    203c firmware images add K7M2QX docs/seq.png docs/mix.png --dry-run --json
+    203c firmware images add K7M2QX docs/signal-flow.png --description --json
+
+### `203c firmware images edit CODE ID`
+
+A picture's caption ("": none) or place: the gallery or the description (sign-in with write)
+
+- `--caption TEXT` One line under the picture (≤ 60 characters; "" removes it)
+- `--place gallery|description` Move it: into the gallery it goes last
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c firmware images edit K7M2QX 7ces8nvr --caption "Sixteen steps a page" --json
+    203c firmware images edit K7M2QX 7ces8nvr --place description --json
+
+### `203c firmware images remove CODE ID...`
+
+Remove pictures (the description keeps its words where it named one: there it shows nothing) (sign-in with write)
+
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+- `--yes` Yes, do it (it cannot be undone)
+
+    203c firmware images remove K7M2QX 7ces8nvr --dry-run --json
+    203c firmware images remove K7M2QX 7ces8nvr --yes --json
+
+### `203c firmware images order CODE ID...`
+
+The gallery's order: these ids first, in this order, the others after them as they were (sign-in with write)
+
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203c firmware images order K7M2QX q4hzuufx 7ces8nvr --json
+
+### `203c firmware images prune CODE`
+
+Remove the description's pictures its text no longer uses (sign-in with write)
+
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+- `--yes` Yes, do it (it cannot be undone)
+
+    203c firmware images prune K7M2QX --dry-run --json
+    203c firmware images prune K7M2QX --yes --json
+
 ### `203c firmware checklist CODE`
 
-What a firmware's page has and lacks (cover, summary, description, links, notes), with the command for each
+What a firmware's page has and lacks (cover, pictures, summary, description, links, notes), with the command for each
 
     203c firmware checklist K7M2QX --json
 
@@ -574,7 +631,7 @@ Fork a firmware (or a version) into a new firmware of yours (sign-in with write)
 - `--name NAME` The firmware's name, 1-64 characters (required)
 - `--summary TEXT` The cover blurb, 1-100 characters: what it does (not just the name) (required)
 - `--description TEXT` The page text (Markdown)
-- `--description-file PATH` The page text from a Markdown file
+- `--description-file PATH` The page text from a Markdown file; the local pictures it names go up as the description's (help pictures)
 - `--private` Only people with the code and the password see it
 - `--password P` The download password of a private firmware (8-64 characters)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
@@ -1942,6 +1999,7 @@ Every API operation with its JSON schema (for programs)
 - `203c help checks` — When the checks send a version back (exit 5)
 - `203c help page` — A good firmware page
 - `203c help cover` — Covers
+- `203c help pictures` — Pictures: the gallery above the description, and pictures in the description
 - `203c help sounds` — Sound packs (official firmware only; the section may not be open yet)
 - `203c help projects` — Projects (official firmware only)
 - `203c help works` — Works (official firmware only)

@@ -1,8 +1,8 @@
 # Tutorials (教程): the format
 
 Every firmware on the 203 community can have **tutorials**: how to use it, on the device, step by step. They are
-written in one format, the one of the Cardenza's own guide (<https://cardenza.203.io/guide/>): **lessons of short
-steps**, each step a sentence or two, the keys it asks for lit on a drawing of the board, and what the screen shows.
+written in one format, the one of the Cardenza's own guide (https://cardenza.203.io/guide/): **lessons of short steps**,
+each step a sentence or two, the keys it asks for lit on a drawing of the board, and what the screen shows.
 The community shows a tutorial that way on the firmware's page (its 教程 / Tutorials tab), in Chinese, English or
 both. Its API refuses a tutorial that does not follow this page, and `203c tutorial check` says where, line by line.
 
@@ -18,8 +18,8 @@ and up to 5 links each per firmware). The owner and the community's admins may h
 deletes it.
 
 **Description or tutorial?** A firmware's description (简介) says in a few lines what it is and why one would want it,
-with pictures. How to use it (key tables, menus, every setting) is a tutorial: the description links to the
-tutorials tab rather than holding a manual.
+with pictures (how to write one: reference/description-guide.md, on the site /guide/description). How to use it (key
+tables, menus, every setting) is a tutorial: the description links to the tutorials tab rather than holding a manual.
 
 ## The file
 
@@ -87,7 +87,7 @@ say is another step.
 |---|---|
 | `{{key:fn}}`, `{{key:fn+s}}` | the key cap(s), as on the device |
 | `**bold**`, `*italic*` | emphasis |
-| `` `code` `` | code |
+| a word between backquotes | code |
 | `[words](https://…)`, a bare `https://…` | a link (opens in a new tab) |
 
 Nothing else: no HTML (`<tags>`, `&entities;`), no pictures in the words, no headings, lists, quotes, tables or code

@@ -312,6 +312,8 @@ With `--json` an error is one JSON line on stderr (the last line):
 | `launcher_official_only` | only the official 203 Launcher is offered; publish your firmware as an app |
 | `admin_scope_required` | an admin's sign-in without the admin scope: `login --admin --json` (exit 4) |
 | `rate_limited` | wait `retry_after` seconds |
+| `network_blocked_sandbox` | your sandbox's network allowlist blocks the community: only the user can allow `cardenza.203.io` and `apps.203.io` (below); tell them `hint`'s steps, then run `next[0]` |
+| `network_blocked_cdn` | the site's firewall (Cloudflare) blocked the request, not your sandbox: tell the user (its `ray`); do it with 203c, not curl or a web fetch |
 | `invalid` (+ `field`) | fix that field as `hint` says |
 
 All codes: `help errors` (trusted publishing: `oidc_untrusted`, `oidc_channel`, `oidc_invalid`, `oidc_unavailable`,
@@ -319,6 +321,18 @@ All codes: `help errors` (trusted publishing: `oidc_untrusted`, `oidc_channel`, 
 `https://cardenza.203.io/community/api`, the live copy until community.203.io exists), `COMMUNITY_LANG` (`zh` or `en`: the language of what the server writes; `--lang`
 on any command). What people wrote comes as they wrote it. Answer the user in their language (with a
 Chinese-speaking user pass `--lang zh`).
+
+## Running in a sandboxed agent (Claude Code on the web, Codex cloud…)
+
+A cloud sandbox reaches only the hosts its environment allows. npm and GitHub are on Claude Code's default list
+(`npm install -g 203c`, `203c skill install` work); the 203 community is on none. `doctor --json` checks both of its
+hosts. On `network_blocked_sandbox` (exit 1), stop and ask the user: only they can allow **`cardenza.203.io`** and
+**`apps.203.io`**, per environment (a file in the repository cannot). Claude Code on the web: claude.ai/code → the
+environment selector under the message box → Cloud → the environment's settings icon → Network access: Limited, keep
+Allow package managers, add both to Allowed domains → Save changes (a shared Team/Enterprise environment: an Owner, in
+admin settings › Cloud environments); Codex cloud and other sandboxes: their own per-environment allowlist. An open
+session follows within a minute: then run `next[0]`. Meanwhile what needs no network works: building, `203c rules`,
+`203c skill install`, and over USB `flash --bin`, `log`, `board`. All of it: `help sandbox`.
 
 ## Also
 

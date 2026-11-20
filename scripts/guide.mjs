@@ -3,6 +3,7 @@
 // skill/203-community.
 
 import {NAME_RULE} from "./project.mjs";
+import {BLOCKED_CODES, COMMUNITY_HOSTS, OFFLINE_EN, OFFLINE_ZH, defaultLang, isDnsFailure, sandboxSteps} from "./lib.mjs";
 
 // Exit codes: the same for every command (SKILL.md and reference/cli.md list them).
 export const EXIT = {ok: 0, refused: 1, usage: 2, later: 3, signin: 4, rejected: 5, confirm: 6};
@@ -131,7 +132,9 @@ export const ERROR_CODES = [
   ["device_busy", 3, "the device is installing something", "wait, then retry"],
   ["not_installable", 1, "launchers are flashed from the website, never sent", "flash it on the website"],
   ["risk_not_accepted", 1, "a third-party launcher", "add --accept-risk if the user accepts it"],
-  ["unreachable", 3, "the API cannot be reached", "check the network / --api; `doctor`"],
+  ["unreachable", 3, "the API cannot be reached (ENOTFOUND in a sandboxed agent: its allowlist may lack the community's hosts)", "check the network / --api; `doctor`; a sandbox: `help sandbox`"],
+  ["network_blocked_sandbox", 1, "a network allowlist on the way blocked the community (an agent's sandbox: Claude Code on the web, Codex …; a 403 with x-deny-reason: host_not_allowed, or one that is not the API's; in a sandbox also ENOTFOUND or a proxy's certificate)", "only the user can allow it: cardenza.203.io and apps.203.io in the environment's network settings (`hint` says where; `help sandbox`), then run it again"],
+  ["network_blocked_cdn", 1, "the firewall in front of the site (Cloudflare) blocked the request (`ray`)", "nothing to fix in the project: other programs (curl, urllib, web fetches) are blocked, 203c normally passes; report it with the Ray ID or try another network"],
   ["unavailable", 3, "the API or a provider failed", "try again later"],
   ["upload_failed", 3, "an upload failed", "run the same command again: it resumes"],
 ];
@@ -172,7 +175,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   what is left of today's limits                   {P} quotas --json
   change your name or bio                          {P} me edit --name "…" --bio "…" --json
 
-Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices board requests launchers admin)`},
+Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover sounds projects works models signin errors devices board requests launchers sandbox admin)`},
 
   new: {title: "A new firmware for the Cardenza: make, build, try, publish, listen", text: `
 1. {P} new "My firmware" --summary "What it does" --json     a folder with CardenzaHAL (git submodule) and its template,
@@ -550,6 +553,18 @@ board_refused (the firmware's reason), board_busy, board_timeout, board_lost.`},
 {P} dev update CODE N --status done --progress 100 --note "In 1.5.0 (VCODE)" --json
 The tracker is internal (nobody is notified); tell users with {P} comments add request CODE/N --body "…" --json.`},
 
+  sandbox: {title: "Running in a sandboxed agent (Claude Code on the web, Codex cloud…): allowing the community's hosts", text: `
+A coding agent in a sandbox reaches only the hosts its environment allows. Claude Code's default environment allows
+package registries and GitHub (npm install -g 203c and {P} skill install work there; Codex cloud installs in its setup
+script); the 203 community is on no default list: the user allows ${COMMUNITY_HOSTS.join(" and ")}.
+{P} doctor --json checks both and says what blocks them. The errors:
+  network_blocked_sandbox  the sandbox's allowlist blocked the host (a 403 with x-deny-reason: host_not_allowed; a 403
+                           that is not the community's JSON; in a sandbox also ENOTFOUND or a proxy's certificate)
+  network_blocked_cdn      the firewall in front of the site (Cloudflare) blocked the request: not the sandbox
+  unreachable (ENOTFOUND)  the name does not resolve: offline, or a sandbox whose allowlist lacks it
+
+{STEPS}`},
+
   admin: {title: "Admins", text: `
 {P} admin issues --json, {P} admin issue N --json, {P} admin issue-update N --status false_positive --reply "…"
 {P} admin override VCODE --note "…" (publish a false positive), {P} admin recheck VCODE
@@ -561,7 +576,7 @@ export function topicText(name, prog) {
   if (!topic) return null;
   const exits = EXIT_TEXT.map(([code, text]) => `  ${code}  ${text}`).join("\n");
   const codes = ERROR_CODES.map(([code, exit, meaning, todo]) => `  ${code.padEnd(19)} exit ${exit}  ${meaning}; ${todo}`).join("\n");
-  return `${topic.title}\n${topic.text.replace(/\{P\}/g, prog).replace("{EXITS}", exits).replace("{CODES}", codes)}\n`;
+  return `${topic.title}\n${topic.text.replace(/\{P\}/g, prog).replace("{EXITS}", exits).replace("{CODES}", codes).replace("{STEPS}", () => sandboxSteps("en"))}\n`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -575,9 +590,19 @@ export function explainApiError(error, ctx) {
   const a = ctx.args ?? {}, o = ctx.flags ?? {};
   const fwCode = a.CODE ?? o.firmware;
   if (code === "usage") { out.exit = EXIT.usage; out.hint = "Fix the command (see --help)"; out.next = [ctx.run([...ctx.words, "--help"], {json: false})]; return out; }
+  if (BLOCKED_CODES.has(code)) {
+    // A network on the way, not the API: the user changes the sandbox's settings (or, the CDN, the site's owner).
+    const lang = ctx.client?.lang ?? defaultLang();
+    out.exit = EXIT.refused;
+    out.hint = error.hint ?? (code === "network_blocked_sandbox" ? sandboxSteps(lang, {more: [error.data?.host]}) : lang === "zh" ? OFFLINE_ZH : OFFLINE_EN);
+    out.next = [...new Set([ctx.cmd({}), ctx.run(["doctor"])])];
+    return out;
+  }
   if (code === "unreachable" || status === 0) {
     out.code = "unreachable"; out.exit = EXIT.later;
     out.hint = `Check the network and the API address (${ctx.api}); --api URL or COMMUNITY_API sets it. Then run the same command again.`;
+    const dns = /\b(ENOTFOUND|EAI_AGAIN)\b/.exec(message ?? "");
+    if (dns && isDnsFailure(dns[1])) out.hint += " " + maybeSandbox(ctx.client?.lang ?? defaultLang());
     out.next = [ctx.run(["doctor"])];
     return out;
   }
@@ -679,6 +704,13 @@ export function explainApiError(error, ctx) {
   if (/^command_/.test(code)) { out.hint = "The device reported a failure: read `error`; run the same command again once it is fixed."; out.next = [ctx.cmd({})]; return out; }
   out.hint = "Read `error`; see help errors.";
   return out;
+}
+
+/** ENOTFOUND outside a known sandbox: offline, or a sandbox that says nothing of itself. */
+export function maybeSandbox(lang = "en") {
+  return lang === "zh"
+    ? `如果这是在 AI 的沙箱里（Claude Code 网页版、Codex 云端……），它的网络白名单里没有的域名也会这样解析不了：请用户放行 ${COMMUNITY_HOSTS.join("、")}（203c help sandbox 有每一步）。`
+    : `In a sandboxed agent (Claude Code on the web, Codex cloud…) a host its network allowlist lacks fails like this too: ask the user to allow ${COMMUNITY_HOSTS.join(" and ")} (203c help sandbox has the steps).`;
 }
 
 function conflictHint(message, ctx, out) {

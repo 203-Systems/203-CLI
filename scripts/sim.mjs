@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {spawn, spawnSync} from "node:child_process";
-import {ApiError} from "./lib.mjs";
+import {ApiError, failed} from "./lib.mjs";
 import {CliError, EXIT} from "./guide.mjs";
 import {size} from "./checks.mjs";
 
@@ -353,7 +353,7 @@ export async function uploadSim(ctx, {code, vcode, local}) {
     form.set("file", new Blob([fs.readFileSync(file.full)]), path.basename(file.path));
     let response;
     try { response = await ctx.client.fetch(upload.upload_url, {method: "POST", headers: {...ctx.client.langHeaders(), Authorization: "Bearer " + upload.ticket}, body: form}); }
-    catch (error) { throw new ApiError(0, "upload_failed", `${upload.path}: the upload failed (${error.cause?.code || error.message})`); }
+    catch (error) { throw failed(error, reason => new ApiError(0, "upload_failed", `${upload.path}: the upload failed (${reason})`)); }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status >= 500 || response.status === 409) throw new ApiError(response.status, "upload_failed", `${upload.path}: ${data.error || "the upload failed"}`, data);

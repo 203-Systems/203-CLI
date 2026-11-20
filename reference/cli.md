@@ -138,7 +138,9 @@ all of them) as JSON.
 | `device_busy` | 3 | the device is installing something | wait, then retry |
 | `not_installable` | 1 | launchers are flashed from the website, never sent | flash it on the website |
 | `risk_not_accepted` | 1 | a third-party launcher | add --accept-risk if the user accepts it |
-| `unreachable` | 3 | the API cannot be reached | check the network / --api; `doctor` |
+| `unreachable` | 3 | the API cannot be reached (ENOTFOUND in a sandboxed agent: its allowlist may lack the community's hosts) | check the network / --api; `doctor`; a sandbox: `help sandbox` |
+| `network_blocked_sandbox` | 1 | a network allowlist on the way blocked the community (an agent's sandbox: Claude Code on the web, Codex …; a 403 with x-deny-reason: host_not_allowed, or one that is not the API's; in a sandbox also ENOTFOUND or a proxy's certificate) | only the user can allow it: cardenza.203.io and apps.203.io in the environment's network settings (`hint` says where; `help sandbox`), then run it again |
+| `network_blocked_cdn` | 1 | the firewall in front of the site (Cloudflare) blocked the request (`ray`) | nothing to fix in the project: other programs (curl, urllib, web fetches) are blocked, 203c normally passes; report it with the Ray ID or try another network |
 | `unavailable` | 3 | the API or a provider failed | try again later |
 | `upload_failed` | 3 | an upload failed | run the same command again: it resumes |
 
@@ -2013,4 +2015,5 @@ Every API operation with its JSON schema (for programs)
 - `203c help devices` — Installing firmware on a device: over a USB cable (no sign-in) or sent over Wi-Fi
 - `203c help board` — A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203c board)
 - `203c help requests` — Requests and the developer tracker
+- `203c help sandbox` — Running in a sandboxed agent (Claude Code on the web, Codex cloud…): allowing the community's hosts
 - `203c help admin` — Admins

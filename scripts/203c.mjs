@@ -993,7 +993,7 @@ function report(error, argv) {
   if (json) process.stderr.write(JSON.stringify(out) + "\n");
   else {
     const lines = [`203c: ${out.error}${out.code && !["usage", "internal"].includes(out.code) ? ` (${out.code})` : ""}`];
-    if (out.hint) lines.push(`  ${out.hint}`);
+    if (out.hint) lines.push(...String(out.hint).split("\n").map(line => `  ${line}`));
     for (const p of out.problems ?? []) if (p.error !== out.error) lines.push(`  also: ${p.error}${p.hint ? " — " + p.hint : ""}`);
     if (out.log_tail) lines.push("  Last lines of the boot log:", ...out.log_tail.split("\n").map(l => "    " + l));
     if (out.build_log) lines.push("  Last lines of the build:", ...out.build_log.split("\n").map(l => "    " + l));

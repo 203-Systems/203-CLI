@@ -9,11 +9,12 @@ import os from "node:os";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {ApiError, CLI_VERSION, DEFAULT_API, uploadCover, uploadPicture, uploadSource, tokenFile} from "./lib.mjs";
+import {ApiError, BLOCKED_CODES, CLI_VERSION, COMMUNITY_HOSTS, DEFAULT_API, agentSandbox, failed, isDnsFailure, offline, probeHost, uploadCover, uploadPicture, uploadSource,
+  tokenFile} from "./lib.mjs";
 import {PROJECT_FILE, LEGACY_FILE, NAME_RULE, nameOk, checkProject, cloneUrlOf, cmakeProjectName, findProjectFile, gitTagVersion, licenseOf, manifestOf, remotePage,
   versionTxt, writeProject} from "./project.mjs";
 import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
-import {CliError, EXIT} from "./guide.mjs";
+import {CliError, EXIT, maybeSandbox} from "./guide.mjs";
 import {skillState} from "./skill.mjs";
 import {EMSDK_HINT, describeSim, explainBuild, findHal, findProject, halScript, readSimDir, runBuild, sameBuild, simLine, simState, toolchain,
   uploadSim, waitSim, playUrl} from "./sim.mjs";
@@ -182,13 +183,37 @@ export async function doctor(ctx) {
   check("skill", skill.ok, skill.detail, {optional: true});
   if (!skill.ok) r.warn("skill_missing", `The Agent Skill is ${/not installed/.test(skill.detail) ? "not installed" : "older than this 203c"}: coding agents read the rules from it`,
     {next: [ctx.run(["skill", "install"])]});
-  let info = null;
+  // A sandboxed agent (Claude Code on the web, Codex …): its network allowlist decides what 203c reaches.
+  const sandbox = agentSandbox(ctx.client.env);
+  if (sandbox) check("sandbox", true, `${{claude_code: "a Claude Code cloud session (CLAUDE_CODE_REMOTE)", codex: "Codex's sandbox, network off (CODEX_SANDBOX_NETWORK_DISABLED)"}[sandbox]}: ` +
+    `its network allowlist must allow ${COMMUNITY_HOSTS.join(" and ")} (help sandbox)`, {optional: true});
+  let info = null, apiFailure = null;
   try { info = await ctx.client.request("GET", "/", {auth: false}); }
   catch (error) {
-    r.problem("unreachable", `The API at ${ctx.api} does not answer (${error.message})`, {exit: EXIT.later,
-      hint: `Check the network; --api URL or COMMUNITY_API sets the address (default ${DEFAULT_API})`, next: [ctx.cmd({})]});
+    apiFailure = error;
+    if (error instanceof ApiError && BLOCKED_CODES.has(error.code)) {
+      r.problem(error.code, error.message, {hint: error.hint, next: [ctx.cmd({})], ...error.data});
+    } else {
+      const dns = isDnsFailure(/\b(ENOTFOUND|EAI_AGAIN)\b/.exec(error.message ?? "")?.[1]);
+      r.problem("unreachable", `The API at ${ctx.api} does not answer (${error.message})`, {exit: EXIT.later,
+        hint: `Check the network; --api URL or COMMUNITY_API sets the address (default ${DEFAULT_API})` + (dns ? ". " + maybeSandbox(ctx.client.lang) : ""), next: [ctx.cmd({})]});
+    }
   }
   if (info) check("api", info.version === 2, `${ctx.api}: API version ${info.version}${info.version === 2 ? "" : " (203c speaks version 2: update the skill)"}`);
+  // Both of the community's hosts (the live copy and its twin), when the API is one of them: a sandbox's allowlist needs both.
+  const apiHost = new URL(ctx.api).hostname;
+  if (COMMUNITY_HOSTS.includes(apiHost)) {
+    for (const host of COMMUNITY_HOSTS) {
+      const probe = host === apiHost ? {ok: !!info, error: apiFailure} : await probeHost(ctx.client, host);
+      const error = probe.error;
+      check("host", probe.ok, `${host}: ${probe.ok ? "reachable" : error && BLOCKED_CODES.has(error.code) ? `blocked (${error.code}, ${error.data?.reason})`
+        : `no answer (${error?.message ?? "?"})`}`, {host, ...(error ? {code: error.code} : {})});
+      if (probe.ok || host === apiHost) continue;
+      // The twin alone: 203c works through the API's host, the user allows this one too.
+      const same = apiFailure && apiFailure.code === error.code;
+      r.warn(error.code, error.message, {hint: same ? "the same as above" : error.hint ?? "", host});
+    }
+  }
   const limits = {...LIMITS, ...(info?.limits ?? {})};
   const masked = ctx.client.token ? ctx.client.token.slice(0, 4) + "…" + ctx.client.token.slice(-4) : null;
   check("token", !!ctx.client.token, ctx.client.token ? `${masked} from ${{flag: "--token", env: "COMMUNITY_TOKEN", file: ctx.tokenFile}[ctx.tokenSource]}` : "none (not signed in)");
@@ -226,7 +251,7 @@ export async function doctor(ctx) {
   if (!tools.emscripten.ok) r.warn("sim_toolchain", "Emscripten is not installed: publish cannot build simulator versions (Play) of CardenzaHAL firmware here", {hint: EMSDK_HINT});
   if (ctx.pendingLogin) r.warn("login_pending", "A sign-in waits for the user's approval", {hint: `Approve ${ctx.pendingLogin.user_code} at ${ctx.pendingLogin.verify_url}`, next: [ctx.run(["login", "--wait"])]});
   const signedIn = !!account;
-  const json = {ok: !r.problems.length, signed_in: signedIn, cli: CLI_VERSION, node: process.versions.node, api: ctx.api, api_version: info?.version ?? null,
+  const json = {ok: !r.problems.length, signed_in: signedIn, cli: CLI_VERSION, node: process.versions.node, api: ctx.api, api_version: info?.version ?? null, sandbox,
     lang: ctx.client.lang, token: {source: ctx.tokenSource, ...(masked ? {masked} : {})},
     me: account ? {id: account.id, name: account.name, role: account.role, scopes: account.scopes, credential: account.credential ?? null} : null,
     quotas, problems: r.problems.map(clean), warnings: r.warnings.map(clean), checks,
@@ -236,8 +261,9 @@ export async function doctor(ctx) {
     lines.push("✓ left     " + Object.entries(quotas).map(([k, v]) => `${k} ${v.left ?? "?"}/${v.limit}${v.estimate ? "*" : ""}`).join(" · "));
     if (Object.values(quotas).some(v => v.estimate)) lines.push("           * estimated from your lists (the API has no quota endpoint yet)");
   }
-  for (const p of r.problems) lines.push(`✗ ${p.error}\n    ${p.hint ?? ""}${p.next.length ? "\n    → " + p.next.join("\n    → ") : ""}`);
-  for (const w of r.warnings) lines.push(`! ${w.message}${w.hint ? "\n    " + w.hint : ""}${w.next?.length ? "\n    → " + w.next.join("\n    → ") : ""}`);
+  const indent = text => String(text).split("\n").join("\n    ");
+  for (const p of r.problems) lines.push(`✗ ${p.error}\n    ${indent(p.hint ?? "")}${p.next.length ? "\n    → " + p.next.join("\n    → ") : ""}`);
+  for (const w of r.warnings) lines.push(`! ${w.message}${w.hint ? "\n    " + indent(w.hint) : ""}${w.next?.length ? "\n    → " + w.next.join("\n    → ") : ""}`);
   lines.push(r.problems.length ? "" : `Ready. What next: ${ctx.run(["help", "start"], {json: false})}`);
   return {json, text: lines.join("\n").trimEnd(), exit: r.exit()};
 }
@@ -1608,7 +1634,7 @@ export async function publish(ctx, {mode}) {
       if (notices) form.set("notices", new Blob([notices.bytes]), "NOTICES.txt");
       let response;
       try { response = await ctx.client.fetch(upload.upload_url, {method: "POST", headers: {...ctx.client.langHeaders(), Authorization: "Bearer " + upload.ticket}, body: form}); }
-      catch (error) { throw new ApiError(0, "upload_failed", `The ${upload.target} upload failed (${error.cause?.code || error.message})`); }
+      catch (error) { throw failed(error, reason => new ApiError(0, "upload_failed", `The ${upload.target} upload failed (${reason})`)); }
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status >= 500 || response.status === 409) throw new ApiError(response.status, "upload_failed", `${upload.target}: ${data.error || "the upload failed"}`, data);
@@ -1861,7 +1887,7 @@ export async function simUpload(ctx, {code = null, dir = null} = {}) {
   const account = await me(ctx, r);
   let answer = null;
   try { answer = await ctx.client.get("/versions/" + enc(vcode)); } catch (error) {
-    if (!(error instanceof ApiError) || error.code === "unreachable") throw error;
+    if (!(error instanceof ApiError) || offline(error)) throw error;
     r.problem("not_found", `No version of yours has the code ${vcode}`, {hint: "Never guess a code: versions list CODE", next: [ctx.run(["firmware", "mine"])]});
   }
   const version = answer?.version, fw = answer?.firmware;
@@ -2199,7 +2225,7 @@ async function versionOf(ctx, r, fw, given) {
     if (answer.firmware?.code !== fw.code) r.problem("invalid", `${parsed.code} is a version of ${answer.firmware?.name}, not of ${fw.name}`, {field: "version",
       next: [ctx.run(["versions", "list", fw.code])]});
   } catch (error) {
-    if (error instanceof ApiError && error.code !== "unreachable") r.problem("not_found", `No version has the code ${parsed.code}`, {field: "version", next: [ctx.run(["versions", "list", fw.code])]});
+    if (error instanceof ApiError && !offline(error)) r.problem("not_found", `No version has the code ${parsed.code}`, {field: "version", next: [ctx.run(["versions", "list", fw.code])]});
     else throw error;
   }
 }
@@ -2598,8 +2624,10 @@ export async function rules(ctx) {
   if (ctx.flags.online) {
     const site = String(ctx.api).replace(/\/+$/, "").replace(/\/api$/, "");
     from = site + "/develop.md";
-    try { const response = await fetch(from); if (response.ok) text = await response.text(); } catch { text = null; }
-    if (!text) ctx.note(`could not fetch ${from}: the copy in the skill`);
+    let why = "";
+    try { const response = await ctx.client.fetch(from); if (response.ok) text = await response.text(); }
+    catch (error) { text = null; if (BLOCKED_CODES.has(error?.code)) why = ` (${error.code}: help sandbox)`; }
+    if (!text) ctx.note(`could not fetch ${from}${why}: the copy in the skill`);
   }
   if (!text) { from = RULES_FILE; try { text = fs.readFileSync(RULES_FILE, "utf8"); } catch { text = null; } }
   if (!text) throw new CliError("not_found", "The rules are not in this copy of the skill", {hint: "Reinstall the skill, or: 203c rules --online"});

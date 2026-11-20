@@ -139,8 +139,9 @@ export async function standInApi(routes) {
 // Runs 203c with these arguments: {code, stdout, stderr, json (stdout parsed), error (stderr's last line parsed)}.
 export function run(args, {cwd = ROOT, env = {}} = {}) {
   return new Promise(resolve => {
+    // Not in an agent's sandbox unless a test says so (203c reads these to explain a blocked network).
     const child = spawn(process.execPath, [CLI, ...args], {cwd, env: {...process.env, COMMUNITY_TOKEN: "", COMMUNITY_API: "", COMMUNITY_LANG: "",
-      LC_ALL: "", LC_MESSAGES: "", LANG: "en_US.UTF-8", ...env}});
+      LC_ALL: "", LC_MESSAGES: "", LANG: "en_US.UTF-8", CLAUDE_CODE_REMOTE: "", CODEX_SANDBOX_NETWORK_DISABLED: "", ...env}});
     let stdout = "", stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk; });
     child.stderr.on("data", chunk => { stderr += chunk; });

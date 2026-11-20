@@ -44,6 +44,27 @@ Community device id: **`cardenza`** (the default device of `203c publish`). Stat
 | Node.js | 18 or later | `203c` |
 | Python 3 | | the HAL's host tools (`cardenza_web.py`, `cardenza_flash.py`, `cardenza_usb.py`) |
 
+## Running in a sandboxed agent (Claude Code on the web, Codex cloud…)
+
+A coding agent in a cloud sandbox reaches only the hosts its environment allows, and only the user can change that,
+per environment (a file in the repository cannot). npm and GitHub are on Claude Code's default list, so
+`npm install -g 203c` and `203c skill install` work there; the 203 community is on no default list.
+
+- **Allow `cardenza.203.io` and `apps.203.io`** (the community and its twin). Claude Code on the web: at
+  <https://claude.ai/code>, the environment selector under the message box → Cloud → the environment's settings
+  (gear) icon → Network access: **Limited**, keep **Allow package managers** on, add both to **Allowed domains** (one
+  per line) → **Save changes** (or choose **Full**); a session already open follows within about a minute. A shared
+  Team or Enterprise environment: an Owner changes it in claude.ai's admin settings › Cloud environments
+  ([Claude Code's cloud environments](https://code.claude.com/docs/en/cloud-environments.md#network-access)). Codex
+  cloud and other sandboxes keep their own allowlist per environment: add the same two hosts there.
+- Building may need Espressif's hosts as well (the first build fetches TinyUSB from Espressif's component registry):
+  allow `*.espressif.com`, or install ESP-IDF and build once in the environment's setup script.
+- `203c doctor` checks both hosts. A blocked request is `network_blocked_sandbox` (the sandbox's allowlist; its
+  `hint` has these steps) or `network_blocked_cdn` (the site's firewall, not the sandbox: report its Ray ID).
+  `203c help sandbox` has it all.
+- Until then, what needs no network still works: building, `203c rules`, `203c skill install`, and on a computer
+  with the Cardenza on its USB cable `203c flash --bin`, `203c log` and `203c board`.
+
 ## Build and try
 
 The HAL's [`tools/cardenza.py`](https://github.com/203-Systems/CardenzaHAL/blob/main/tools/cardenza.py) is the

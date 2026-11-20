@@ -15,9 +15,11 @@ export const DEFAULT_API = "https://cardenza.203.io/community/api";
 export const CLI_VERSION = "3.5.0";
 
 export class ApiError extends Error {
-  constructor(status, code, message, data = {}) {
+  constructor(status, code, message, data = {}, {hint} = {}) {
     super(message);
     this.status = status; this.code = code; this.data = data;
+    // What to do, when the error knows it better than the API's code says (a blocked network).
+    if (hint) this.hint = hint;
   }
 }
 
@@ -131,11 +133,190 @@ export function defaultLang(env = process.env) {
   return /^zh/i.test(value) ? "zh" : "en";
 }
 
+// ---------------------------------------------------------------------------------------------
+// A network that keeps 203c from the community (the user, 2026-11-20: an agent in Claude Code's cloud got "HTTP 403",
+// which told nobody what to do). Every request 203c makes goes through Client.fetch, which tells these apart from the
+// API's own answers (always JSON) and says what to do:
+// - an agent sandbox's network allowlist (network_blocked_sandbox): a 403 with x-deny-reason: host_not_allowed
+//   (Claude Code's cloud, code.claude.com/docs/en/errors.md#host-not-allowed-in-a-cloud-session); a 403 from one of
+//   the community's hosts that is not the community's answer; and in a sandbox that says it is one, the host not
+//   resolving (ENOTFOUND, EAI_AGAIN) or a certificate that is not the host's (its proxy answered);
+// - the CDN's block page in front of the site (network_blocked_cdn): Cloudflare's 403 (cf-ray, cf-mitigated, "Your
+//   request was blocked.", its "Access denied" page), which only the site's owner changes.
+// Only the user can allow a host in a sandbox, per environment (a file in the repository cannot).
+
+/** The community's hosts: the live copy and its twin. A sandbox's allowlist needs both. */
+export const COMMUNITY_HOSTS = ["cardenza.203.io", "apps.203.io"];
+export const BLOCKED_CODES = new Set(["network_blocked_sandbox", "network_blocked_cdn"]);
+/** The API could not be reached (no answer, or a network between that blocks it): nothing the API said. */
+export const offline = error => error instanceof ApiError && (error.code === "unreachable" || BLOCKED_CODES.has(error.code));
+/** A fetch that threw, as 203c says it: a blocked network's own error as it is, else `make(the system's reason)`. */
+export const failed = (error, make) => error instanceof ApiError && BLOCKED_CODES.has(error.code) ? error : make(error?.cause?.code || error?.message);
+
+/** The agent sandbox this runs in, from what the sandboxes document: Claude Code's cloud sessions set
+ * CLAUDE_CODE_REMOTE=true (code.claude.com/docs/en/cloud-environments.md), Codex sets CODEX_SANDBOX_NETWORK_DISABLED=1
+ * for a command its sandbox keeps off the network (openai/codex, codex-rs/core/src/spawn.rs). Others say nothing known. */
+export function agentSandbox(env = process.env) {
+  if (env.CLAUDE_CODE_REMOTE === "true") return "claude_code";
+  if (env.CODEX_SANDBOX_NETWORK_DISABLED === "1") return "codex";
+  return null;
+}
+
+const DNS_FAILURES = new Set(["ENOTFOUND", "EAI_AGAIN"]);
+const CERT_FAILURES = new Set(["SELF_SIGNED_CERT_IN_CHAIN", "DEPTH_ZERO_SELF_SIGNED_CERT", "UNABLE_TO_GET_ISSUER_CERT", "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "CERT_UNTRUSTED", "ERR_TLS_CERT_ALTNAME_INVALID"]);
+/** The system's word for a failed fetch (undici puts it on the cause, or on the first of several addresses tried). */
+export const failureCode = error => error?.cause?.code ?? error?.cause?.errors?.[0]?.code ?? error?.code ?? null;
+export const isDnsFailure = code => DNS_FAILURES.has(code);
+const hostOf = url => { try { return new URL(String(url)).hostname.toLowerCase(); } catch { return ""; } };
+const looksJson = text => { try { JSON.parse(text); return true; } catch { return false; } };
+
+/**
+ * Whether a 403 is a network on the way rather than the API: {by: "sandbox" | "cdn", reason, ray?} or null.
+ * `ours`: the host is the community's (its answers are JSON; another host's 403 counts only with the sandbox's header).
+ */
+export function blockedAnswer({status, headers, body = "", ours = false}) {
+  if (status !== 403) return null;
+  const header = name => (typeof headers?.get === "function" ? headers.get(name) : headers?.[name]) ?? "";
+  if (/host_not_allowed/i.test(header("x-deny-reason"))) return {by: "sandbox", reason: "host_not_allowed"};
+  if (looksJson(body)) return null;
+  const ray = header("cf-ray") || null;
+  const page = /Your request was blocked|you have been blocked|Access denied[^<]*Cloudflare|Attention Required|cf-error-details/i.test(body);
+  if (page || header("cf-mitigated") || (/html/i.test(header("content-type")) && (ray || /cloudflare/i.test(header("server"))))) {
+    return {by: "cdn", reason: header("cf-mitigated") ? "challenge" : "blocked", ray};
+  }
+  return ours ? {by: "sandbox", reason: "http_403"} : null;
+}
+
+/** Whether a request that got no answer was kept off the network by the sandbox this runs in: {by, reason, cause} or null. */
+export function blockedFailure(error, {ours = false, sandbox = null} = {}) {
+  if (!sandbox || !ours) return null;
+  const cause = failureCode(error) ?? "fetch failed";
+  if (DNS_FAILURES.has(cause)) return {by: "sandbox", reason: "dns", cause};
+  if (CERT_FAILURES.has(cause)) return {by: "sandbox", reason: "certificate", cause};
+  // Codex runs the command with the network off: whatever failed, that is why.
+  if (sandbox === "codex") return {by: "sandbox", reason: "no_network", cause};
+  return null;
+}
+
+/** What 203c says to do in a sandbox that blocks the community (help sandbox, the errors' hints, doctor). */
+export function sandboxSteps(lang = "en", {sandbox = null, more = []} = {}) {
+  const domains = [...COMMUNITY_HOSTS, ...more.filter(host => host && !COMMUNITY_HOSTS.includes(host))];
+  if (lang === "zh") {
+    const list = domains.join("、");
+    const claude = `- Claude Code 网页版（云端会话）：打开 claude.ai/code，点输入框下面的环境选择器 → Cloud → 这个环境右边的设置（齿轮）图标 → Network access 选 Limited，` +
+      `保持勾选「Allow package managers」，在 Allowed domains 里每行一个加上 ${list} → Save changes（或者选 Full）。已经开着的会话大约一分钟内跟上新设置` +
+      `（会话标题后面的小箭头 → Edit cloud environment 也能改）。Team / Enterprise 的共享环境由 Owner 在 claude.ai 的管理设置 › Cloud environments 里改。`;
+    const others = `- 别的沙箱各有自己的白名单，按环境设置：Codex 云端在环境的联网（internet access）设置里打开并加上这些域名；电脑上的 Codex 默认不让命令联网` +
+      `（批准这条命令联网，或在 ~/.codex/config.toml 设 [sandbox_workspace_write] network_access = true）。`;
+    return [`只有用户自己能放行 ${list}，在环境的设置里改（仓库里的文件做不到）：`,
+      ...(sandbox === "codex" ? [others, claude] : [claude, others]), OFFLINE_ZH].join("\n");
+  }
+  const list = domains.length > 2 ? domains.slice(0, -1).join(", ") + " and " + domains.at(-1) : domains.join(" and ");
+  const claude = `- Claude Code on the web (a cloud session): claude.ai/code → the environment selector under the message box → Cloud → the ` +
+    `environment's settings (gear) icon → Network access: Limited, keep "Allow package managers" on, add ${list} to Allowed domains (one ` +
+    `per line) → Save changes (or choose Full). A session already open follows within about a minute (the caret after its title → Edit cloud ` +
+    `environment does the same). A shared Team or Enterprise environment: an Owner changes it in claude.ai admin settings › Cloud environments.`;
+  const others = `- Other sandboxes have their own allowlist, per environment: Codex cloud, the environment's internet access (turn it on, add the ` +
+    `domains); Codex on a computer runs commands without network unless allowed (approve the command with network, or ` +
+    `[sandbox_workspace_write] network_access = true in ~/.codex/config.toml).`;
+  return [`Only the user can allow ${list}, in the environment's settings (a file in the repository cannot):`,
+    ...(sandbox === "codex" ? [others, claude] : [claude, others]), OFFLINE_EN].join("\n");
+}
+
+export const OFFLINE_EN = "Meanwhile, what needs no network still works: building (tools/cardenza.py build), 203c rules, 203c skill install, " +
+  "and with the device on this computer's USB cable 203c flash --bin build/<project>.bin, log and board.";
+export const OFFLINE_ZH = "在那之前，不用联网的照样能做：编译（tools/cardenza.py build）、203c rules、203c skill install，设备用 USB 线接在这台电脑上时还有 " +
+  "203c flash --bin build/<project>.bin、log 和 board。";
+
+/** The ApiError for a request a network on the way blocked (`url`: the request's, `found`: blockedAnswer / blockedFailure). */
+export function blockedError(found, url, {lang = "en", status = 0, sandbox = null} = {}) {
+  const host = hostOf(url);
+  const zh = lang === "zh";
+  if (found.by === "cdn") {
+    const ray = found.ray ? (zh ? `，Ray ID ${found.ray}` : `, Ray ID ${found.ray}`) : "";
+    const message = zh ? `网站的防火墙（${host} 前面的 Cloudflare）拦下了这个请求（HTTP ${status}${ray}）：拒绝它的不是社区`
+      : `The site's firewall (Cloudflare, in front of ${host}) blocked this request (HTTP ${status}${ray}): it was not the community that refused it`;
+    const hint = zh
+      ? "这个项目和这台电脑上都改不了它：防火墙把这个请求（它来的地址，或发它的程序）当成了机器人，只有网站的主人能在 Cloudflare 里放行。203c 自己的请求" +
+        `（User-Agent 203c/${CLI_VERSION}）平时会放行；它常拦的是别的程序直接发的请求（curl、Python 的 urllib、AI 的网页抓取），这些请用 203c 去做。` +
+        `203c 自己也被拦时：把 Ray ID 告诉 203 Systems（https://github.com/203-Systems/203-CLI/issues，GitHub 连得上），或换个网络再试。\n${OFFLINE_ZH}`
+      : "Nothing in this project or on this computer changes it: the firewall took the request (where it came from, or the program that sent it) " +
+        `for a bot, and only the site's owner lets it through, in Cloudflare. 203c's own requests (User-Agent 203c/${CLI_VERSION}) normally pass; ` +
+        "what it blocks is other programs fetching directly (curl, Python's urllib, an agent's web fetch): do that with 203c. When 203c itself " +
+        `is blocked: tell 203 Systems with the Ray ID (https://github.com/203-Systems/203-CLI/issues; GitHub is reachable), or try from another network.\n${OFFLINE_EN}`;
+    return new ApiError(0, "network_blocked_cdn", message, {host, http_status: status, reason: found.reason, ...(found.ray ? {ray: found.ray} : {})}, {hint});
+  }
+  const why = {
+    host_not_allowed: zh ? `HTTP 403，x-deny-reason: host_not_allowed` : `HTTP 403, x-deny-reason: host_not_allowed`,
+    http_403: zh ? "HTTP 403，但不是社区的回答，社区回答的都是 JSON" : "HTTP 403 that is not the community's answer, which is always JSON",
+    dns: zh ? `这里解析不了这个域名：${found.cause}` : `its name does not resolve here: ${found.cause}`,
+    certificate: zh ? `替它应答的是代理，证书不是网站的：${found.cause}` : `a proxy answered for it, not with the site's certificate: ${found.cause}`,
+    no_network: zh ? `Codex 运行这条命令时没开网络：${found.cause}` : `Codex runs this command without network access: ${found.cause}`,
+  }[found.reason];
+  // Sure when the sandbox says so (its header, or it says it is one); a 403 that is not the API's elsewhere is a
+  // network allowlist all the same: an agent's sandbox, a proxy or a firewall.
+  const sure = found.reason === "host_not_allowed" || !!sandbox;
+  const message = zh
+    ? `${sure ? "这个环境的网络白名单" : "路上的网络白名单（AI 的沙箱、代理或防火墙）"}拦下了 ${host}（${why}）：在这里 203c 连不上 203 社区`
+    : `${sure ? "This environment's network allowlist" : "A network allowlist on the way (an agent's sandbox, a proxy or a firewall)"} blocked ${host} (${why}): 203c cannot reach the 203 community from here`;
+  return new ApiError(0, "network_blocked_sandbox", message,
+    {host, allow: [...new Set([...COMMUNITY_HOSTS, host])], reason: found.reason, ...(status ? {http_status: status} : {}), ...(found.cause ? {cause: found.cause} : {}),
+      ...(sandbox ? {sandbox} : {})},
+    {hint: sandboxSteps(lang, {sandbox, more: [host]})});
+}
+
+/**
+ * fetch as 203c uses it: the same, except that a network on the way that blocks the request (above) throws its
+ * ApiError instead of answering. `ours(host)`: the community's hosts and the API's; `lang()`: the client's.
+ */
+export function guardFetch(fetcher, {ours, lang = () => "en", env = process.env}) {
+  return async (url, init) => {
+    const host = hostOf(url);
+    const sandbox = agentSandbox(env);
+    let response;
+    try { response = await fetcher(url, init); }
+    catch (error) {
+      const found = blockedFailure(error, {ours: ours(host), sandbox});
+      throw found ? blockedError(found, url, {lang: lang(), sandbox}) : error;
+    }
+    if (response?.status !== 403) return response;
+    // The body of a 403 is read from a copy: the caller reads the original as before.
+    let body = "";
+    try { body = typeof response.clone === "function" ? await response.clone().text() : ""; } catch { body = ""; }
+    const found = blockedAnswer({status: response.status, headers: response.headers, body, ours: ours(host)});
+    if (found) throw blockedError(found, url, {lang: lang(), status: response.status, sandbox});
+    return response;
+  };
+}
+
+/**
+ * One of the community's hosts as this computer reaches it (doctor): {host, ok, url, status?, error?}, `error` being
+ * the ApiError 203c would report (network_blocked_sandbox, network_blocked_cdn, unreachable). The API's root, at the
+ * same path as the client's API, without a token.
+ */
+export async function probeHost(client, host, {timeout_ms = 10_000} = {}) {
+  const url = new URL(client.api + "/");
+  url.hostname = host;
+  try {
+    const response = await client.fetch(url.href, {headers: client.langHeaders(), signal: AbortSignal.timeout(timeout_ms)});
+    const text = await response.text().catch(() => "");
+    if (response.ok && looksJson(text)) return {host, ok: true, url: url.href, status: response.status};
+    return {host, ok: false, url: url.href, status: response.status,
+      error: new ApiError(response.status, "unavailable", `${host} answered HTTP ${response.status}, not the community's API`)};
+  } catch (error) {
+    return {host, ok: false, url: url.href, error: error instanceof ApiError ? error
+      : new ApiError(0, "unreachable", `Cannot reach ${url.origin} (${failureCode(error) ?? error?.message})`)};
+  }
+}
+
 export class Client {
-  constructor({api = process.env.COMMUNITY_API || DEFAULT_API, token, fetch: fetcher = globalThis.fetch, lang = defaultLang()} = {}) {
+  constructor({api = process.env.COMMUNITY_API || DEFAULT_API, token, fetch: fetcher = globalThis.fetch, lang = defaultLang(), env = process.env} = {}) {
     this.api = api.replace(/\/+$/, "");
     this.token = token === undefined ? loadToken(this.api) : token;
-    this.fetch = fetcher;
+    const apiHost = hostOf(this.api);
+    this.env = env;
+    this.fetch = guardFetch(fetcher, {ours: host => host === apiHost || COMMUNITY_HOSTS.includes(host), lang: () => this.lang, env});
     this.lang = /^zh/i.test(lang || "") ? "zh" : "en";
     // This run's trusted-publishing credential (login --github-oidc), renewed before it ends.
     const run = token === undefined && !process.env.COMMUNITY_TOKEN ? loadRunCredential(this.api) : null;
@@ -180,7 +361,7 @@ export class Client {
     }
     let response;
     try { response = await this.fetch(url, {method, headers: sent, body: payload}); }
-    catch (error) { throw new ApiError(0, "unreachable", "Cannot reach " + this.api + " (" + (error.cause?.code || error.message) + ")"); }
+    catch (error) { throw failed(error, reason => new ApiError(0, "unreachable", "Cannot reach " + this.api + " (" + reason + ")")); }
     const text = await response.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -215,7 +396,7 @@ function readFile(file) {
 async function put(client, upload, bytes) {
   let response;
   try { response = await client.fetch(upload.url, {method: upload.method || "PUT", headers: upload.headers, body: bytes}); }
-  catch (error) { throw new ApiError(0, "unreachable", "The upload failed: " + (error.cause?.code || error.message)); }
+  catch (error) { throw failed(error, reason => new ApiError(0, "unreachable", "The upload failed: " + reason)); }
   if (!response.ok) throw new ApiError(response.status, "upload_failed", `The storage refused the upload (HTTP ${response.status}): ${(await response.text()).slice(0, 200)}`);
   await response.arrayBuffer().catch(() => {});
 }
@@ -370,7 +551,7 @@ export async function publishVersion(client, {code, channel = "stable", version,
     if (noticeBytes) form.set("notices", new Blob([noticeBytes]), "NOTICES.txt");
     let response;
     try { response = await client.fetch(upload.upload_url, {method: "POST", headers: {...client.langHeaders(), Authorization: "Bearer " + upload.ticket}, body: form}); }
-    catch (error) { throw new ApiError(0, "unreachable", "The upload failed: " + (error.cause?.code || error.message)); }
+    catch (error) { throw failed(error, reason => new ApiError(0, "unreachable", "The upload failed: " + reason)); }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new ApiError(response.status, data.code || "upload_failed", `${upload.target}: ${data.error || "upload refused"}`, data);
     uploaded.push(data);
@@ -872,7 +1053,7 @@ export async function uploadSource(client, code, versionCode, bytes, sha256) {
   form.set("source", new Blob([bytes]), "source.tar.gz");
   let response;
   try { response = await client.fetch(started.upload.upload_url, {method: "POST", headers: {...client.langHeaders(), Authorization: "Bearer " + started.upload.ticket}, body: form}); }
-  catch (error) { throw new ApiError(0, "upload_failed", `The source upload failed (${error.cause?.code || error.message})`); }
+  catch (error) { throw failed(error, reason => new ApiError(0, "upload_failed", `The source upload failed (${reason})`)); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(response.status, data.code || "upload_failed", data.error || "The source upload was refused", data);
   return data;

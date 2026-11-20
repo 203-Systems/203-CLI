@@ -30,8 +30,14 @@ else
   echo "Note: 203cli needs Node 18 or newer (https://nodejs.org)." >&2
 fi
 if mkdir -p "$BIN" 2>/dev/null && [ -w "$BIN" ]; then
-  printf '#!/bin/sh\nexec node "%s/203-community/scripts/203cli.mjs" "$@"\n' "$DEST" > "$BIN/203cli"
-  chmod +x "$BIN/203cli"
+  # A 203cli there that is not such a script (npm's link to its package) stays: writing through it would change the package.
+  if [ -L "$BIN/203cli" ] || { [ -e "$BIN/203cli" ] && ! grep -q "203-community/scripts/" "$BIN/203cli" 2>/dev/null; }; then
+    echo "Note: $BIN/203cli is another install (npm's?): left as it is" >&2
+  else
+    printf '#!/bin/sh\nexec node "%s/203-community/scripts/203cli.mjs" "$@"\n' "$DEST" > "$BIN/.203cli.new"
+    chmod +x "$BIN/.203cli.new"
+    mv -f "$BIN/.203cli.new" "$BIN/203cli"
+  fi
   echo "Installed the command $BIN/203cli"
   case ":$PATH:" in *":$BIN:"*) ;; *) echo "Note: $BIN is not on your PATH; add it, or run node \"$DEST/203-community/scripts/203cli.mjs\"" >&2 ;; esac
   echo "Try: 203cli doctor"

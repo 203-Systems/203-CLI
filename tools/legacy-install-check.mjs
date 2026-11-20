@@ -77,14 +77,14 @@ function shells() {
   return out;
 }
 
-function inShell([name, program, pre], line, env) {
+function inShell([name, program, pre], line, env, cwd = temp) {
   return new Promise(resolve => {
     // cmd: the whole line in quotes after /s /c, passed as it is (as Node's shell: true does). PowerShell: a quoted
     // path is run with &, and the native command's exit code is the shell's.
     const cmd = name === "cmd";
     const ps = name === "pwsh" || name === "powershell";
     const text = cmd ? `"${line}"` : ps ? `${line.startsWith('"') ? "& " : ""}${line}; exit $LASTEXITCODE` : line;
-    const child = spawn(program, [...pre, text], {env: {...process.env, NO_UPDATE_NOTIFIER: "1", CI: "1", GITHUB_ACTIONS: "", ...env},
+    const child = spawn(program, [...pre, text], {cwd, env: {...process.env, NO_UPDATE_NOTIFIER: "1", CI: "1", GITHUB_ACTIONS: "", ...env},
       windowsVerbatimArguments: cmd});
     let stdout = "", stderr = "";
     child.stdout.on("data", c => { stdout += c; });
@@ -94,16 +94,16 @@ function inShell([name, program, pre], line, env) {
 }
 
 // What a 203c run must give, from any shell.
-async function expect203c(label, shell, invoke, env) {
+async function expect203c(label, shell, invoke, env, cwd) {
   const {RENAME_EN} = await import(new URL("../legacy/203c/lib.mjs", import.meta.url).href);
-  const v = await inShell(shell, `${invoke} --version`, env);
+  const v = await inShell(shell, `${invoke} --version`, env, cwd);
   check(v.code === 0 && v.stdout.trim() === version && v.stderr.includes(RENAME_EN), `${label} [${shell[0]}]: 203c --version is 203cli's, the notice on stderr`, JSON.stringify(v));
-  const bad = await inShell(shell, `${invoke} nonsense --json`, env);
+  const bad = await inShell(shell, `${invoke} nonsense --json`, env, cwd);
   let error = null;
   try { error = JSON.parse(bad.stderr.trim().split(/\r?\n/).pop()); } catch { error = null; }
   check(bad.code === 2 && error?.code === "usage" && bad.stdout === "" && /^203c /.test(error?.next?.[0] ?? ""),
     `${label} [${shell[0]}]: an error keeps 203cli's exit code (2), JSON last on stderr, next names 203c`, JSON.stringify(bad));
-  const help = await inShell(shell, `${invoke} --help --json`, env);
+  const help = await inShell(shell, `${invoke} --help --json`, env, cwd);
   let json = null;
   try { json = JSON.parse(help.stdout); } catch { json = null; }
   check(help.code === 0 && json?.run_as === "203c", `${label} [${shell[0]}]: --json stdout is JSON alone`, help.stdout.slice(0, 300) + help.stderr.slice(0, 300));
@@ -130,8 +130,12 @@ try {
   fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({name: "a-project", version: "1.0.0", private: true}));
   await npm(["install", "--registry", REGISTRY, "--cache", cache, oldTgz], {cwd: project});
   for (const shell of list) {
+    // npx, from the project: what people type in any shell. And the .bin path itself where a shell runs it as it is
+    // (PowerShell opens a file without an extension instead of running it, for every npm package: npx there).
+    await expect203c("local npx", shell, "npx --no-install 203c", {}, project);
     const local = path.join(project, "node_modules", ".bin");
-    await expect203c("local", shell, shell[0] === "git-bash" || !windows ? `"${local.split(path.sep).join("/")}/203c"` : `"${path.join(local, "203c")}"`, {});
+    if (shell[0] === "pwsh" || shell[0] === "powershell") continue;
+    await expect203c("local .bin", shell, shell[0] === "git-bash" || !windows ? `"${local.split(path.sep).join("/")}/203c"` : `"${path.join(local, "203c")}"`, {});
   }
 
   // npm install -g 203cli: its own command, and its skill.

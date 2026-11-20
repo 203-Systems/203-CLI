@@ -13,7 +13,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import {ROOT} from "./fixtures.mjs";
+import {ROOT, NO_UPDATES} from "./fixtures.mjs";
 import {image} from "./fixtures.mjs";
 import {demoPort} from "../scripts/launcher-usb.mjs";
 
@@ -63,7 +63,7 @@ after(() => { server.close(); fs.rmSync(dir, {recursive: true, force: true}); })
 // Signed out: no token anywhere (no COMMUNITY_TOKEN, an empty config folder).
 function cli(args, env = {}) {
   return new Promise(resolve => {
-    const child = spawn(process.execPath, [CLI, "--api", api, ...args], {cwd: dir, env: {...process.env, XDG_CONFIG_HOME: path.join(dir, "config"),
+    const child = spawn(process.execPath, [CLI, "--api", api, ...args], {cwd: dir, env: {...process.env, ...NO_UPDATES, XDG_CONFIG_HOME: path.join(dir, "config"),
       COMMUNITY_TOKEN: "", COMMUNITY_API: "", LANG: "en_US.UTF-8", ...env}});
     let stdout = "", stderr = "";
     child.stdout.on("data", c => { stdout += c; });

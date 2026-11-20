@@ -11,7 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
-import {ROOT} from "./fixtures.mjs";
+import {ROOT, NO_UPDATES} from "./fixtures.mjs";
 import {FakeBoard, INFO, fakePixel, packFake, unpackFake} from "./board-fake.mjs";
 import {pack7, unpack7, sysexRequest, hidRequest, sysexAnswer, hidAnswer, SysexReader, HidReader, Board, BoardError, OP, FLAG, openBoard,
   bridgeLink, lostPart, COREMIDI_BRIDGE, HIDAPI_BRIDGE} from "../scripts/board-usb.mjs";
@@ -526,7 +526,7 @@ function standInSystem({midi = null, hid = null} = {}) {
 }
 function cli(args, env = {}) {
   return new Promise(resolve => {
-    const child = spawn(process.execPath, [CLI, ...args], {cwd: dir, env: {...process.env, XDG_CONFIG_HOME: path.join(dir, "config"), COMMUNITY_TOKEN: "", COMMUNITY_API: "",
+    const child = spawn(process.execPath, [CLI, ...args], {cwd: dir, env: {...process.env, ...NO_UPDATES, XDG_CONFIG_HOME: path.join(dir, "config"), COMMUNITY_TOKEN: "", COMMUNITY_API: "",
       LANG: "en_US.UTF-8", ...env}});
     let stdout = "", stderr = "";
     child.stdout.on("data", c => { stdout += c; });
@@ -633,7 +633,7 @@ test("Ctrl-C: the firmware is told to stop (CANCEL; an upload PUT_ABORT), nothin
   try {
     const env = standInSystem({midi: pty.slave});
     const interrupt = async args => {
-      const child = spawn(process.execPath, [CLI, ...args], {cwd: dir, env: {...process.env, ...env, XDG_CONFIG_HOME: path.join(dir, "config")}});
+      const child = spawn(process.execPath, [CLI, ...args], {cwd: dir, env: {...process.env, ...NO_UPDATES, ...env, XDG_CONFIG_HOME: path.join(dir, "config")}});
       let stderr = "";
       child.stderr.on("data", c => { stderr += c; });
       const closed = new Promise(resolve => child.on("close", code => resolve(code)));

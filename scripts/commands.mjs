@@ -13,6 +13,7 @@ import {newProject} from "./scaffold.mjs";
 import {inbox, link} from "./feedback.mjs";
 import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff, sync} from "./project-view.mjs";
 import {skillInstall} from "./skill.mjs";
+import {updatesCommand} from "./updates.mjs";
 import path from "node:path";
 
 const B = help => ({bool: true, help});
@@ -108,6 +109,10 @@ cmd("init", "Write 203.json (the project file) from what the project says: CMake
 cmd("skill install", "Put the Agent Skill (SKILL.md, the guides, this 203c) into the coding agents' skills folders: Claude Code's ~/.claude/skills (CLAUDE_SKILLS_DIR), Codex's ~/.codex/skills when it is there; run it after npm install -g 203c and after every update", {group: "Start",
   offline: true, flags: {dir: V("DIR", "Install into this skills folder only (it gets 203-community/)"), ...DRY},
   run: skillInstall, topic: "start", examples: ["skill install", "skill install --dry-run --json", "skill install --dir ~/.agents/skills"]});
+cmd("updates", "Whether a newer 203c is out (npm) and whether this project's CardenzaHAL submodule is behind its main or not a clean copy, with the command for each; --quiet: only those notices, from today's answer (for scripts and CardenzaHAL's build). The commands of the work (sim, flash, log, board, new, fork, publish, rules, …) print the same notices on stderr when they end, asking at most once a day; off in CI and with NO_UPDATE_NOTIFIER or C203_NO_UPDATE_CHECK=1", {group: "Start",
+  offline: true, flags: {project: V("DIR", "The firmware project whose CardenzaHAL submodule is checked (default: here)"),
+    quiet: B("Only the notices, nothing when all is current; from today's answer, and none in CI or with the opt-outs (for scripts and builds)")},
+  run: updatesCommand, topic: "start", examples: ["updates", "updates --json", "updates --quiet --project ."]});
 cmd("new NAME [DIR]", "Start a firmware project: CardenzaHAL as a git submodule and its template, named NAME, with 203.json, the README and the release workflow; it builds as it is (no sign-in)", {group: "Start",
   anyone: true, flags: {summary: FIRMWARE_FIELDS.summary, tags: FIRMWARE_FIELDS.tags, device: V("DEVICE", "The device (default cardenza, the only one with a template so far)"),
     project: V("ID", "CMake's project() name, the BIN's name (default from NAME: \"Pocket Metronome\" → pocket_metronome)"), ...DRY},
@@ -521,7 +526,7 @@ cmd("devices update-launcher DEVICE", "Upgrade the device's 203 Launcher to the 
 
 // The development channel of a running firmware on CardenzaHAL (its docs/usb-dev.md), over the USB cable: no sign-in (`anyone`),
 // like flash and log. macOS and Linux over its MIDI (Linux: else its HID); Windows through python's hidapi.
-const BOARD = {group: "Board (a running firmware over USB)", anyone: true, topic: "board"};
+const BOARD = {group: "Board (a running firmware over USB)", anyone: true, topic: "board", notices: true};
 cmd("board info", "What the firmware on the cable is: name, version, community code, build, ELF SHA-256, CardenzaHAL commit, Launcher, chip, uptime and reset reason", {...BOARD,
   run: boardInfo, examples: ["board info", "board info --json"]});
 cmd("board partitions", "The flash: every partition (offsets and sizes in hex), app images and how full, NVS entries used, the running one, free flash", {...BOARD,
@@ -672,6 +677,11 @@ cmd("source upload VCODE [DIR]", "Attach the source archive of the project in DI
 cmd("source delete CODE VCODE", "Remove a version's source archive", {group: "Publishing", flags: YES, confirm: true, op: "version_source_delete", write: true,
   args: ctx => ({code: ctx.args.CODE, version_code: ctx.args.VCODE}), examples: ["source delete K7M2QX V3X9PA --yes --json"]});
 
+// The commands of the work on a firmware (and every board command) print the update notices when they end: a newer 203c,
+// the project's CardenzaHAL behind its main (updates.mjs; doctor lists them itself).
+for (const name of ["new", "init", "fork", "clone", "link", "rules", "publish", "versions publish", "versions simulator", "sim build", "sim upload", "sim check",
+  "source check", "source upload", "sync", "flash", "log", "devices recover"]) COMMANDS.find(c => c.name === name).notices = true;
+
 // Groups whose bare word runs one of their commands (devices → devices list).
 export const GROUP_DEFAULT = {devices: "devices list", me: "whoami"};
 // Words people use for commands that have other names: suggested, never run silently.
@@ -682,7 +692,7 @@ export const ALIASES = {
   request: "requests", device: "devices", merge: "merges", cover: "firmware cover", list: "firmware mine", info: "doctor",
   images: "firmware images", pictures: "firmware images", gallery: "firmware images", screenshots: "firmware images",
   checkout: "clone", "git-clone": "clone", remix: "fork", "based-on": "firmware based-on", lineage: "firmware based-on", spec: "rules", guide: "rules",
-  quota: "quotas", limits: "quotas", lookup: "firmware lookup", archive: "source upload",
+  quota: "quotas", limits: "quotas", update: "updates", upgrade: "updates", outdated: "updates", lookup: "firmware lookup", archive: "source upload",
   simulator: "sim", emulator: "sim", wasm: "sim build", web: "sim build", play: "sim check",
 };
 

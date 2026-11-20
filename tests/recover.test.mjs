@@ -11,7 +11,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import {ROOT} from "./fixtures.mjs";
+import {ROOT, NO_UPDATES} from "./fixtures.mjs";
 import {image, merged} from "./fixtures.mjs";
 
 const CLI = path.join(ROOT, "scripts/203c.mjs");
@@ -52,7 +52,7 @@ after(() => { server.close(); fs.rmSync(dir, {recursive: true, force: true}); })
 
 function cli(args, env = {}) {
   return new Promise(resolve => {
-    const child = spawn(process.execPath, [CLI, "--api", api, ...args], {cwd: dir, env: {...process.env, XDG_CONFIG_HOME: dir,
+    const child = spawn(process.execPath, [CLI, "--api", api, ...args], {cwd: dir, env: {...process.env, ...NO_UPDATES, XDG_CONFIG_HOME: dir,
       COMMUNITY_TOKEN: "cct_" + "1".repeat(64), COMMUNITY_API: "", LANG: "en_US.UTF-8", ...env}});
     let stdout = "", stderr = "";
     child.stdout.on("data", c => { stdout += c; });

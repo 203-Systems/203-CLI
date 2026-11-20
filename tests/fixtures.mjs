@@ -136,12 +136,16 @@ export async function standInApi(routes) {
   return {api: `http://127.0.0.1:${server.address().port}/api`, requests, close: () => new Promise(resolve => server.close(resolve))};
 }
 
+// The update notices off (C203_NO_UPDATE_CHECK) and, should a test turn them on, never asking npm or GitHub: for every
+// 203c a test runs (updates.test.mjs turns them on with stand-ins).
+export const NO_UPDATES = {C203_NO_UPDATE_CHECK: "1", NO_UPDATE_NOTIFIER: "", C203_NPM_REGISTRY: "http://127.0.0.1:9", C203_GITHUB_API: "http://127.0.0.1:9"};
+
 // Runs 203c with these arguments: {code, stdout, stderr, json (stdout parsed), error (stderr's last line parsed)}.
 export function run(args, {cwd = ROOT, env = {}} = {}) {
   return new Promise(resolve => {
     // Not in an agent's sandbox unless a test says so (203c reads these to explain a blocked network).
     const child = spawn(process.execPath, [CLI, ...args], {cwd, env: {...process.env, COMMUNITY_TOKEN: "", COMMUNITY_API: "", COMMUNITY_LANG: "",
-      LC_ALL: "", LC_MESSAGES: "", LANG: "en_US.UTF-8", CLAUDE_CODE_REMOTE: "", CODEX_SANDBOX_NETWORK_DISABLED: "", ...env}});
+      LC_ALL: "", LC_MESSAGES: "", LANG: "en_US.UTF-8", CLAUDE_CODE_REMOTE: "", CODEX_SANDBOX_NETWORK_DISABLED: "", ...NO_UPDATES, ...env}});
     let stdout = "", stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk; });
     child.stderr.on("data", chunk => { stderr += chunk; });

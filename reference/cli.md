@@ -236,6 +236,17 @@ Put the Agent Skill (SKILL.md, the guides, this 203c) into the coding agents' sk
     203c skill install --dry-run --json
     203c skill install --dir ~/.agents/skills
 
+### `203c updates`
+
+Whether a newer 203c is out (npm) and whether this project's CardenzaHAL submodule is behind its main or not a clean copy, with the command for each; --quiet: only those notices, from today's answer (for scripts and CardenzaHAL's build). The commands of the work (sim, flash, log, board, new, fork, publish, rules, …) print the same notices on stderr when they end, asking at most once a day; off in CI and with NO_UPDATE_NOTIFIER or C203_NO_UPDATE_CHECK=1
+
+- `--project DIR` The firmware project whose CardenzaHAL submodule is checked (default: here)
+- `--quiet` Only the notices, nothing when all is current; from today's answer, and none in CI or with the opt-outs (for scripts and builds)
+
+    203c updates
+    203c updates --json
+    203c updates --quiet --project .
+
 ### `203c new NAME [DIR]`
 
 Start a firmware project: CardenzaHAL as a git submodule and its template, named NAME, with 203.json, the README and the release workflow; it builds as it is (no sign-in)

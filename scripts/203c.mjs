@@ -17,6 +17,7 @@ import {COMMANDS, GLOBAL_FLAGS, GROUPS, GROUP_DEFAULT, ALIASES, findCommand} fro
 import {CliError, EXIT, EXIT_TEXT, ERROR_CODES, TOPICS, explainApiError, topicText, usage} from "./guide.mjs";
 import {isPlaceholder, nearest, normalizeChannel, normalizeCode, normalizeTags} from "./checks.mjs";
 import {rules} from "./publish.mjs";
+import {startNotices} from "./updates.mjs";
 
 // Flag names that mean another flag (suggested, never used silently).
 const FLAG_SYNONYMS = {binary: "bin", image: "bin", file: "bin", "bin-file": "bin", "firmware-bin": "bin", path: "bin", ver: "version", tag: "tags",
@@ -820,6 +821,11 @@ async function main(argv) {
   // Notes made while parsing.
   if (!json) for (const n of notes) process.stderr.write("203c: " + n + "\n");
   ctx.args = bindArguments(command, positional, {...base, args: {}});
+  // A newer 203c, the project's CardenzaHAL behind its main: asked now, said when the command ends (updates.mjs).
+  if (command.notices) {
+    const dir = typeof flags.project === "string" ? flags.project : ["sim build", "source check", "source upload"].includes(command.name) ? ctx.args.DIR : null;
+    updateNotices = startNotices({from: path.resolve(ctx.cwd, dir ?? ".")});
+  }
   ctx.cmd = (changes = {}, {json: asJson = json} = {}) => rebuild({...base, args: ctx.args}, command, order, positional, changes, {json: asJson});
   ctx.text = (key, {need, min, max} = {}) => {
     const fileKey = key + "_file";
@@ -1006,8 +1012,11 @@ function report(error, argv) {
 
 // The context of the command being run, to explain the API's refusals in its terms.
 let lastContext = null;
+// The update notices of the command being run (on stderr when it ends, before an error's own lines: those stay last).
+let updateNotices = null;
+const showNotices = async () => { try { await updateNotices?.show(); } catch { /* never in the way */ } };
 const argv = process.argv.slice(2);
 // Exit once stdout and stderr have written everything: to a pipe they are asynchronous on macOS, and exiting at once
 // cut long answers short there (--help --json read by an agent).
 const exitAfterOutput = code => process.stdout.write("", () => process.stderr.write("", () => process.exit(code)));
-main(argv).then(code => exitAfterOutput(code ?? 0), error => exitAfterOutput(report(error, argv)));
+main(argv).then(async code => { await showNotices(); exitAfterOutput(code ?? 0); }, async error => { await showNotices(); exitAfterOutput(report(error, argv)); });

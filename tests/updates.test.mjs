@@ -193,7 +193,12 @@ test("CardenzaHAL: the submodule found from the project or a folder in it; behin
   assert.equal(f.asked.filter(u => u.includes("/compare/")).length, 1);
   // Run from elsewhere: the path is the one to type from there.
   const sub = await checkUpdates({from: path.join(p.fw, "main"), cwd: path.join(p.fw, "main"), fetch: f.fetch, file, now: NOW, env: {}});
-  assert.match(sub.notices[0], new RegExp(`update --remote ${path.join("..", "components", "CardenzaHAL").replace(/\\/g, "\\\\")},`));
+  assert.match(sub.notices[0], / git submodule update --remote \.\.\/components\/CardenzaHAL,/);
+  // From outside the repository: git -C to it. For a build's folder (cwd null): from the repository's top.
+  const outside = await checkUpdates({from: p.fw, cwd: dir, fetch: f.fetch, file, now: NOW, env: {}});
+  assert.match(outside.notices[0], / git -C fw-behind submodule update --remote components\/CardenzaHAL, .*\(git -C fw-behind add components\/CardenzaHAL\)$/);
+  const build = await checkUpdates({from: p.fw, cwd: null, fetch: f.fetch, file, now: NOW, env: {}});
+  assert.match(build.notices[0], / git submodule update --remote components\/CardenzaHAL,/);
 });
 
 test("CardenzaHAL: at its main, a commit GitHub does not have, GitHub away: nothing; a commit off main: said", async () => {
@@ -330,6 +335,8 @@ test("203c updates: both answers (--json), --quiet: only the notices or nothing,
   assert.equal(quiet.code, 0);
   assert.equal(quiet.stdout.trim().split("\n").length, 2);
   assert.match(quiet.stdout, /^203c 99\.0\.0 is out/);
+  // --project (CardenzaHAL's build, run in its build folder): the commands from the project's top.
+  assert.match(quiet.stdout, / git submodule update --remote components\/CardenzaHAL,/);
   // All current: --quiet prints nothing; plain says so.
   latest = CLI_VERSION;
   try {

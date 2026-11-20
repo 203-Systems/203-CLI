@@ -90,6 +90,8 @@ function git(args, cwd) {
   return run.status === 0 ? (run.stdout ?? "").trim() : null;
 }
 const real = p => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+const inside = (dir, p) => { const r = path.relative(dir, p); return !r.startsWith("..") && !path.isAbsolute(r); };
+const quoted = p => /^[A-Za-z0-9_@%+=:,./-]+$/.test(p) ? p : `"${p}"`;
 
 /** owner/name of a GitHub repository's URL (https, ssh, scp-like), or null. */
 export function githubRepo(url) {
@@ -115,7 +117,7 @@ export function findHalSubmodule(from) {
   const here = real(from);
   const found = Object.values(modules).filter(m => m.path && fs.existsSync(path.join(top, m.path, "cardenzaHAL.h")));
   // Several (rare): the one inside the folder asked about first.
-  const outside = m => Number(!real(path.join(top, m.path)).startsWith(here));
+  const outside = m => Number(!inside(here, real(path.join(top, m.path))));
   found.sort((a, b) => outside(a) - outside(b));
   for (const module of found) {
     const dir = path.join(top, module.path);
@@ -166,6 +168,7 @@ async function getJson(url, {fetch, signal, headers = {}}) {
  */
 export async function checkUpdates({from = process.cwd(), fresh = false, env = process.env, fetch = globalThis.fetch, now = Date.now(),
   file = stateFile(env), timeout = TIMEOUT_MS, current = CLI_VERSION, cwd = process.cwd(), hal: wantHal = true} = {}) {
+  // cwd: where the commands in the notices are typed (null: from the repository's top, as for a build's folder).
   const state = readState(file);
   const signal = AbortSignal.timeout(timeout);
   const registry = String(env.C203_NPM_REGISTRY || NPM_REGISTRY).replace(/\/+$/, "");
@@ -222,16 +225,21 @@ export async function checkUpdates({from = process.cwd(), fresh = false, env = p
   if (outdated) notices.push(`203c ${c.latest} is out (you have ${current}): ${UPDATE_CLI}`);
   let halOut = null;
   if (hal) {
-    const shown = path.relative(cwd, hal.dir) || ".";
+    // The path to type: from here when here is in the repository, else (a build's folder too: cwd null) from its top,
+    // the .gitmodules path, with git -C to it when here is elsewhere.
+    const slash = p => p.split(path.sep).join("/");
+    const fromTop = !cwd || !inside(real(hal.top), real(cwd));
+    const shown = fromTop ? hal.path : slash(path.relative(cwd, hal.dir)) || ".";
+    const q = quoted(shown);
+    const gitC = !cwd || !fromTop ? "git" : `git -C ${quoted(slash(path.relative(cwd, hal.top)) || ".")}`;
     const onMain = h && ["identical", "ahead"].includes(h.status);
     // check_submodule.py looks at the submodule's own origin/main, which a shallow clone may lack: GitHub knows better.
     const localText = l && !(l.not_on_main && onMain) ? l.text : null;
     halOut = {path: shown, dir: hal.dir, commit: hal.commit, repo: hal.repo, status: h?.status ?? null, behind: h?.behind ?? null,
       checked: h?.checked ?? (hal.repo ? "failed" : "skipped"), local: localText};
-    const q = shown.includes(" ") ? `"${shown}"` : shown;
     if (h?.status === "ahead" && h.behind > 0) {
       notices.push(`CardenzaHAL in this project (${q}) is ${h.behind} commit${h.behind === 1 ? "" : "s"} behind its main: ` +
-        `git submodule update --remote ${q}, build and test, then commit the new pointer (git add ${q})`);
+        `${gitC} submodule update --remote ${q}, build and test, then commit the new pointer (${gitC} add ${q})`);
     }
     if (localText) notices.push(`CardenzaHAL in this project (${q}) is not a clean copy of upstream main: ${localText}`);
     else if (["behind", "diverged"].includes(h?.status) && !l?.not_on_main) {
@@ -273,7 +281,8 @@ export async function updatesCommand(ctx) {
   // --quiet is for scripts and builds (CardenzaHAL's CMake): the notices only (nothing when there are none), from the
   // day's answers, and none where nothing is asked by itself (CI, the opt-outs).
   const off = o.quiet ? automaticOff() : null;
-  const result = off ? {cli: null, hal: null, notices: [], off} : await checkUpdates({from, fresh: !o.quiet, cwd: ctx.cwd});
+  // With --project (a build in its own folder) the commands are written from the project's repository top.
+  const result = off ? {cli: null, hal: null, notices: [], off} : await checkUpdates({from, fresh: !o.quiet, cwd: typeof o.project === "string" ? null : ctx.cwd});
   if (o.quiet) return o.json ? {json: result} : result.notices.length ? {json: result, text: result.notices.join("\n")} : undefined;
   const lines = [];
   const {cli, hal, notices} = result;

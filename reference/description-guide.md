@@ -1,15 +1,11 @@
 [en]
 # Writing a firmware's description
 
-The description is what people read under the pictures on a firmware's page, and in the Launcher's store under
-Details. They are not developers: they want to know what it is, what it does for them, what they need and how to
-start, and then decide to install it. Write it like a product page: short, plain words, what people get before how
-it works. The manual goes in its tutorial.
+The description is what people read under the pictures on a firmware's page, and in the Launcher's store under Details. They are not developers: they want to know what it is, what it does for them, what they need and how to start, and then decide to install it. Write it like a product page: short, plain words, what people get before how it works. The manual goes in its tutorial.
 
 ## The shape {#shape}
 
-1. **The opening**, without a heading: one or two sentences saying what it is and who it is for. The line that
-   matters most comes first.
+1. **The opening**, without a heading: one or two sentences saying what it is and who it is for. The line that matters most comes first.
 2. **`## Features`**: 3–6 bullets of one line each, the benefit before the detail.
 3. **`## Needs`** (when it needs something): the device, the Launcher's version, accessories, an SD card.
 4. **`## Get started`**: 1–3 lines: the first thing to do once it is installed.
@@ -17,8 +13,7 @@ it works. The manual goes in its tutorial.
 
 ## Length {#length}
 
-Aim for **800 characters** or fewer (pictures are not counted). Over **1500** the editor and 203c warn; over
-**3000** a description cannot be saved. Short is not a loss: what does not fit here belongs elsewhere.
+Aim for **800 characters** or fewer (pictures are not counted). Over **1500** the editor and 203c warn; over **3000** a description cannot be saved. Short is not a loss: what does not fit here belongs elsewhere.
 
 | Not in the description | Where it goes |
 | --- | --- |
@@ -29,12 +24,7 @@ Aim for **800 characters** or fewer (pictures are not counted). Over **1500** th
 
 ## Pictures {#pictures}
 
-Show it before you describe it: **3–5 different screenshots of the firmware itself** in its gallery, the large
-pictures above the description. The screen people see first, then one for each main feature. With a Cardenza on the
-USB cable running it, `203c board screen --out docs/screens/home.png` saves the screen as a PNG (the page enlarges it
-pixel for pixel); a photo of the device works too. On the site the gallery is a suggestion; `203c publish` needs 3–5
-(203.json's `publish.images`). A picture inside the text: **Insert picture** on the site, `![words](image:<id>)` in
-Markdown.
+Show it before you describe it: **3–5 different screenshots of the firmware itself** in its gallery, the large pictures above the description. The screen people see first, then one for each main feature. With a Cardenza on the USB cable running it, `203c board screen --out docs/screens/home.png` saves the screen as a PNG (the page enlarges it pixel for pixel); a photo of the device works too. On the site the gallery is a suggestion; `203c publish` needs 3–5 (203.json's `publish.images`). A picture inside the text: **Insert picture** on the site, `![words](image:<id>)` in Markdown.
 
 ## The template {#template}
 
@@ -57,8 +47,7 @@ The editor's **Use the template** puts this in; `203c new` writes it to `docs/de
 
 ## An example {#example}
 
-Too long: 13,000 characters with every mode's key table, the keycaps' legends, the macros' limits and links into the
-HAL's source. A user scrolls past it and still does not know whether it is for them. The same firmware in 700:
+Too long: 13,000 characters with every mode's key table, the keycaps' legends, the macros' limits and links into the HAL's source. A user scrolls past it and still does not know whether it is for them. The same firmware in 700:
 
 ```markdown
 Turns the Cardenza into a controller for your computer and phone: keyboard, mouse, gamepad, MIDI keyboard, USB sound card and TV remote in one.
@@ -101,13 +90,12 @@ Press **Fn** for the mode menu, then **1–8** to pick one. Every mode's keys ar
 | ` ``` ` on the lines above and below | a block of code |
 | `![words](image:<id>)` | one of its own pictures |
 
-A blank line starts a new paragraph. No HTML; pictures from other sites show as links.
+A line ends where you end it (do not wrap long lines by hand); a blank line starts a new paragraph. No HTML; pictures from other sites show as links.
 
 [zh]
 # 怎样写固件简介
 
-简介是固件页上图片下面的那段文字，也是启动器商店里「详情」显示的内容。读它的人不是开发者：他们想知道这是什么、对自己有什么用、要准备什么、
-装好以后怎么开始，然后决定装不装。所以要像写产品介绍一样：简洁、用大白话、先说用户得到什么，再说怎么做到的。说明书放到它的教程里。
+简介是固件页上图片下面的那段文字，也是启动器商店里「详情」显示的内容。读它的人不是开发者：他们想知道这是什么、对自己有什么用、要准备什么、装好以后怎么开始，然后决定装不装。所以要像写产品介绍一样：简洁、用大白话、先说用户得到什么，再说怎么做到的。说明书放到它的教程里。
 
 ## 结构 {#shape}
 
@@ -130,10 +118,7 @@ A blank line starts a new paragraph. No HTML; pictures from other sites show as 
 
 ## 图片 {#pictures}
 
-先让人看到，再用文字介绍：在图片（简介上面的大图）里放 **3–5 张固件自己的截图**，每张都不一样：第一张是用户最先看到的画面，然后每个主要功能一张。
-Cardenza 用 USB 线连着电脑、正在运行这个固件时，`203c board screen --out docs/screens/home.png` 把屏幕存成一张 PNG（页面会按像素放大）；
-设备的照片也可以。在网页上发布时图片只是建议；用 `203c publish` 发布必须有 3–5 张（203.json 的 `publish.images`）。正文里的插图：网页上点
-**插入图片**，Markdown 里写 `![说明](image:<id>)`。
+先让人看到，再用文字介绍：在图片（简介上面的大图）里放 **3–5 张固件自己的截图**，每张都不一样：第一张是用户最先看到的画面，然后每个主要功能一张。Cardenza 用 USB 线连着电脑、正在运行这个固件时，`203c board screen --out docs/screens/home.png` 把屏幕存成一张 PNG（页面会按像素放大）；设备的照片也可以。在网页上发布时图片只是建议；用 `203c publish` 发布必须有 3–5 张（203.json 的 `publish.images`）。正文里的插图：网页上点**插入图片**，Markdown 里写 `![说明](image:<id>)`。
 
 ## 模板 {#template}
 
@@ -199,4 +184,4 @@ Cardenza 用 USB 线连着电脑、正在运行这个固件时，`203c board scr
 | 上下各一行 ` ``` ` | 一段代码 |
 | `![说明](image:<id>)` | 它自己的一张图片 |
 
-空一行是新的一段。不能写 HTML；别的网站的图片显示成链接。
+换行就是换行（不要手动折行）；空一行是新的一段。不能写 HTML；别的网站的图片显示成链接。

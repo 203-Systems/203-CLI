@@ -289,8 +289,8 @@ export async function tutorialPublish(ctx) {
   }
   const mine = (await allTutorials(ctx, code)).find(t => t.kind === "guide" && t.author?.id === me.id) ?? null;
   const counts = countsOf(checked.result);
-  plan.push(mine ? `change your tutorial ${mine.id} on ${fw.name} (${code}): ${counts.lessons} lessons, ${counts.steps} steps`
-    : `add your tutorial to ${fw.name} (${code}): ${counts.lessons} lessons, ${counts.steps} steps`);
+  const sizes = `${counts.lessons} lesson${counts.lessons === 1 ? "" : "s"}, ${counts.steps} step${counts.steps === 1 ? "" : "s"}`;
+  plan.push(mine ? `change your tutorial ${mine.id} on ${fw.name} (${code}): ${sizes}` : `add your tutorial to ${fw.name} (${code}): ${sizes}`);
   if (o.dry_run) {
     // The server's own dry run, with the pictures it has; the ones to upload are left out of it.
     const document = structuredClone(checked.result.tutorial);

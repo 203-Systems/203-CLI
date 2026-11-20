@@ -188,6 +188,22 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `GET /firmware/{code}/merges/{n}` | A merge request |  | MergeRequest |
 | `POST /firmware/{code}/merges/{n}/status` | Merge, close or reopen — body: status, merged_version? | write | MergeRequest |
 
+## Tutorials
+
+| | | auth | answer |
+|---|---|---|---|
+| `GET /firmware/{code}/tutorials` | A firmware's tutorials: its owner's first (official), then the others, newest updated first |  | List&lt;TutorialSummary&gt; |
+| `POST /firmware/{code}/tutorials?dry_run` | Add a tutorial: {document} (the file's text, checked: errors with line and column) or {title, url} (a link); one guide and 5 links each; 20 a day — body: document?, title?, url? | write | 201 Tutorial |
+| `GET /firmware/{code}/tutorials/{id}` | A tutorial (a guide's document; its source for its author) |  | Tutorial |
+| `POST /firmware/{code}/tutorials/{id}/edit?dry_run` | Change a tutorial (its author): a guide's whole file, a link's title or address — body: document?, title?, url? | write | Tutorial |
+| `POST /firmware/{code}/tutorials/{id}/delete` | Delete a tutorial (its author, an admin); a guide's pictures go with it | write | Status |
+| `POST /firmware/{code}/tutorials/{id}/hide` | Hide a tutorial or show it again (the firmware's owner, an admin; its author is told) — body: on, reason? | write | Tutorial |
+| `GET /firmware/{code}/tutorial-images` | Your pictures for your tutorial of a firmware (image:<id> in its file) | read | TutorialImages |
+| `POST /firmware/{code}/tutorial-images` | A signed upload for a tutorial's picture (PNG, JPEG or WebP, up to 2 MB; 60 a firmware) — body: mime, size | write | ImageUpload |
+| `POST /firmware/{code}/tutorial-images/{id}/done` | The picture is uploaded: check it | write | TutorialImage |
+| `POST /firmware/{code}/tutorial-images/{id}/delete` | Remove a picture no tutorial of yours shows | write | Status |
+| `GET /tutorials?target&q` | Firmware with tutorials, the most downloaded first: each with its count and first 3 (the official first) |  | List&lt;FirmwareTutorials&gt; |
+
 ## Works
 
 | | | auth | answer |

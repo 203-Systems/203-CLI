@@ -10,6 +10,7 @@ import zlib from "node:zlib";
 import {spawnSync} from "node:child_process";
 import {BoardError, OP, LIMITS, openBoard, concat, u32, readU32, lostPart} from "./board-usb.mjs";
 import {CliError, EXIT} from "./guide.mjs";
+import {colorFlag, framePicture, framedPng} from "./pictures.mjs";
 
 const EMPTY = new Uint8Array(0);
 const enc = new TextEncoder();
@@ -466,13 +467,27 @@ export async function boardScreen(ctx) {
   const cwd = ctx.cwd ?? process.cwd();
   const file = path.resolve(cwd, String(ctx.flags?.out ?? `cardenza-${stamp()}.png`));
   if (!fs.existsSync(path.dirname(file))) throw new CliError("file_not_found", `The folder of --out does not exist (${path.dirname(file)})`, {field: "out"});
+  // --frame: the community's standard picture (pictures.mjs: 1280 x 720, the colour, the bezel, the screen at 4 times).
+  const frame = !!ctx.flags?.frame;
+  if (ctx.flags?.color !== undefined && !frame) throw new CliError("usage", "--color is the standard picture's background: give --frame with it", {exit: EXIT.usage, field: "color"});
+  const color = frame ? colorFlag(ctx) : null;
   return session(ctx, async board => {
     const bytes = await board.ask(OP.SCREEN, EMPTY, {timeout: board.timeout});
     const screen = decodeScreen(bytes);
-    fs.writeFileSync(file, encodePng(screen.width, screen.height, rgbOf(screen.pixels)));
+    const rgb = rgbOf(screen.pixels);
+    let framed = null;
+    if (frame) {
+      try { framed = framePicture({width: screen.width, height: screen.height, rgb}, color); } catch (error) {
+        throw new CliError("invalid", `The screen is ${screen.width} × ${screen.height}: the standard picture frames the Cardenza's 240 × 135 (or a whole multiple); leave --frame out`, {field: "frame"});
+      }
+    }
+    fs.writeFileSync(file, framed ? framedPng(framed) : encodePng(screen.width, screen.height, rgb));
     const source = screen.source === 0 ? "new" : "last";
-    if (!ctx.json) ctx.say?.(`${screen.width} × ${screen.height}, ${source === "new" ? "a frame the firmware presented after the request" : "the firmware's last frame (it presented none for 250 ms)"}`);
-    return {json: {path: file, width: screen.width, height: screen.height, encoding: screen.encoding === 1 ? "rle" : "raw", source, bytes: bytes.length}, text: file};
+    if (!ctx.json) ctx.say?.(`${screen.width} × ${screen.height}${framed ? ` in the standard picture (1280 × 720 on ${color.hex})` : ""}, ` +
+      `${source === "new" ? "a frame the firmware presented after the request" : "the firmware's last frame (it presented none for 250 ms)"}`);
+    return {json: {path: file, width: framed ? framed.width : screen.width, height: framed ? framed.height : screen.height,
+      screen: {width: screen.width, height: screen.height}, framed: !!framed, ...(framed ? {color: color.hex} : {}),
+      encoding: screen.encoding === 1 ? "rle" : "raw", source, bytes: bytes.length}, text: file};
   });
 }
 

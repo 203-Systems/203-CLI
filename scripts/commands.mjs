@@ -10,6 +10,7 @@ import {deviceLog} from "./devlog.mjs";
 import {boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardPress, boardKeys, boardCoredump,
   filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv} from "./board.mjs";
 import {newProject} from "./scaffold.mjs";
+import {imagesFrame} from "./pictures.mjs";
 import {inbox, link} from "./feedback.mjs";
 import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff, sync} from "./project-view.mjs";
 import {skillInstall} from "./skill.mjs";
@@ -151,7 +152,7 @@ cmd("firmware cover CODE [IMAGE]", "Set a firmware's cover picture (PNG/JPEG/Web
 // Pictures (COMMUNITY.md "Pictures"): the gallery shown large above the description, and the description's own.
 cmd("firmware images list CODE", "A firmware's pictures: the gallery (shown large above the description, at most 9, in order) and the description's own (at most 20), each with its id, caption, size, the reference to put in the description and whether it is there", {group: "Publishing",
   run: listPictures, topic: "pictures", examples: ["firmware images list K7M2QX --json"]});
-cmd("firmware images add CODE IMAGE...", "Add pictures (PNG/JPEG/WebP, ≤ 2 MB each) to the gallery above the description, or with --description to the description (it prints each one's ![](image:ID) to put in the text); a picture it has already is skipped", {group: "Publishing",
+cmd("firmware images add CODE IMAGE...", "Add pictures (PNG/JPEG/WebP, ≤ 2 MB each) to the gallery above the description, or with --description to the description (it prints each one's ![](image:ID) to put in the text); a picture it has already is skipped. The standard look: images frame (help pictures)", {group: "Publishing",
   flags: {caption: V("TEXT", "One line under the picture (≤ 60 characters; one picture only)"), description: B("Into the description (placed by its text: ![words](image:ID)), not the gallery"), ...DRY},
   run: addPictures, write: true, topic: "pictures",
   examples: ['firmware images add K7M2QX docs/home.png --caption "The home screen" --json', "firmware images add K7M2QX docs/seq.png docs/mix.png --dry-run --json",
@@ -165,6 +166,12 @@ cmd("firmware images order CODE ID...", "The gallery's order: these ids first, i
   flags: {...DRY}, run: orderPictures, write: true, topic: "pictures", examples: ["firmware images order K7M2QX q4hzuufx 7ces8nvr --json"]});
 cmd("firmware images prune CODE", "Remove the description's pictures its text no longer uses", {group: "Publishing",
   flags: {...DRY, ...YES}, run: prunePictures, write: true, topic: "pictures", examples: ["firmware images prune K7M2QX --dry-run --json", "firmware images prune K7M2QX --yes --json"]});
+// The standard picture (COMMUNITY.md "Pictures", the user 2026-11-20): one flat colour, a dark bezel, the screen at 4 times.
+cmd("images frame IMAGE...", "The community's standard picture for the cover and the gallery: 1280 x 720, one flat colour, a dark bezel and in it the screenshot (the 240 x 135 screen or a whole multiple) at 4 times, pixel for pixel; a design of the screen's shape is resampled into the same frame. Writes NAME-framed.png beside each (help pictures)", {group: "Publishing", offline: true,
+  flags: {color: V("COLOR", "The background, one flat colour: #RRGGBB, or orange (the default), amber, mint, blue, violet, grey, paper; the firmware's own colour is best, the same on every picture"),
+    out: V("FILE.png", "Where to write it (one IMAGE only; default IMAGE-framed.png beside it)")},
+  run: imagesFrame, topic: "pictures",
+  examples: ["images frame docs/screens/home.png", "images frame docs/screens/*.png --color '#3B82E6' --json", "images frame docs/screens/home.png --out docs/cover.png --json"]});
 cmd("firmware checklist CODE", "What a firmware's page has and lacks (cover, pictures, summary, description, links, notes), with the command for each", {group: "Publishing",
   run: checklist, topic: "page", examples: ["firmware checklist K7M2QX --json"]});
 // Tutorials (教程, COMMUNITY.md "Tutorials"): how to use a firmware, lessons of short steps in one format
@@ -567,9 +574,11 @@ cmd("board memory", "Heaps (internal, PSRAM, DMA: free, least free, largest bloc
 cmd("board storage", "The SD card: mounted, its size, the file system's size and free space", {...BOARD, run: boardStorage, examples: ["board storage --json"]});
 cmd("board status", "The display, keys down, the system menu, USB and the presence service", {...BOARD, run: boardStatus, examples: ["board status --json"]});
 cmd("board i2c", "Every device that answers on the shared I2C bus (the codec, the expansion port's)", {...BOARD, run: boardI2c, examples: ["board i2c --json"]});
-cmd("board screen", "A screenshot: the firmware's next frame as a PNG (prints its path)", {...BOARD,
-  flags: {out: V("FILE.png", "Where to write it (default cardenza-<date>-<time>.png in the current folder)")}, run: boardScreen,
-  examples: ["board screen", "board screen --out menu.png --json"]});
+cmd("board screen", "A screenshot: the firmware's next frame as a PNG (prints its path); --frame makes it the community's standard picture for the cover and the gallery", {...BOARD,
+  flags: {out: V("FILE.png", "Where to write it (default cardenza-<date>-<time>.png in the current folder)"),
+    frame: B("The standard picture (1280 x 720: one flat colour, a dark bezel, the screen at 4 times; help pictures) instead of the bare 240 x 135 screen"),
+    color: V("COLOR", "With --frame: the background, #RRGGBB or orange (the default), amber, mint, blue, violet, grey, paper")}, run: boardScreen,
+  examples: ["board screen", "board screen --out menu.png --json", "board screen --frame --out docs/screens/home.png --json", "board screen --frame --color '#3B82E6' --out docs/screens/seq.png"]});
 cmd("board press KEY...", "Press keys as a finger would, one after another (fn+s: together): esc, 1, q, fn, ok, space, up/down/left/right (; . , /), home …", {...BOARD,
   flags: {hold: V("MS", "How long each is held (default 100)", {type: "int"}), gap: V("MS", "The pause after each (default 100)", {type: "int"})},
   run: boardPress, examples: ["board press down down ok", "board press fn+s", "board press home --json", "board press esc --hold 1500"]});

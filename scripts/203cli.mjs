@@ -122,6 +122,12 @@ function resolveCommand(words, argv, ctxBase) {
       next: deeper.map(c => `${ctxBase.prog} ${c.name} --help${ctxBase.json ? " --json" : ""}`)});
   }
   const without = drop => argv.filter((token, i) => !(drop.includes(token) && argv.indexOf(token) === i));
+  // A group that is also another group's alias (images: images frame here, firmware images add there): that group's action.
+  const aliased = ALIASES[first] && lowered[1] ? COMMANDS.find(c => c.name === `${ALIASES[first]} ${lowered[1]}`) : null;
+  if (aliased) {
+    throw usage(`Unknown command: ${first} ${words[1]}`, {hint: `Did you mean ${aliased.name}? (${ctxBase.prog} ${first} --help lists ${first}'s own)`,
+      next: [`${ctxBase.prog} ${[...aliased.words, ...without([words[0], words[1]])].map(quote).join(" ")}`, `${ctxBase.prog} ${aliased.name} --help${ctxBase.json ? " --json" : ""}`]});
+  }
   if (GROUPS.includes(first)) {
     const actions = [...new Set(COMMANDS.filter(c => c.words[0] === first && c.words.length > 1).map(c => c.words[1]))];
     const alias = ALIASES[lowered[1]]?.split(" ").pop();

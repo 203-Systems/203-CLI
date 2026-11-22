@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import {fileURLToPath} from "node:url";
-import {Client, ApiError, DEFAULT_API, CLI_VERSION, OPS, opsByName, loadToken, saveToken, forgetToken, forgetOldToken, migrateFromOldName, tokenFile, loginStart, loginPoll, browserLogin, browserProblem,
+import {Client, ApiError, DEFAULT_API, CLI_VERSION, OPS, opsByName, loadToken, saveToken, forgetToken, tokenFile, loginStart, loginPoll, browserLogin, browserProblem,
   oidcExchange, oidcAvailable, inGithubActions, runCredentialOf, saveRunCredential, forgetRunCredential, runCredentialFile, defaultLang} from "./lib.mjs";
 import {COMMANDS, GLOBAL_FLAGS, GROUPS, GROUP_DEFAULT, ALIASES, findCommand} from "./commands.mjs";
 import {CliError, EXIT, EXIT_TEXT, ERROR_CODES, TOPICS, explainApiError, topicText, usage} from "./guide.mjs";
@@ -32,12 +32,7 @@ const FLAG_SYNONYMS = {binary: "bin", image: "bin", file: "bin", "bin-file": "bi
 
 const SELF = fileURLToPath(import.meta.url);
 function program() {
-  // The last 203c package runs this file under its own command (C203_RUN_AS=203c, rename.mjs): 203c is what is on PATH there.
-  const runAs = process.env.C203_RUN_AS;
-  if (runAs && /^[A-Za-z0-9._-]+$/.test(runAs)) return runAs;
-  let script = process.argv[1] ? path.resolve(process.argv[1]) : SELF;
-  // Run through the old name's script (scripts/203c.mjs): the commands printed name this one, beside it.
-  if (path.basename(script) === "203c.mjs") script = path.join(path.dirname(script), "203cli.mjs");
+  const script = process.argv[1] ? path.resolve(process.argv[1]) : SELF;
   if (installedCommand(script)) return "203cli";
   const relative = path.relative(process.cwd(), script);
   const shown = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : script;
@@ -805,8 +800,6 @@ async function main(argv) {
   }
   const {flags, order, positional} = parsed;
   const lang = typeof flags.lang === "string" ? flags.lang : undefined;
-  // The first run where 203c was signed in: its sign-in carries over (lib.mjs migrateFromOldName).
-  migrateFromOldName();
   const client = new Client({api: flags.api || undefined, token: typeof flags.token === "string" ? flags.token : undefined, ...(lang ? {lang} : {})});
   const tokenSource = typeof flags.token === "string" ? "flag" : process.env.COMMUNITY_TOKEN ? "env" : client.run ? "oidc" : client.token ? "file" : null;
   // The token travels only over https (plain http only to this machine, for a local dev stack).
@@ -952,8 +945,6 @@ async function main(argv) {
       catch (error) { offline = !(error instanceof ApiError) || error.status === 0 || error.status >= 500; }
     }
     const removed = tokenSource === "env" ? false : tokenSource === "oidc" ? forgetRunCredential() : forgetToken();
-    // 203c's copy of the same token (it carried over at the rename) goes with it.
-    if (tokenSource === "file") forgetOldToken(client.token);
     try { fs.unlinkSync(pendingFile()); } catch { /* none */ }
     const where = "the site: 设置 › 个人令牌 (/me/tokens)";
     result = {json: {status: revoked ? "revoked" : removed ? "signed_out" : "no_token", revoked, removed,

@@ -1,6 +1,6 @@
 ---
 name: 203-community
-description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203cli (formerly 203c), and make firmware for 203 devices the recommended way (a guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203cli rules, 203.json). Use it to start a Cardenza firmware from CardenzaHAL's template (new), try it on the user's device over USB (flash through the Launcher, log, board), publish versions from a laptop or CI (trusted publishing) with simulator versions and source archives, create or fork firmware and clone their source, bind a project to its firmware or move it (link), set the cover and page, read what the community has about the project's firmware for planning (sync: page, versions, requests, comments, forks; project diff) and keep the tracker, see why the checks sent a version back and appeal it, share sound packs, projects, works and 3D models, send firmware over Wi-Fi, search and comment, and, for admins, moderate.
+description: Work with the 203 Systems firmware community (community.203.io; live copy cardenza.203.io/community) through its CLI, 203cli, and make firmware for 203 devices the recommended way (a guide and hardware reference per product: Cardenza 鸣片, NullPerator 零序, Mystrix 魔矩; 203cli rules, 203.json). Use it to start a Cardenza firmware from CardenzaHAL's template (new), try it on the user's device over USB (flash through the Launcher, log, board), publish versions from a laptop or CI (trusted publishing) with simulator versions and source archives, create or fork firmware and clone their source, bind a project to its firmware or move it (link), set the cover and page, read what the community has about the project's firmware for planning (sync: page, versions, requests, comments, forks; project diff) and keep the tracker, see why the checks sent a version back and appeal it, share sound packs, projects, works and 3D models, send firmware over Wi-Fi, search and comment, and, for admins, moderate.
 ---
 
 # 203 community
@@ -17,10 +17,6 @@ is not found, run `node <this skill's folder>/scripts/203cli.mjs` instead (e.g.
 `node ~/.claude/skills/203-community/scripts/203cli.mjs`): the same CLI. **Run it from the firmware project's folder**
 (where `203.json` and `build/` are): paths are relative to the current folder, and `publish` reads `./203.json`.
 The commands 203cli prints in `next` are ready to run as they are (with the full path when `203cli` is not on PATH).
-203cli was called `203c` (npm package and command, up to 3.5.0): where a script, a workflow, a README or the user says
-`203c`, it means 203cli, with the same commands, flags, JSON and exit codes. Use `203cli`; the old `203c` command and
-`scripts/203c.mjs` still run 203cli after a notice (on stderr), so suggest the switch: `npm install -g 203cli && 203cli skill
-install`, then `npm uninstall -g 203c`.
 Making a firmware? Read the device's page first (below); for the Cardenza, `203cli rules` prints the firmware project
 rules (CardenzaHAL's `docs/FIRMWARE-PROJECT.md`: dependencies, files, HAL rules, builds, checks, publishing).
 
@@ -350,7 +346,7 @@ Chinese-speaking user pass `--lang zh`).
 
 The commands of the work (`sim`, `flash`, `log`, `board`, `new`, `fork`, `clone`, `init`, `link`, `publish`, `rules`,
 `source`, `sync`) end with a line on stderr when something is out of date, and the firmware's build prints the same
-as a CMake warning (CardenzaHAL's `cmake/require_203c.cmake`); `doctor` lists them, `updates --json` asks now:
+as a CMake warning (CardenzaHAL's `cmake/require_203cli.cmake`); `doctor` lists them, `updates --json` asks now:
 
 - `203cli: 203cli X is out (you have Y): npm install -g 203cli && 203cli skill install`: run both, then go on (the
   skill is a copy of the command: update it with it). `doctor` says it as `cli_outdated`.

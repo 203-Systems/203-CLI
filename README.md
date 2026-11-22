@@ -35,11 +35,6 @@ npm install -g 203cli  # the 203cli command
 203cli skill install   # its Agent Skill, for Claude Code and Codex (run it again after every update)
 ```
 
-**Coming from `203c`?** It is renamed `203cli` (the same commands, flags, JSON answers and exit codes), and 203cli is the
-only CLI now: `npm install -g 203cli && 203cli skill install`, then `npm uninstall -g 203c`, and write `203cli` where
-scripts and CI say `203c`. Your sign-in carries over. Until then the old ways keep working and say so: the last `203c`
-package runs 203cli, and so does the skill's old script path (`node …/203-community/scripts/203c.mjs`).
-
 203cli says when a newer one is out (and when a firmware project's CardenzaHAL is behind its `main`): a line on stderr
 after the commands of the work, at most one check a day; `203cli updates` asks now, `NO_UPDATE_NOTIFIER=1` turns it off.
 

@@ -2,7 +2,7 @@
 // latest) and whether the project's CardenzaHAL submodule is behind the HAL's main (GitHub's compare), or not a clean copy
 // of it (the HAL's own tools/check_submodule.py says so). One line each, on stderr, after the commands developers run
 // while working (commands.mjs `notices`); doctor lists both; `203cli updates` asks for them; CardenzaHAL's build prints
-// them too (cmake/require_203c.cmake runs `203cli updates --quiet`).
+// them too (cmake/require_203cli.cmake runs `203cli updates --quiet`).
 // Never in the way: each asks the network at most once a day (updates.json beside the sign-in, ~/.config/203cli: versions
 // and commit counts only), the request starts with the command and is waited for at most TIMEOUT_MS from then, any
 // failure is silent, nothing goes to stdout or into an exit code, and nothing is asked in CI (CI, GITHUB_ACTIONS) or
@@ -14,11 +14,10 @@ import os from "node:os";
 import path from "node:path";
 import {spawn, spawnSync} from "node:child_process";
 import {CLI_VERSION, USER_AGENT, configDir} from "./lib.mjs";
-import {INSTALL, RENAME_EN, runAsOldName} from "./rename.mjs";
 
 export const NPM_REGISTRY = "https://registry.npmjs.org";
 export const GITHUB_API = "https://api.github.com";
-export const UPDATE_CLI = INSTALL;
+export const UPDATE_CLI = "npm install -g 203cli && 203cli skill install";
 export const DAY_MS = 24 * 3600 * 1000;
 export const TIMEOUT_MS = 1500;
 // Waited for a little longer than a request may take, so a failed request is still written down (and not asked again
@@ -177,7 +176,7 @@ async function getJson(url, {fetch, signal, headers = {}}) {
  * fresh: ask the network now (doctor, `updates`), else at most once a day. Never throws.
  */
 export async function checkUpdates({from = process.cwd(), fresh = false, env = process.env, fetch = globalThis.fetch, now = Date.now(),
-  file = stateFile(env), timeout = TIMEOUT_MS, current = CLI_VERSION, cwd = process.cwd(), hal: wantHal = true, oldName = runAsOldName(env)} = {}) {
+  file = stateFile(env), timeout = TIMEOUT_MS, current = CLI_VERSION, cwd = process.cwd(), hal: wantHal = true} = {}) {
   // cwd: where the commands in the notices are typed (null: from the repository's top, as for a build's folder).
   const state = readState(file);
   const signal = AbortSignal.timeout(timeout);
@@ -233,12 +232,7 @@ export async function checkUpdates({from = process.cwd(), fresh = false, env = p
   const items = [];
   const say = (code, notice, {message = notice, hint = null, next = []} = {}) => items.push({code, notice, message, ...(hint ? {hint} : {}), next});
   const outdated = !!c.latest && compareVersions(current, c.latest) === -1;
-  const cli = {current, latest: c.latest, outdated, checked: c.checked, ...(oldName ? {renamed: true} : {})};
-  // Run under the old name (rename.mjs): always said, first, whatever npm answered.
-  if (oldName) {
-    say("cli_renamed", RENAME_EN, {message: "203c is renamed 203cli: 203c gets no more updates or support",
-      hint: "Install 203cli and its Agent Skill (then npm uninstall -g 203c)", next: ["npm install -g 203cli", "203cli skill install", "npm uninstall -g 203c"]});
-  }
+  const cli = {current, latest: c.latest, outdated, checked: c.checked};
   if (outdated) {
     say("cli_outdated", `203cli ${c.latest} is out (you have ${current}): ${UPDATE_CLI}`, {message: `203cli ${c.latest} is out (you have ${current})`,
       hint: "Update the command, then its Agent Skill", next: ["npm install -g 203cli", "203cli skill install"]});
@@ -287,8 +281,7 @@ export function startNotices({from, env = process.env, write = text => process.s
       const wait = new Promise(resolve => { timer = setTimeout(() => resolve(null), Math.max(0, started + (rest.timeout ?? TIMEOUT_MS) + GRACE_MS - Date.now())); });
       const result = await Promise.race([pending, wait]);
       clearTimeout(timer);
-      // The rename was said when the command started (the old script or the last 203c package said it): not twice.
-      const lines = (result?.items ?? []).filter(i => i.code !== "cli_renamed").map(i => i.notice);
+      const lines = (result?.items ?? []).map(i => i.notice);
       for (const line of lines) write("203cli: " + line + "\n");
       return lines;
     },
@@ -310,8 +303,7 @@ export async function updatesCommand(ctx) {
   const lines = [];
   const {cli, hal, notices} = result;
   const said = notice => lines.push("! " + notice);
-  if (cli.renamed) said(notices[0]);
-  if (cli.outdated) said(notices[cli.renamed ? 1 : 0]);
+  if (cli.outdated) said(notices[0]);
   else if (cli.latest) lines.push(`✓ 203cli ${cli.current}${compareVersions(cli.current, cli.latest) === 0 ? " is the newest" : ` (npm's newest is ${cli.latest})`}`);
   else lines.push(`- 203cli ${cli.current}: npm did not answer (offline, or blocked here): not checked`);
   if (!hal) lines.push("- CardenzaHAL: no CardenzaHAL submodule in this repository");

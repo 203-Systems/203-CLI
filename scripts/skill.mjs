@@ -76,7 +76,7 @@ export async function skillInstall(ctx) {
       fs.rmSync(fresh, {recursive: true, force: true});
       fs.mkdirSync(fresh);
       for (const item of SKILL_ITEMS) copy(path.join(PACKAGE_ROOT, item), path.join(fresh, item));
-      for (const script of ["203cli.mjs", "203c.mjs"]) try { fs.chmodSync(path.join(fresh, "scripts", script), 0o755); } catch { /* Windows */ }
+      try { fs.chmodSync(path.join(fresh, "scripts", "203cli.mjs"), 0o755); } catch { /* Windows */ }
       fs.rmSync(p.path, {recursive: true, force: true});
       fs.renameSync(fresh, p.path);
       done.push({agent: p.agent, path: p.path, version: CLI_VERSION, status: p.before ? "updated" : "installed", ...(p.before ? {before: p.before} : {})});

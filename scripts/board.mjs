@@ -281,7 +281,7 @@ export async function session(ctx, work) {
     if (stopped) process.exit(130);
     stopped = true;
     board.interrupted = true;
-    process.stderr.write("\n203c: stopping (the device is told to stop sending)…\n");
+    process.stderr.write("\n203cli: stopping (the device is told to stop sending)…\n");
     board.cancel({ms: 300}).catch(() => {});
     setTimeout(() => process.exit(130), 3000).unref();
   };

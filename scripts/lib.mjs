@@ -17,7 +17,7 @@ export const NEW_API = "https://stage.203.io/api";
 export const NEW_ADDRESS_IS_DEFAULT = false;
 export const DEFAULT_API = NEW_ADDRESS_IS_DEFAULT ? NEW_API : OLD_API;
 // 203cli's own version (doctor prints it; the API sees it in User-Agent: 203cli/<version>).
-export const CLI_VERSION = "3.5.1";
+export const CLI_VERSION = "3.6.0";
 export const USER_AGENT = "203cli/" + CLI_VERSION;
 
 export class ApiError extends Error {
@@ -37,60 +37,8 @@ export class ApiError extends Error {
 export function configDir(env = process.env, home = os.homedir()) {
   return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "203cli");
 }
-/** 203c's folder, before the rename: ~/.config/203c. */
-export function oldConfigDir(env = process.env, home = os.homedir()) {
-  return path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "203c");
-}
-
 export function tokenFile() {
   return path.join(configDir(), "token");
-}
-
-/**
- * Once, at 203cli's first run on a computer where 203c was signed in: 203c's token copied into 203cli's folder (mode 600),
- * so the sign-in carries over (nothing is printed: no secret, no noise), and sync's last looks (inbox/). 203c's folder is
- * left as it is, so a 203c still installed keeps working until the community moves; `203cli logout` revokes the token and
- * removes both copies. The update checks are not copied (asked again), the waiting browser sign-in neither. migrated.json says it was done
- * (its time and whether a token came), so a later 203c sign-in is never copied over a 203cli one or after a logout.
- * Returns what it did: {token: true|false} or null (nothing to do).
- */
-export function migrateFromOldName({env = process.env, home = os.homedir()} = {}) {
-  const from = oldConfigDir(env, home), to = configDir(env, home);
-  const marker = path.join(to, "migrated.json");
-  try {
-    if (!fs.existsSync(from) || fs.existsSync(marker)) return null;
-    let token = null;
-    try { token = fs.readFileSync(path.join(from, "token"), "utf8").trim() || null; } catch { token = null; }
-    fs.mkdirSync(to, {recursive: true, mode: 0o700});
-    const target = path.join(to, "token");
-    let copied = false;
-    if (token && !fs.existsSync(target)) {
-      fs.writeFileSync(target, token + "\n", {mode: 0o600});
-      fs.chmodSync(target, 0o600);
-      copied = true;
-    }
-    // The last look at each firmware (sync's "new since"), kept per firmware in inbox/: no secret, copied as it is.
-    try {
-      for (const name of fs.readdirSync(path.join(from, "inbox"))) {
-        const there = path.join(to, "inbox", name);
-        if (!/\.json$/.test(name) || fs.existsSync(there)) continue;
-        fs.mkdirSync(path.dirname(there), {recursive: true, mode: 0o700});
-        fs.copyFileSync(path.join(from, "inbox", name), there);
-      }
-    } catch { /* none */ }
-    fs.writeFileSync(marker, JSON.stringify({from, at: new Date().toISOString(), token: copied}) + "\n", {mode: 0o600});
-    return {token: copied};
-  } catch { return null; }
-}
-
-/** 203c's own copy of `token`, removed (logout: the same token, revoked): true when there was one. */
-export function forgetOldToken(token, {env = process.env, home = os.homedir()} = {}) {
-  const file = path.join(oldConfigDir(env, home), "token");
-  try {
-    if (!token || fs.readFileSync(file, "utf8").trim() !== token) return false;
-    fs.unlinkSync(file);
-    return true;
-  } catch { return false; }
 }
 
 export function loadToken(api) {
@@ -1297,8 +1245,7 @@ export async function browserLogin(client, {name, admin = false, timeout = 300, 
   await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   const redirect = `http://127.0.0.1:${server.address().port}/callback`;
   try {
-    // The OAuth client id stays "203c" (the name before the rename): the community's database knows that one.
-    const checked = await client.request("GET", "/auth/authorize", {auth: false, query: {response_type: "code", client_id: "203c", redirect_uri: redirect,
+    const checked = await client.request("GET", "/auth/authorize", {auth: false, query: {response_type: "code", client_id: "203cli", redirect_uri: redirect,
       code_challenge: challenge, code_challenge_method: "S256", state, scope: admin ? "read write admin" : "read write",
       name: (name || "203cli on " + os.hostname()).slice(0, 40)}});
     say(checked.authorize_url);
@@ -1329,7 +1276,7 @@ export async function browserLogin(client, {name, admin = false, timeout = 300, 
         }
         try {
           const got = await client.request("POST", "/auth/token", {auth: false, body: {grant_type: "authorization_code", code: url.searchParams.get("code") ?? "",
-            code_verifier: verifier, redirect_uri: redirect, client_id: "203c"}});
+            code_verifier: verifier, redirect_uri: redirect, client_id: "203cli"}});
           await reply(200, "203cli is signed in", `Signed in as ${escapeHtml(got.user?.name ?? "")}. You can close this tab and go back to the terminal.`);
           resolve(got);
         } catch (error) {

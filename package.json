@@ -1,10 +1,9 @@
 {
   "name": "203cli",
-  "version": "3.5.1",
-  "description": "203cli (formerly 203c), the 203 Systems firmware community's CLI (Cardenza 鸣片, NullPerator, Mystrix): start a firmware project, install it on a device over USB, read its log, publish it; with the Agent Skill and every device's development guide",
+  "version": "3.6.0",
+  "description": "203cli, the 203 Systems firmware community's CLI (Cardenza 鸣片, NullPerator, Mystrix): start a firmware project, install it on a device over USB, read its log, publish it; with the Agent Skill and every device's development guide",
   "keywords": [
     "203cli",
-    "203c",
     "203-systems",
     "cardenza",
     "firmware",

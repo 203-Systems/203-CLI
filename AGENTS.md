@@ -7,13 +7,9 @@ when a tag `vX.Y.Z` equal to `package.json`'s version is pushed (npm trusted pub
 `install.sh` installs (kept working for scripts that have it, CI among them): it reaches those when the community pins
 the new commit.
 
-203cli was called `203c` up to 3.5.0 (renamed 2026-11-20, the user: 203cli is the only CLI, and whoever used 203c is told).
-Every old way in still ends at 203cli, after a notice on stderr (`scripts/rename.mjs` has the words): the old script path
-`scripts/203c.mjs` (a shim: what CardenzaHAL's community-publish action at older commits and older install.sh commands run),
-and the last npm package `203c` in `legacy/203c` (it depends on 203cli and runs it as `203c`, C203_RUN_AS; released once,
-by a tag `203c-vX.Y.Z`, after 203cli is on npm; its words are compared with rename.mjs's by the tests). Keep both; never
-give the 203cli package a `203c` command (it would clash with the 203c package's). `tools/legacy-install-check.mjs` installs
-both packed packages from a stand-in registry and runs `203c` from every shell (CI, three systems).
+203cli is the only name (the user, 2026-11-22: "去掉所有的203c ref 只保留203cli", and the community refuses the old name).
+Nothing here runs, answers to, falls back to or mentions an earlier name: no other command, script path, npm package or
+config folder. Do not add one back.
 
 ## What 203cli promises (keep it)
 

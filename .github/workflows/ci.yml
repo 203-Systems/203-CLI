@@ -1,7 +1,6 @@
 # The tests on every push and pull request (Linux on three Node versions, macOS and Windows on one), what npm would
-# publish (npm pack --dry-run: the package 203cli, released by release.yml on a tag), the last 203c (legacy/203c)
-# installed and run from every shell of the three systems, and whether reference/firmware-project.md is still
-# CardenzaHAL's docs/FIRMWARE-PROJECT.md.
+# publish (npm pack --dry-run: the package 203cli, released by release.yml on a tag), and whether
+# reference/firmware-project.md is still CardenzaHAL's docs/FIRMWARE-PROJECT.md.
 name: CI
 on:
   push:
@@ -43,23 +42,6 @@ jobs:
           203cli --version
           HOME="$RUNNER_TEMP/home" USERPROFILE="$RUNNER_TEMP/home" 203cli skill install --json
           test -f "$RUNNER_TEMP/home/.claude/skills/203-community/SKILL.md"
-  # The last 203c (legacy/203c), installed as people get it (npm install -g 203c, and in a project) with 203cli from a
-  # stand-in registry, run from cmd, PowerShell and Git Bash on Windows, sh and bash elsewhere: 203cli's output and exit code.
-  legacy:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node tools/legacy-install-check.mjs
   # Informational: the community may take a HAL branch's rules before the HAL merges them.
   rules:
     runs-on: ubuntu-latest

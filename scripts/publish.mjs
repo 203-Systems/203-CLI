@@ -17,7 +17,6 @@ import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
 import {CliError, EXIT, maybeSandbox} from "./guide.mjs";
 import {skillState} from "./skill.mjs";
 import {checkUpdates, optedOut} from "./updates.mjs";
-import {findCommand} from "./rename.mjs";
 import {DESCRIPTION_MAX, DESCRIPTION_TARGET, DESCRIPTION_WARN, GALLERY_MIN, GALLERY_MOST, GUIDE_URL, descriptionLength, galleryRule, placeholderIn,
   scaffoldDescription} from "./description.mjs";
 import {EMSDK_HINT, describeSim, explainBuild, findHal, findProject, halScript, readSimDir, runBuild, sameBuild, simLine, simState, toolchain,
@@ -188,17 +187,6 @@ export async function doctor(ctx) {
   const updatesOff = optedOut(ctx.client.env ?? process.env);
   const updating = updatesOff ? null : checkUpdates({from: ctx.cwd ?? process.cwd(), cwd: ctx.cwd ?? process.cwd(), fresh: true,
     env: ctx.client.env ?? process.env, fetch: ctx.client.fetch}).catch(() => null);
-  // 203c, 203cli's old name, still on PATH (rename.mjs): what to do about it. 203cli is the only CLI now.
-  const old = findCommand("203c", ctx.client.env ?? process.env);
-  if (old) {
-    const own = findCommand("203cli", ctx.client.env ?? process.env);
-    const quoted = /^[A-Za-z0-9_@%+=:,./-]+$/.test(old.file) ? old.file : `'${old.file}'`;
-    check("old_name", false, `203c, the old name of 203cli, is still installed: ${old.file}`, {optional: true});
-    r.warn("old_name_installed", `203c is renamed 203cli, and 203c is still installed (${old.file}): it gets no more updates or support`,
-      {hint: (own ? "" : "Install 203cli first (then run 203cli instead of 203c, in scripts too). ") +
-        (old.npm ? "Then uninstall 203c." : "Then delete that file: an older install.sh wrote it."),
-      next: [...(own ? [] : ["npm install -g 203cli", "203cli skill install"]), old.npm ? "npm uninstall -g 203c" : `rm ${quoted}`]});
-  }
   // The Agent Skill beside it (npm installs the command only: 203cli skill install puts the skill where agents read it).
   const skill = skillState();
   check("skill", skill.ok, skill.detail, {optional: true});

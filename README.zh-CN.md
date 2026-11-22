@@ -27,10 +27,6 @@ npm install -g 203cli  # 203cli 命令
 203cli skill install   # 它的 Agent Skill，给 Claude Code 和 Codex（每次更新后再运行一次）
 ```
 
-**用过 `203c`？** 它已改名为 `203cli`（命令、参数、JSON 回答和退出码都不变），203cli 是现在唯一的命令行：运行
-`npm install -g 203cli && 203cli skill install`，然后 `npm uninstall -g 203c`，脚本和 CI 里的 `203c` 改成 `203cli`。登录会自动带过来。
-改之前旧的用法照样能用，并会提示改名：最后一版 `203c` 包会转而运行 203cli，Skill 里旧的脚本路径（`node …/203-community/scripts/203c.mjs`）也一样。
-
 有新版 203cli（或者固件项目里的 CardenzaHAL 落后于它的 `main`）时，203cli 会在做事的命令结束后往 stderr 打一行提示，
 每天最多查一次；`203cli updates` 立刻查，`NO_UPDATE_NOTIFIER=1` 关掉。
 

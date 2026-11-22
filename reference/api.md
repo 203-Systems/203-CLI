@@ -38,10 +38,6 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `GET /auth/authorize?response_type&client_id&redirect_uri&code_challenge&code_challenge_method&state&scope&name` | 203cli's browser sign-in: check an authorization request (PKCE S256, loopback redirect); answers the site's /authorize page to open |  | AuthorizeCheck |
 | `POST /auth/authorize` | Approve (scopes) or refuse a browser sign-in (the /authorize page); answers where to send the browser — body: response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state, scope?, name?, approve, scopes? | website only | Authorized |
 | `POST /auth/token` | Exchange an authorization code and its verifier for a cli credential (once, within 60 seconds) — body: grant_type, code, code_verifier, redirect_uri, client_id |  | DeviceToken |
-| `POST /auth/cli/start` | Start a CLI sign-in (the device authorization with client cli; 203c before 3.1) — body: name? |  | CliStart |
-| `POST /auth/cli/poll` | Poll a CLI sign-in: 428 until approved, then the token once — body: request_id |  | CliToken |
-| `GET /auth/cli/{user_code}` | What a CLI sign-in code asks for | website only | CliRequest |
-| `POST /auth/cli/approve` | Approve or refuse a CLI sign-in — body: user_code, scopes?, approve | website only | CliApproved |
 | `POST /auth/oidc/github` | Trusted publishing: a GitHub Actions run's OIDC token (audience: this API's base) for a ci credential that publishes one firmware's versions for 15 minutes, when a trusted publisher of it matches the run; 401 oidc_invalid, 403 oidc_untrusted or oidc_channel — body: token, firmware |  | OidcToken |
 
 ## The account

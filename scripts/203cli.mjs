@@ -997,7 +997,7 @@ function report(error, argv) {
       next: explained.next.filter(Boolean), exit: explained.exit, ...(error.status ? {status: error.status} : {}), ...extra};
   } else {
     out = {error: String(error?.message ?? error), code: "internal", hint: "A bug in 203cli: please send this message with the command (feedback --kind bug)", next: [], exit: EXIT.later,
-      ...(process.env.DEBUG_203CLI || process.env.DEBUG_203C ? {stack: error?.stack} : {})};
+      ...(process.env.DEBUG_203CLI ? {stack: error?.stack} : {})};
   }
   if (lastContext?.notes?.length) out.notes = lastContext.notes;
   if (json) process.stderr.write(JSON.stringify(out) + "\n");

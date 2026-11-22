@@ -7,9 +7,9 @@ when a tag `vX.Y.Z` equal to `package.json`'s version is pushed (npm trusted pub
 `install.sh` installs (kept working for scripts that have it, CI among them): it reaches those when the community pins
 the new commit.
 
-203cli is the only name (the user, 2026-11-22: "去掉所有的203c ref 只保留203cli", and the community refuses the old name).
-Nothing here runs, answers to, falls back to or mentions an earlier name: no other command, script path, npm package or
-config folder. Do not add one back.
+203cli is the only name (the user, 2026-11-22: "只保留203cli"; the community refuses any other). Nothing here runs,
+answers to, falls back to or mentions an earlier name: no other command, script path, npm package, environment variable
+or config folder. Do not add one back.
 
 ## What 203cli promises (keep it)
 

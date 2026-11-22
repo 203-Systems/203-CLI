@@ -17,7 +17,7 @@ export const NEW_API = "https://stage.203.io/api";
 export const NEW_ADDRESS_IS_DEFAULT = false;
 export const DEFAULT_API = NEW_ADDRESS_IS_DEFAULT ? NEW_API : OLD_API;
 // 203cli's own version (doctor prints it; the API sees it in User-Agent: 203cli/<version>).
-export const CLI_VERSION = "3.6.0";
+export const CLI_VERSION = "3.6.1";
 export const USER_AGENT = "203cli/" + CLI_VERSION;
 
 export class ApiError extends Error {

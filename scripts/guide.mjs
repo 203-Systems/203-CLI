@@ -612,7 +612,7 @@ The tracker is internal (nobody is notified); tell users with {P} comments add r
 Its status shows publicly as one of four: new 未处理, in_progress 正在完成 (accepted, planned, in_progress), done 已完成, rejected 已拒绝:
 {P} requests list CODE --status 正在完成 --json             (also --status new|in_progress|done|rejected)
 {P} dev list --author NAME --json                          what one person (or bot) filed
-Attachments (pictures ≤ 10 MB, videos ≤ 100 MB, other files ≤ 20 MB; at most 9): --attach FILE, repeated:
+Attachments (pictures ≤ 10 MB, videos ≤ 95 MB, other files ≤ 20 MB; at most 9): --attach FILE, repeated:
 {P} requests create CODE --title "…" --body-file report.md --attach log.txt --attach screen.png --json
 {P} comments add request CODE/N --body "…" --attach shot.png --json   ({P} posts create and {P} feedback take --attach too)`},
 

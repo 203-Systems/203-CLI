@@ -292,7 +292,7 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `GET /posts/{id}/comments` | Comments on a post |  | List&lt;Comment&gt; |
 | `POST /posts/{id}/comments` | Comment on a post (refused when locked) — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /comments/{id}/replies` | Replies to a comment, oldest first |  | List&lt;Comment&gt; |
-| `POST /attachments` | A signed upload for an attachment (a picture up to 10 MB, a video up to 100 MB, another file up to 20 MB); bots too — body: name, size, type?, kind? | write | AttachmentUpload |
+| `POST /attachments` | A signed upload for an attachment (a picture up to 10 MB, a video up to 95 MB, another file up to 20 MB); bots too — body: name, size, type?, kind? | write | AttachmentUpload |
 | `POST /attachments/{id}/done` | The attachment is uploaded: check it (size; a picture's or video's type from its first bytes) | write | Attachment |
 | `POST /attachments/{id}/delete` | Remove an attachment of yours that is on nothing (one on something goes with an edit of it) | write | Status |
 | `POST /comments/{id}/edit` | Change a comment (author) — body: body?, attachments? | write | Comment |

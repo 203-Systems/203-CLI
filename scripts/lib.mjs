@@ -648,7 +648,9 @@ export async function uploadTutorialPicture(client, code, bytes, mime) {
 // a request or a feedback issue, up to 9 an item. Each is a signed upload: POST /attachments {name, size, type, kind} →
 // {attachment, upload}, PUT the bytes, POST /attachments/<id>/done → the Attachment; the item's body then names them
 // (attachments: [id, …]). One not used by an item within 24 hours expires on the server.
-export const ATTACHMENT_LIMITS = {image: 10 * 1024 * 1024, video: 100 * 1024 * 1024, file: 20 * 1024 * 1024, per_item: 9};
+// A video at most 95 MB, decimal (95 000 000 bytes): the live community's upload host passes 100 MB a request (COMMUNITY.md "Uploads").
+export const ATTACHMENT_LIMITS = {image: 10 * 1024 * 1024, video: 95000000, file: 20 * 1024 * 1024, per_item: 9};
+const LIMIT_TEXT = {image: "10 MB", video: "95 MB", file: "20 MB"};
 // Names the community refuses (pages and programs a browser or a system would open as such); the same list as the server's.
 export const REFUSED_EXTENSIONS = ["html", "htm", "xhtml", "shtml", "svg", "svgz", "exe", "msi", "bat", "cmd", "com", "scr", "ps1", "vbs",
   "js", "mjs", "jar", "apk", "dmg", "pkg", "lnk", "hta", "wsf", "app"];
@@ -697,7 +699,7 @@ export function checkAttachments(files) {
     try { fs.readSync(fd, head, 0, 64, 0); } finally { fs.closeSync(fd); }
     const {kind, type} = attachmentType(head, name);
     if (stat.size > ATTACHMENT_LIMITS[kind]) {
-      throw fail(`${name}: ${stat.size} bytes, more than the ${sizeText(ATTACHMENT_LIMITS[kind])} a ${{image: "picture", video: "video", file: "file"}[kind]} may have`,
+      throw fail(`${name}: ${stat.size} bytes, more than the ${LIMIT_TEXT[kind]} a ${{image: "picture", video: "video", file: "file"}[kind]} may have`,
         {limits: {image: ATTACHMENT_LIMITS.image, video: ATTACHMENT_LIMITS.video, file: ATTACHMENT_LIMITS.file}});
     }
     return {file: String(file), name, size: stat.size, kind, type};
@@ -1053,7 +1055,7 @@ op("comment_add", "Comment on something (parent: reply to a comment; attach: loc
 op("comment_edit", "Change your comment", {id: n("Comment id"), body: s("Text"), attachments: a("Its attachments' ids, the whole new list (absent: kept as they are)")},
   ["id", "body"], (c, x) => c.post(`/comments/${x.id}/edit`, pick(x, ["body", "attachments"])), {write: true});
 op("comment_delete", "Delete a comment", {id: n("Comment id")}, ["id"], (c, x) => c.post(`/comments/${x.id}/delete`), {write: true});
-op("attachment_upload", "Upload local files as attachments (images ≤ 10 MB, videos ≤ 100 MB, other files ≤ 20 MB; at most 9): their ids go in an item's attachments",
+op("attachment_upload", "Upload local files as attachments (images ≤ 10 MB, videos ≤ 95 MB, other files ≤ 20 MB; at most 9): their ids go in an item's attachments",
   {files: a("Local paths")}, ["files"], (c, x) => uploadAttachments(c, x.files), {write: true});
 op("attachment_delete", "Remove an attachment of yours that is on nothing yet", {id: s("Attachment id")}, ["id"],
   (c, x) => c.post(`/attachments/${enc(x.id)}/delete`), {write: true});

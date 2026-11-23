@@ -100,6 +100,11 @@ before(async () => {
   fs.writeSync(big, png, 0, 64, 0);
   fs.ftruncateSync(big, 10 * 1024 * 1024 + 1);
   fs.closeSync(big);
+  // A video a byte over 95 MB, decimal (the community's upload host passes 100 MB a request).
+  const long = fs.openSync(path.join(work, "long.mov"), "w");
+  fs.writeSync(long, Buffer.from("\0\0\0\x14ftypqt  \0\0\0\0qt  ", "latin1"));
+  fs.ftruncateSync(long, 95000001);
+  fs.closeSync(long);
 });
 after(async () => { await stand.close(); fs.rmSync(home, {recursive: true, force: true}); fs.rmSync(work, {recursive: true, force: true}); });
 
@@ -169,6 +174,9 @@ test("--attach is checked before anything is sent: a 10th file, a page, a pictur
   assert.equal(big.code, 2);
   assert.match(big.error.error, /big\.png: 10485761 bytes, more than the 10 MB a picture may have/);
   assert.match(big.error.hint, /up to 10 MB/);
+  const long = await cli(["feedback", "--kind", "bug", "--title", "t", "--message", "m", "--attach", "long.mov"]);
+  assert.equal(long.code, 2);
+  assert.match(long.error.error, /long\.mov: 95000001 bytes, more than the 95 MB a video may have/);
   const missing = await cli(["comments", "add", "post", "p1p1p1p1", "--body", "x", "--attach", "nowhere.png"]);
   assert.equal(missing.code, 1);
   assert.equal(missing.error.code, "file_not_found");

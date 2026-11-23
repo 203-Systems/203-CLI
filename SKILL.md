@@ -93,7 +93,7 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | see why a version was sent back | `versions check VCODE --json` |
 | share a sound pack / project / work | `sounds upload … --firmware OFFICIAL --title "…" --dry-run --json` (workflow 4) |
 | change your name or bio | `me edit --name "…" --bio "…" --json` |
-| ask for something in a firmware, or report a problem with it, with pictures, a video or a log | `requests create CODE --title "…" --body-file report.md --attach screen.png --attach log.txt --json` (`--attach` repeats, at most 9: pictures ≤ 10 MB, videos ≤ 100 MB, other files ≤ 20 MB; `posts create`, `comments add` and `feedback` take it too) |
+| ask for something in a firmware, or report a problem with it, with pictures, a video or a log | `requests create CODE --title "…" --body-file report.md --attach screen.png --attach log.txt --json` (`--attach` repeats, at most 9: pictures ≤ 10 MB, videos ≤ 95 MB, other files ≤ 20 MB; `posts create`, `comments add` and `feedback` take it too) |
 | feedback about the community itself (not a firmware) | `feedback --kind bug|idea --title "…" --message-file report.txt --attach shot.png --json` |
 | where a request stands | `requests list CODE --status 正在完成 --json` (`status`: new 未处理, in_progress 正在完成, done 已完成, rejected 已拒绝), `requests show CODE N --json` |
 | an admin action (`admin …`) | an admin sign-in has the admin scope: `login --admin --json` (exit 4 `admin_scope_required` says so) |

@@ -30,7 +30,7 @@ const YES = {yes: B("Yes, do it (it cannot be undone)")};
 const DRY = {"dry-run": B("Check everything (files, values, permissions) and print the plan; change nothing")};
 const FORCE = {force: B("Go on despite a quality warning (only when that is really meant)")};
 // Attachments (COMMUNITY.md "Attachments", the user 2026-11-23): local files uploaded first, then named by the item.
-const ATTACH = {attach: V("FILE", `Attach a local file (repeat, at most ${ATTACHMENT_LIMITS.per_item}): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made`, {repeat: true})};
+const ATTACH = {attach: V("FILE", `Attach a local file (repeat, at most ${ATTACHMENT_LIMITS.per_item}): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 95 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made`, {repeat: true})};
 // --attach checked here (each there, a name the community takes, within its limit, at most 9) so a wrong one stops the
 // command before anything is sent. Answers the absolute paths (none: undefined).
 function attachArg(ctx) {
@@ -44,7 +44,7 @@ function attachArg(ctx) {
     }
     throw ctx.usage(`--attach ${error.message}`, {field: "attach",
       hint: `Up to ${ATTACHMENT_LIMITS.per_item} files an item: pictures (PNG, JPEG, WebP, GIF) up to ${attachmentSize(ATTACHMENT_LIMITS.image)}, ` +
-        `videos (MP4, WebM, MOV) up to ${attachmentSize(ATTACHMENT_LIMITS.video)}, other files up to ${attachmentSize(ATTACHMENT_LIMITS.file)} ` +
+        `videos (MP4, WebM, MOV) up to 95 MB (95 000 000 bytes), other files up to ${attachmentSize(ATTACHMENT_LIMITS.file)} ` +
         "(no pages or programs: .html, .svg, .exe, .js …); more files or a larger log: put them in a .zip"});
   }
   return files;

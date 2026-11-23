@@ -1259,7 +1259,7 @@ Write a post (--attach: pictures, videos or files under it) (sign-in with write)
 - `--body-file PATH` Markdown file
 - `--tags a,b` Up to 5
 - `--firmware CODE` A firmware it is about
-- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 95 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli posts create --title "1.4.0 is out" --body "What changed: …" --tags announcement --json
     203cli posts create --title "My desk setup" --body-file post.md --attach desk.jpg --attach demo.mp4 --json
@@ -1306,7 +1306,7 @@ Comment on something, or reply (--parent); --attach: pictures, videos or files u
 - `--body TEXT` 1-4000 characters (may be left out with --attach)
 - `--body-file PATH` Text file
 - `--parent COMMENT` Reply to this comment id
-- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 95 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli comments add request K7M2QX/3 --body "Done in 1.5.0" --json
     203cli comments add post ab12cd34 --body "The log of the crash" --attach log.txt --json
@@ -1455,7 +1455,7 @@ Ask for something in a firmware (--attach: pictures, videos or files under it) (
 - `--title TEXT` 4-80 characters (required)
 - `--body TEXT` Markdown
 - `--body-file PATH` File
-- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 95 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli requests create K7M2QX --title "Swing for the arpeggiator" --json
     203cli requests create K7M2QX --title "Crash when saving" --body-file report.md --attach log.txt --attach screen.png --json
@@ -1543,7 +1543,7 @@ Send feedback about the community (a bug or an idea; --attach: pictures, videos 
 - `--message TEXT` 1-2000 characters
 - `--message-file PATH` File
 - `--page PATH` Where on the site
-- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 95 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli feedback --kind bug --title "Typo on /levels" --message "Experiance" --json
     203cli feedback --kind bug --title "Upload stops at 90%" --message-file report.txt --attach screen.png --json

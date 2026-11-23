@@ -210,8 +210,10 @@ test("admin bots create: the token printed once, or into --token-file (mode 600)
   const file = path.join(work, "secrets", "bot.token");
   const filed = ok(await cli(["admin", "bots", "create", "第三个", "--token-file", "secrets/bot.token"]));
   assert.deepEqual(Object.keys(filed.json).sort(), ["bot", "token_file"]);
-  assert.equal(filed.json.token_file, file);
-  assert.ok(!filed.stdout.includes("cct_") && !filed.stderr.includes("cct_"), "the token is never printed");
+  assert.equal(fs.realpathSync(filed.json.token_file), fs.realpathSync(file));
+  // In GitHub Actions the CLI asks the runner to mask the token (an ::add-mask:: line, which the runner swallows): not printing it.
+  const shown = text => text.split(/\r?\n/).filter(line => !line.startsWith("::add-mask::")).join("\n");
+  assert.ok(!shown(filed.stdout).includes("cct_") && !shown(filed.stderr).includes("cct_"), "the token is never printed");
   assert.equal(fs.readFileSync(file, "utf8"), botToken(3) + "\n");
   if (process.platform !== "win32") assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   // A file that is there is not written over (and nothing is made or rotated) unless --overwrite.

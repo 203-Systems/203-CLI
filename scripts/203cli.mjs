@@ -239,8 +239,13 @@ function bindArguments(command, positional, base) {
   }
   if (at < positional.length) {
     const extra = positional.slice(at);
+    // A command with actions below it (board settings: get, set, reset): the action, misspelt or left out.
+    const deeper = COMMANDS.filter(c => c.words.length === command.words.length + 1 && command.words.every((word, i) => c.words[i] === word));
+    const action = deeper.length && !params.length ? nearest(String(extra[0]).toLowerCase(), deeper.map(c => c.words.at(-1))) : null;
     fail(`Unexpected ${extra.length > 1 ? "arguments" : "argument"} for "${command.name}": ${extra.map(quote).join(" ")}`, {
-      hint: `Usage: ${command.usage}. A text with spaces goes in quotes: --notes "two words"`});
+      hint: deeper.length && !params.length ? `${action ? `Did you mean ${command.name} ${action}? ` : ""}${command.name} alone takes no arguments; its actions: ${deeper.map(c => c.usage).join(", ")}`
+        : `Usage: ${command.usage}. A text with spaces goes in quotes: --notes "two words"`,
+      ...(action ? {next: [`${base.prog} ${[...command.words, action, ...extra.slice(1)].map(quote).join(" ")}${base.json ? " --json" : ""}`]} : {})});
   }
   for (const param of params) {
     const value = args[param.name];

@@ -59,6 +59,7 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool 
 203cli flash --bin build/my_synth.bin  # onto your Cardenza over USB, through its Launcher
 203cli log                      # what it prints
 203cli board screen             # what it shows (a PNG); board info, memory, press, coredump, files: 203cli help board
+203cli board settings           # the board's volume, brightness, key lights, mic gain, language; set KEY VALUE, reset
 203cli publish --dry-run        # checks everything the community will check
 203cli publish
 203cli tutorial new             # how to use it: a tutorial (lessons, keys, screenshots); tutorial check, tutorial publish

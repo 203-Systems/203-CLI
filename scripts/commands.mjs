@@ -8,7 +8,7 @@ import {recoverDevice} from "./recover.mjs";
 import {flashDevice} from "./flash.mjs";
 import {deviceLog} from "./devlog.mjs";
 import {boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardPress, boardKeys, boardCoredump,
-  filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv} from "./board.mjs";
+  filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, boardSettings, boardSettingsGet, boardSettingsSet, boardSettingsReset} from "./board.mjs";
 import {newProject} from "./scaffold.mjs";
 import {inbox, link} from "./feedback.mjs";
 import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff, sync} from "./project-view.mjs";
@@ -631,6 +631,17 @@ cmd("board files put LOCAL [PATH]", "Copy a file onto the SD card (PATH: the fil
 cmd("board files rm PATH", "Remove a file (or an empty folder) from the SD card", {...BOARD, run: filesRm, examples: ["board files rm CardenzaSynth/Samples/old.wav --json"]});
 cmd("board files mkdir PATH", "Make a folder on the SD card", {...BOARD, run: filesMkdir, examples: ["board files mkdir CardenzaSynth/Samples/drums --json"]});
 cmd("board files mv FROM TO", "Rename or move a file or folder on the SD card", {...BOARD, run: filesMv, examples: ["board files mv Samples/a.wav Samples/kick.wav --json"]});
+// The board's settings (CardenzaHAL docs/SETTINGS.md): the HAL's, in every firmware that starts USB on a HAL from 2026-11-23 on,
+// also one built without the development channel. The user may say "device settings": the cable's commands are board's.
+const SETTINGS_ABOUT = "The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one";
+cmd("board settings", `Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language (value, range or choices, default, stored). ${SETTINGS_ABOUT}`, {...BOARD,
+  run: boardSettings, examples: ["board settings", "board settings --json"]});
+cmd("board settings get KEY", "One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language): its value, range or choices, default, whether it is stored", {...BOARD,
+  run: boardSettingsGet, examples: ["board settings get volume", "board settings get language --json"]});
+cmd("board settings set KEY VALUE", `Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code. ${SETTINGS_ABOUT}`, {...BOARD,
+  run: boardSettingsSet, examples: ["board settings set volume 50", "board settings set language zh --json", "board settings set mic_gain -6 --json", "board settings set volume_limit 60 --json"]});
+cmd("board settings reset", "Every one of the board's settings but the language back to its default (as the Launcher's reset): what the user chose goes, so it asks on a terminal and a program needs --yes; nothing to reset changes nothing", {...BOARD,
+  flags: {yes: B("Yes, put them back (only when the user asked for it)")}, run: boardSettingsReset, examples: ["board settings reset", "board settings reset --yes --json"]});
 
 cmd("me edit", "Change your name, bio or avatar", {group: "People",
   flags: {name: V("NAME", "2-24 letters, digits, CJK, _ - . (single spaces inside)"), bio: V("TEXT", "Up to 300 characters"), "bio-file": V("PATH", "The bio from a file"),

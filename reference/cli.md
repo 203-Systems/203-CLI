@@ -116,8 +116,8 @@ all of them) as JSON.
 | `board_not_found` | 1 | board: no Cardenza on USB (no firmware with CardenzaHAL's USB device, and no serial port either) | plug it in with a data cable (not a charging-only one), turn it on, start the firmware |
 | `board_no_usb` | 1 | board: the firmware does not start CardenzaHAL's USB device (only its serial port is there, as with the template), so it has no development channel | add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main, rebuild, flash; `log` reads its console meanwhile |
 | `board_in_launcher` | 1 | board: the device is in its 203 Launcher, not running a firmware | start the firmware from the Launcher (or `flash --bin` a build), run it again |
-| `hal_too_old` | 1 | board: the firmware's CardenzaHAL is older than the development channel (IDENTIFY says protocol 1, or no answer to HELLO) | rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again |
-| `dev_channel_off` | 1 | board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off | turn it on in its sdkconfig, build and install it again |
+| `hal_too_old` | 1 | board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23) | rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again |
+| `dev_channel_off` | 1 | board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works) | turn it on in its sdkconfig, build and install it again |
 | `hidapi_missing` | 1 | board on Windows: python's hidapi package (or python) is missing | `pip install hidapi` |
 | `board_refused` | 1 | board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …) | read `error` and `hint` |
 | `board_busy` | 3 | board: the firmware's development channel has 8 requests queued | wait a moment, run it again |
@@ -1782,6 +1782,38 @@ Make a folder on the SD card
 Rename or move a file or folder on the SD card
 
     203cli board files mv Samples/a.wav Samples/kick.wav --json
+
+### `203cli board settings`
+
+Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language (value, range or choices, default, stored). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+
+    203cli board settings
+    203cli board settings --json
+
+### `203cli board settings get KEY`
+
+One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language): its value, range or choices, default, whether it is stored
+
+    203cli board settings get volume
+    203cli board settings get language --json
+
+### `203cli board settings set KEY VALUE`
+
+Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code. The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+
+    203cli board settings set volume 50
+    203cli board settings set language zh --json
+    203cli board settings set mic_gain -6 --json
+    203cli board settings set volume_limit 60 --json
+
+### `203cli board settings reset`
+
+Every one of the board's settings but the language back to its default (as the Launcher's reset): what the user chose goes, so it asks on a terminal and a program needs --yes; nothing to reset changes nothing
+
+- `--yes` Yes, put them back (only when the user asked for it)
+
+    203cli board settings reset
+    203cli board settings reset --yes --json
 
 ## People
 

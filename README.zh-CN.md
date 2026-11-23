@@ -46,6 +46,7 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # HAL 的编译工具�
 203cli flash --bin build/my_synth.bin  # 通过 Launcher 用 USB 线装到你的鸣片上
 203cli log                      # 看它打印的日志
 203cli board screen             # 看它显示的画面（PNG）；board info、memory、press、coredump、files：203cli help board
+203cli board settings           # 板子的音量、亮度、键灯、麦克风增益、语言；set KEY VALUE 修改，reset 恢复默认
 203cli publish --dry-run        # 先按社区的检查全部检查一遍
 203cli publish
 203cli tutorial new             # 怎么用：写成教程（一课课、按键、截图）；tutorial check、tutorial publish

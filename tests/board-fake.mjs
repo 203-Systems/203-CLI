@@ -1,12 +1,14 @@
 // A stand-in firmware for 203cli board's tests: the device side of CardenzaHAL's development channel (docs/usb-dev.md), written
 // from the spec apart from scripts/board-usb.mjs (its own 7-bit packing, framing, queue), so a mistake shared by both sides
 // does not hide. It answers in-process through link() (the same link interface the real backends give 203cli), or behind a
-// pseudo-terminal (`sink` and receive(), tests/board.test.mjs). An SD card in memory, a screen, keys, a core dump.
+// pseudo-terminal (`sink` and receive(), tests/board.test.mjs). An SD card in memory, a screen, keys, a core dump, and the
+// board's settings (CardenzaHAL docs/SETTINGS.md: protocol 3; a firmware of protocol 2 answers them "unknown request").
 // It also checks what it is sent: a request longer than the HAL can collect lands in `violations`.
 
 const OPS = {HELLO: 0x00, INFO: 0x01, PARTITIONS: 0x02, MEMORY: 0x03, STORAGE: 0x04, STATUS: 0x05, I2C: 0x06, ARG: 0x0e, SCREEN: 0x10, KEYS: 0x11,
   COREDUMP_INFO: 0x20, COREDUMP_READ: 0x21, COREDUMP_ERASE: 0x22, LS: 0x30, GET: 0x31, PUT_BEGIN: 0x32, PUT_DATA: 0x33, PUT_END: 0x34, PUT_ABORT: 0x35,
-  RM: 0x36, MKDIR: 0x37, MV: 0x38, CANCEL: 0x7f};
+  RM: 0x36, MKDIR: 0x37, MV: 0x38, SETTINGS: 0x40, SETTING_GET: 0x41, SETTING_SET: 0x42, SETTINGS_RESET: 0x43, CANCEL: 0x7f};
+const SETTINGS_OPS = [OPS.SETTINGS, OPS.SETTING_GET, OPS.SETTING_SET, OPS.SETTINGS_RESET];
 const LAST = 1, ERROR = 2;
 const text = s => Array.from(Buffer.from(s, "utf8"));
 const le32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
@@ -60,6 +62,16 @@ export const STORAGE = {mounted: true, path: "/sdcard", card_bytes: 31914983424,
 export const STATUS = {display: {ready: true, framebuffer: true, brightness: 80}, keyboard: {down: [], led_brightness: 255}, menu: {enabled: true, open: false},
   usb: {mounted: true, audio_in: false, audio_out: true, playback_restarts: 0}, presence: "connected"};
 export const I2C = {sda: 2, scl: 1, devices: [{address: 8, name: "ES8156 (codec)"}]};
+// The board's settings as SETTINGS.md describes them: key, range, the system menu's step, default, unit; the language's
+// choices are the 203 Launcher's codes.
+export const SETTING_SPECS = [
+  {key: "volume", min: 0, max: 100, step: 2, default: 70, unit: ""},
+  {key: "volume_limit", min: 10, max: 100, step: 2, default: 100, unit: ""},
+  {key: "screen_brightness", min: 10, max: 100, step: 5, default: 100, unit: "%"},
+  {key: "key_brightness", min: 0, max: 15, step: 1, default: 15, unit: ""},
+  {key: "mic_gain", min: -12, max: 36, step: 1, default: 0, unit: "dB"},
+  {key: "language", default: 0, choices: [{value: 0, name: "en"}, {value: 1, name: "zh-Hans"}, {value: 3, name: "ja"}, {value: 4, name: "id"}, {value: 5, name: "vi"}]},
+];
 
 export class FakeBoard {
   constructor(options = {}) {
@@ -78,6 +90,11 @@ export class FakeBoard {
     this.upload = null;
     this.dropOnce = null;     // {op, seq}: that message of that answer is not sent (a gap)
     this.coredump = options.coredump === undefined ? Uint8Array.from({length: 3000}, (_, i) => (i * 31) & 255) : options.coredump;
+    // settings: values the board has (the rest at their defaults, not stored); `keys`: the settings this HAL has.
+    this.specs = SETTING_SPECS.filter(s => !options.keys || options.keys.includes(s.key));
+    this.values = Object.fromEntries(this.specs.map(s => [s.key, options.settings?.[s.key] ?? s.default]));
+    this.stored = new Set(Object.keys(options.settings ?? {}));
+    this.saved = options.saved ?? true;
     this.sink = null;
     this.rx = [];
     this.sysex = null;
@@ -175,7 +192,9 @@ export class FakeBoard {
     const job = this.current = this.queue.shift();
     await (this.pace ? wait(this.pace) : tick());
     let answer;
-    try { answer = this.off ? {error: "off"} : await this.answer(job); } catch (error) { answer = {error: error.message}; }
+    // Built without the development channel: protocol 2 answered everything "off"; 3 answers HELLO and the settings.
+    const off = this.off && !(this.protocol >= 3 && (job.op === OPS.HELLO || SETTINGS_OPS.includes(job.op)));
+    try { answer = off ? {error: "off"} : await this.answer(job); } catch (error) { answer = {error: error.message}; }
     if (answer.error) this.send(job.id, 0, ERROR | LAST, text(job.cancelled ? "cancelled" : answer.error));
     else await this.stream(job, answer.bytes);
     this.current = null;
@@ -216,7 +235,7 @@ export class FakeBoard {
     const json = value => ({bytes: text(JSON.stringify(value))});
     const path = from => Buffer.from(args.slice(from)).toString("utf8");
     switch (op) {
-      case OPS.HELLO: return json({protocol: 2, max_args: 52});
+      case OPS.HELLO: return json(this.protocol >= 3 ? {protocol: 3, max_args: 52, dev: !this.off, settings: true} : {protocol: 2, max_args: 52});
       case OPS.INFO: return json(INFO);
       case OPS.PARTITIONS: return json(PARTITIONS);
       case OPS.MEMORY: this.window = args[0] ?? null; return json(this.memory);
@@ -313,7 +332,50 @@ export class FakeBoard {
         if (this.files.has(from)) { this.files.set(to, this.files.get(from)); this.files.delete(from); return json({moved: from, to}); }
         return {error: "not found"};
       }
-      default: return {error: `unknown request ${op}`};
+      case OPS.SETTINGS:
+      case OPS.SETTING_GET:
+      case OPS.SETTING_SET:
+      case OPS.SETTINGS_RESET: return this.protocol >= 3 ? this.settingsAnswer(op, args) : {error: "unknown request"};
+      default: return {error: "unknown request"};
     }
+  }
+
+  setting(spec) {
+    const value = this.values[spec.key], stored = this.stored.has(spec.key);
+    if (spec.choices) return {key: spec.key, value, default: spec.default, choices: spec.choices, stored};
+    const max = spec.key === "volume" && "volume_limit" in this.values ? this.values.volume_limit : spec.max;
+    return {key: spec.key, value, default: spec.default, min: spec.min, max, step: spec.step, unit: spec.unit, stored};
+  }
+  settingsAnswer(op, args) {
+    const json = value => ({bytes: text(JSON.stringify(value))});
+    const all = () => this.specs.map(s => this.setting(s));
+    if (op === OPS.SETTINGS) return json({settings: all(), saved: this.saved});
+    if (op === OPS.SETTINGS_RESET) {
+      let changed = false;
+      for (const s of this.specs) if (s.key !== "language" && this.values[s.key] !== s.default) { this.values[s.key] = s.default; changed = true; }
+      if (changed) this.saved = false;
+      return json({reset: true, settings: all(), saved: this.saved});
+    }
+    const skip = op === OPS.SETTING_SET ? 4 : 0;
+    if (args.length < skip) return {error: "no value"};
+    const spec = this.specs.find(s => s.key === Buffer.from(args.slice(skip)).toString("utf8"));
+    if (!spec) return {error: "unknown setting"};
+    if (op === OPS.SETTING_GET) return json({setting: this.setting(spec), saved: this.saved});
+    const asked = args[0] | (args[1] << 8) | (args[2] << 16) | (args[3] << 24);
+    const before = {...this.values};
+    let value = asked;
+    if (spec.choices) {
+      if (value === 2) value = 1;                                     // the Launcher's old Traditional Chinese reads as Simplified
+      if (!spec.choices.some(c => c.value === value)) value = this.values[spec.key];
+    } else {
+      const top = spec.key === "volume" && "volume_limit" in this.values ? Math.min(spec.max, this.values.volume_limit) : spec.max;
+      value = Math.max(spec.min, Math.min(top, value));
+    }
+    this.values[spec.key] = value;
+    if (spec.key === "volume_limit" && "volume" in this.values) this.values.volume = Math.min(this.values.volume, value);
+    this.stored.add(spec.key);
+    const changed = this.specs.map(s => s.key).filter(key => this.values[key] !== before[key]);
+    if (changed.length) this.saved = false;
+    return json({asked, changed, setting: this.setting(spec), saved: this.saved});
   }
 }

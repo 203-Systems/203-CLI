@@ -12,12 +12,13 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import {ROOT, NO_UPDATES} from "./fixtures.mjs";
-import {FakeBoard, INFO, fakePixel, packFake, unpackFake} from "./board-fake.mjs";
+import {FakeBoard, INFO, SETTING_SPECS, fakePixel, packFake, unpackFake} from "./board-fake.mjs";
 import {pack7, unpack7, sysexRequest, hidRequest, sysexAnswer, hidAnswer, SysexReader, HidReader, Board, BoardError, OP, FLAG, openBoard,
   bridgeLink, lostPart, COREMIDI_BRIDGE, HIDAPI_BRIDGE} from "../scripts/board-usb.mjs";
 import {keyNumber, keyName, parseCombo, pressSteps, parseSteps, keyRequests, decodeScreen, rgbOf, encodePng, crc32, cardPath, size,
   boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardPress, boardKeys, boardCoredump,
-  filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, partitionsText, memoryText} from "../scripts/board.mjs";
+  filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, partitionsText, memoryText,
+  boardSettings, boardSettingsGet, boardSettingsSet, boardSettingsReset, settingKey, settingValue, textWidth, table, SETTING_KEYS} from "../scripts/board.mjs";
 import {CliError, EXIT} from "../scripts/guide.mjs";
 
 const CLI = path.join(ROOT, "scripts/203cli.mjs");
@@ -431,6 +432,148 @@ test("a firmware too old for the channel, one built without it, one that does no
   await assert.rejects(boardInfo(ctxFor(busy)), e => e.code === "board_busy" && e.exit === EXIT.later);
 });
 
+// ---------------------------------------------------------------------------------------------
+// The board's settings (CardenzaHAL docs/SETTINGS.md)
+
+test("settings: keys and values as typed (aliases, units, languages by tag or name), checked before the device is asked", () => {
+  assert.deepEqual(SETTING_KEYS, SETTING_SPECS.map(s => s.key), "the device's order");
+  assert.equal(settingKey("Volume-Limit", usage), "volume_limit");
+  assert.equal(settingKey("lang", usage), "language");
+  assert.equal(settingKey("key_lights", usage), "key_brightness");
+  assert.throws(() => settingKey("loudness", usage), e => e.code === "usage" && e.field === "KEY" && /volume, volume_limit, screen_brightness, key_brightness, mic_gain, language/.test(e.message));
+  assert.throws(() => settingKey("volum", usage, {fix: guess => `203cli board settings get ${guess}`}), e => /Did you mean volume\?/.test(e.hint) && e.next[0] === "203cli board settings get volume");
+  assert.equal(settingValue("volume", "50", usage), 50);
+  assert.equal(settingValue("mic_gain", "-6", usage), -6);
+  assert.equal(settingValue("mic_gain", "+6dB", usage), 6);
+  assert.equal(settingValue("screen_brightness", "80 %", usage), 80);
+  assert.equal(settingValue("volume", "150", usage), 150, "out of range: the device's to clamp");
+  for (const bad of ["loud", "5.5", "6dB", "", "99999999999"]) assert.throws(() => settingValue("volume", bad, usage), e => e.code === "usage" && e.field === "VALUE", bad);
+  for (const [typed, code] of [["en", 0], ["English", 0], ["zh", 1], ["ZH-HANS", 1], ["zh_Hans", 1], ["简体中文", 1], ["ja", 3], ["日本語", 3], ["id", 4], ["Bahasa Indonesia", 4],
+    ["vi", 5], ["Tiếng Việt", 5], ["3", 3], ["7", 7]]) assert.equal(settingValue("language", typed, usage), code, typed);
+  assert.throws(() => settingValue("language", "klingon", usage), e => e.code === "usage" && /en \(English\), zh-Hans \(简体中文\), ja \(日本語\), id \(Bahasa Indonesia\), vi \(Tiếng Việt\)/.test(e.message));
+  assert.equal(textWidth("简体中文 (zh-Hans)"), 18);
+  assert.equal(textWidth("Tiếng Việt"), 10);
+  assert.deepEqual(table([["a", "简体中文", "x"], ["bb", "en", "y"]]).split("\n").map(line => textWidth(line.slice(0, line.lastIndexOf(" ") + 1))), [14, 14], "columns as wide as a terminal shows them");
+});
+
+test("settings: every one, one, set (the device's clamp said, the limit lowering the volume, a language by name), reset (asked first, the language stays), over SysEx and HID", async () => {
+  for (const kind of ["sysex", "hid"]) {
+    const fake = new FakeBoard({kind, protocol: 3, settings: {volume: 64, volume_limit: 90, screen_brightness: 80, mic_gain: 6, language: 1}});
+    const all = await boardSettings(ctxFor(fake));
+    assert.deepEqual(all.json, {settings: SETTING_SPECS.map(s => fake.setting(s)), saved: true}, "the device's JSON");
+    const rows = all.text.split("\n");
+    assert.match(rows[0], /^setting +value +range +default +stored$/);
+    assert.match(all.text, /\nvolume +64 +0-90 \(at most volume_limit\) +70 +yes\n/);
+    assert.match(all.text, /\nscreen_brightness +80 % +10-100 % +100 % +yes\n/);
+    assert.match(all.text, /\nkey_brightness +15 +0-15 +15 +no\n/);
+    assert.match(all.text, /\nmic_gain +\+6 dB +-12 to \+36 dB +0 dB +yes\n/);
+    assert.match(all.text, /\nlanguage +简体中文 \(zh-Hans\) +en zh-Hans ja id vi +English \(en\) +yes\n/);
+    const column = line => textWidth(line.slice(0, line.search(/ (0-90|en zh-Hans)/) + 1));
+    assert.equal(column(rows.find(l => l.startsWith("volume "))), column(rows.find(l => l.startsWith("language "))), "the language's name does not shift its row");
+    assert.match(all.text, /HOME menu \(Settings\)/);
+    assert.doesNotMatch(all.text, /Not in the board's flash yet/, "saved");
+
+    const language = await boardSettingsGet(ctxFor(fake, {args: {KEY: "lang"}}));
+    assert.deepEqual(language.json, {setting: fake.setting(SETTING_SPECS[5]), saved: true});
+    assert.match(language.text, /^language  简体中文 \(zh-Hans\)\n  choices  English \(en, 0\), 简体中文 \(zh-Hans, 1\), 日本語 \(ja, 3\), Bahasa Indonesia \(id, 4\), Tiếng Việt \(vi, 5\)\n  default  English \(en\)/);
+    assert.match((await boardSettingsGet(ctxFor(fake, {args: {KEY: "volume"}}))).text, /^volume  64\n  range    0-90 \(at most volume_limit\); the HOME menu steps by 2\n  default  70\n  stored   yes/);
+    assert.equal(fake.requests.at(-1).op, OP.SETTING_GET);
+    assert.deepEqual(fake.requests.at(-1).args, [...Buffer.from("volume")], "the key, nothing else");
+
+    // Clamped: the volume under its limit.
+    const loud = await boardSettingsSet(ctxFor(fake, {args: {KEY: "volume", VALUE: "120"}}));
+    assert.deepEqual(fake.requests.at(-1).args, [120, 0, 0, 0, ...Buffer.from("volume")], "i32 little-endian, then the key");
+    assert.equal(loud.json.asked, 120);
+    assert.equal(loud.json.setting.value, 90);
+    assert.equal(loud.json.clamped, true);
+    assert.deepEqual(loud.json.changed, ["volume"]);
+    assert.deepEqual(loud.json.changes, [{key: "volume", from: 64, to: 90}]);
+    assert.equal(loud.json.saved, false);
+    assert.match(loud.text, /^volume 64 → 90\.\nThe device kept it in its range 0-90 \(the most is volume_limit, 90\): asked 120, set 90\.\nNot in the board's flash yet/);
+    // The limit lowered: the volume with it.
+    const limit = await boardSettingsSet(ctxFor(fake, {args: {KEY: "volume-limit", VALUE: "60"}}));
+    assert.deepEqual(limit.json.changed, ["volume", "volume_limit"]);
+    assert.deepEqual(limit.json.changes, [{key: "volume", from: 90, to: 60}, {key: "volume_limit", from: 90, to: 60}]);
+    assert.equal(limit.json.clamped, false);
+    assert.match(limit.text, /^volume_limit 90 → 60\.\nAlso changed: volume 90 → 60 \(the volume stays under its limit\)\./);
+    assert.equal(fake.values.volume, 60);
+    // Negative, signed; a language by name; one the board does not have; the same again.
+    const gain = await boardSettingsSet(ctxFor(fake, {args: {KEY: "mic_gain", VALUE: "-6"}}));
+    assert.deepEqual(fake.requests.at(-1).args.slice(0, 4), [0xfa, 0xff, 0xff, 0xff]);
+    assert.match(gain.text, /^mic_gain \+6 dB → -6 dB\./);
+    const ja = await boardSettingsSet(ctxFor(fake, {args: {KEY: "language", VALUE: "日本語"}}));
+    assert.deepEqual(fake.requests.at(-1).args, [3, 0, 0, 0, ...Buffer.from("language")]);
+    assert.equal(ja.json.setting.value, 3);
+    assert.match(ja.text, /^language 简体中文 \(zh-Hans\) → 日本語 \(ja\)\./);
+    const none = await boardSettingsSet(ctxFor(fake, {args: {KEY: "language", VALUE: "7"}}));
+    assert.equal(none.json.clamped, true);
+    assert.deepEqual(none.json.changes, []);
+    assert.match(none.text, /^language is 日本語 \(ja\) already: nothing changed\.\nThe board has no language with the code 7 \(it has 0 en, 1 zh-Hans, 3 ja, 4 id, 5 vi\): it kept 日本語 \(ja\)\./);
+    const same = await boardSettingsSet(ctxFor(fake, {args: {KEY: "key_brightness", VALUE: "15"}}));
+    assert.match(same.text, /^key_brightness is 15 already: nothing changed\.$/m);
+    assert.equal(same.json.clamped, false);
+    fake.saved = true;
+    const big = await boardSettingsSet(ctxFor(fake, {args: {KEY: "screen_brightness", VALUE: "5%"}}));
+    assert.match(big.text, /^screen_brightness 80 % → 10 %\.\nThe device kept it in its range 10-100 %: asked 5 %, set 10 %\./);
+
+    // Reset: asked first (here no terminal: needs_confirmation, nothing sent); the language stays.
+    const resets = () => fake.requests.filter(q => q.op === OP.SETTINGS_RESET).length;
+    await assert.rejects(boardSettingsReset(ctxFor(fake)), e => e.code === "needs_confirmation" && e.exit === EXIT.confirm && /volume 60 → 70/.test(e.message) &&
+      /the language stays 日本語 \(ja\)/.test(e.message) && e.data.changes.some(c => c.key === "volume_limit" && c.from === 60 && c.to === 100) && /only if the user asked/.test(e.hint));
+    assert.equal(resets(), 0);
+    let asked = null;
+    const no = {...ctxFor(fake), interactive: true, confirm: async question => { asked = question; return false; }};
+    await assert.rejects(boardSettingsReset(no), e => e.code === "needs_confirmation");
+    assert.match(asked, /^Put the board's settings back to their defaults: volume 60 → 70, volume_limit 60 → 100, screen_brightness 10 % → 100 %, mic_gain -6 dB → 0 dB \(the language stays 日本語 \(ja\)\)\?$/);
+    assert.equal(resets(), 0);
+    const reset = await boardSettingsReset({...ctxFor(fake), interactive: true, confirm: async () => true});
+    assert.equal(resets(), 1);
+    assert.equal(reset.json.reset, true);
+    assert.deepEqual(reset.json.changes.map(c => c.key), ["volume", "volume_limit", "screen_brightness", "mic_gain"]);
+    assert.deepEqual(reset.json.settings, SETTING_SPECS.map(s => fake.setting(s)));
+    assert.equal(fake.values.language, 3, "the language stays");
+    assert.match(reset.text, /^Back to their defaults \(the language stays 日本語 \(ja\)\):\n  volume +60 +→ +70\n  volume_limit +60 +→ +100\n/);
+    const again = await boardSettingsReset(ctxFor(fake, {flags: {yes: true}}));
+    assert.equal(resets(), 1, "nothing to reset: nothing sent");
+    assert.deepEqual({reset: again.json.reset, changes: again.json.changes}, {reset: false, changes: []});
+    assert.match(again.text, /at its default already: nothing to reset/);
+    fake.values.volume = 30;
+    const yes = await boardSettingsReset(ctxFor(fake, {flags: {yes: true}, json: true}));
+    assert.deepEqual(yes.json.changes, [{key: "volume", from: 30, to: 70}]);
+    assert.deepEqual(fake.violations, []);
+  }
+});
+
+test("settings: answered by a firmware built without the development channel; a HAL from before them, a setting it lacks, said plainly", async () => {
+  // Protocol 3, the development channel off: the settings answer, the rest is dev_channel_off (HELLO says dev: false).
+  const off = new FakeBoard({protocol: 3, off: true});
+  assert.equal((await boardSettings(ctxFor(off))).json.settings.length, 6);
+  assert.equal((await boardSettingsSet(ctxFor(off, {args: {KEY: "volume", VALUE: "40"}}))).json.setting.value, 40);
+  await assert.rejects(boardInfo(ctxFor(off)), e => e.code === "dev_channel_off" && /board settings works without it/.test(e.hint));
+  assert.ok(!off.requests.some(q => q.op === OP.INFO), "HELLO said so: INFO not asked");
+  // Protocol 2 (a HAL from before 2026-11-23): the other commands work, settings are hal_too_old.
+  const old = new FakeBoard({protocol: 2});
+  assert.deepEqual((await boardInfo(ctxFor(old))).json, INFO);
+  for (const run of [boardSettings(ctxFor(old)), boardSettingsGet(ctxFor(old, {args: {KEY: "volume"}})), boardSettingsReset(ctxFor(old, {flags: {yes: true}}))]) {
+    await assert.rejects(run, e => e.code === "hal_too_old" && e.exit === EXIT.refused && /older than the board's settings \(its USB protocol is 2; 203cli board settings needs 3\)/.test(e.message) &&
+      /CardenzaHAL from 2026-11-23 on/.test(e.hint) && e.data.protocol === 2 && e.data.needs === 3);
+  }
+  assert.ok(!old.requests.some(q => q.op >= OP.SETTINGS && q.op <= OP.SETTINGS_RESET), "not asked: IDENTIFY said 2");
+  // One that says 3 but answers "unknown request" all the same; "off" is never dev_channel_off here; a setting the HAL lacks.
+  const odd = new FakeBoard({protocol: 3});
+  const real = odd.answer.bind(odd);
+  odd.answer = async job => (job.op === OP.SETTINGS ? {error: "unknown request"} : job.op === OP.SETTING_GET ? {error: "off"} : real(job));
+  await assert.rejects(boardSettings(ctxFor(odd)), e => e.code === "hal_too_old" && /2026-11-23/.test(e.hint));
+  await assert.rejects(boardSettingsGet(ctxFor(odd, {args: {KEY: "volume"}})), e => e.code === "board_refused" && e.data.reason === "off");
+  const fewer = new FakeBoard({protocol: 3, keys: ["volume", "volume_limit", "language"]});
+  await assert.rejects(boardSettingsGet(ctxFor(fewer, {args: {KEY: "mic_gain"}})), e => e.code === "board_refused" && e.data.reason === "unknown setting" && /does not have that setting/.test(e.hint));
+  // A wrong key or value: before the device is opened.
+  const untouched = new FakeBoard({protocol: 3});
+  await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "loudness", VALUE: "3"}})), e => e.code === "usage");
+  await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "volume", VALUE: "loud"}})), e => e.code === "usage");
+  assert.deepEqual(untouched.requests, []);
+});
+
 test("the bridges' python compiles; a bridge process carries the bytes both ways (hex lines)", {skip: spawnSync("python3", ["-c", "1"]).status !== 0 && "no python3"}, async () => {
   for (const script of [COREMIDI_BRIDGE, HIDAPI_BRIDGE]) {
     const compiled = spawnSync("python3", ["-I", "-c", "import sys; compile(sys.stdin.read(), 'bridge', 'exec')"], {input: script, encoding: "utf8"});
@@ -598,6 +741,66 @@ test("203cli board over hidraw when raw MIDI cannot be opened; a HAL too old say
   } finally { pty2.close(); }
   const none = await cli(["board", "info", "--json"], {C203_SYS: path.join(dir, "no-sys"), C203_DEV: path.join(dir, "no-dev")});
   assert.equal(none.error.code, "board_not_found");
+});
+
+test("203cli board settings: text and JSON, set, reset asking for --yes, an older HAL", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
+  const fake = new FakeBoard({protocol: 3, off: true, settings: {volume: 64, volume_limit: 90, language: 1}});
+  const pty = await ptyFor(fake);
+  try {
+    const env = standInSystem({midi: pty.slave});
+    const all = await cli(["board", "settings", "--json"], env);
+    assert.equal(all.code, 0, all.stderr);
+    assert.deepEqual(all.json.settings.map(s => [s.key, s.value]), [["volume", 64], ["volume_limit", 90], ["screen_brightness", 100], ["key_brightness", 15], ["mic_gain", 0], ["language", 1]]);
+    const text = await cli(["board", "settings"], env);
+    assert.equal(text.code, 0, text.stderr);
+    assert.match(text.stdout, /language +简体中文 \(zh-Hans\)/);
+    const set = await cli(["board", "settings", "set", "volume_limit", "50", "--json"], env);
+    assert.equal(set.code, 0, set.stderr);
+    assert.deepEqual(set.json.changed, ["volume", "volume_limit"]);
+    const gain = await cli(["board", "settings", "set", "mic_gain", "-3"], env);
+    assert.equal(gain.code, 0, gain.stderr);
+    assert.match(gain.stdout, /^mic_gain 0 dB → -3 dB\./);
+    const ja = await cli(["board", "settings", "set", "language", "ja", "--json"], env);
+    assert.equal(ja.json.setting.value, 3);
+    const unasked = await cli(["board", "settings", "reset", "--json"], env);
+    assert.equal(unasked.code, 6, unasked.stderr);
+    assert.equal(unasked.error.code, "needs_confirmation");
+    assert.match(unasked.error.next[0], /board settings reset --yes --json$/);
+    assert.equal(fake.values.volume_limit, 50, "not reset");
+    const reset = await cli(["board", "settings", "reset", "--yes", "--json"], env);
+    assert.equal(reset.code, 0, reset.stderr);
+    assert.deepEqual(reset.json.settings.map(s => s.value), [70, 100, 100, 15, 0, 3]);
+    const help = JSON.parse((await cli(["board", "settings", "reset", "--help", "--json"])).stdout);
+    assert.equal(help.signin, false);
+    assert.deepEqual(help.flags.map(f => f.name), ["--yes"]);
+    assert.deepEqual(fake.violations, []);
+  } finally { pty.close(); }
+  const old = new FakeBoard({protocol: 2});
+  const pty2 = await ptyFor(old);
+  try {
+    const r = await cli(["board", "settings", "--json"], standInSystem({midi: pty2.slave}));
+    assert.equal(r.code, 1, r.stderr);
+    assert.equal(r.error.code, "hal_too_old");
+    assert.match(r.error.hint, /CardenzaHAL from 2026-11-23 on/);
+  } finally { pty2.close(); }
+});
+
+test("203cli board settings: a wrong key or value, or a misspelt action, is a usage error before any device is looked for", async () => {
+  const nowhere = {C203_SYS: path.join(dir, "no-sys"), C203_DEV: path.join(dir, "no-dev")};
+  const key = await cli(["board", "settings", "set", "volum", "50", "--json"], nowhere);
+  assert.equal(key.code, 2, key.stderr);
+  assert.equal(key.error.code, "usage");
+  assert.equal(key.error.field, "KEY");
+  assert.match(key.error.next[0], /board settings set volume 50 --json$/);
+  const value = await cli(["board", "settings", "set", "language", "klingon", "--json"], nowhere);
+  assert.equal(value.code, 2);
+  assert.match(value.error.error, /zh-Hans \(简体中文\)/);
+  const action = await cli(["board", "settings", "sett", "volume", "50", "--json"], nowhere);
+  assert.equal(action.code, 2);
+  assert.match(action.error.hint, /Did you mean board settings set\?/);
+  assert.match(action.error.next[0], /board settings set volume 50 --json$/);
+  const none = await cli(["board", "settings", "--json"], nowhere);
+  assert.notEqual(none.error.code, "usage", "a right one goes on to look for the device");
 });
 
 test("only a serial port: the 203 Launcher is told apart from a firmware that does not start CardenzaHAL's USB", {skip: !PTY && "Linux with python3 (pty)"}, async () => {

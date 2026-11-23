@@ -1,15 +1,17 @@
 // 203cli board: a running firmware on CardenzaHAL, seen and driven from a computer over its USB cable (the HAL's development
 // channel, CardenzaHAL docs/usb-dev.md; the bytes: board-usb.mjs). What it is (info), its flash (partitions), memory and
-// tasks, the SD card, the I2C bus, its screen as a PNG, keys pressed as if by a finger, its last crash (core dump), and
-// files on its SD card. No sign-in, like flash and log. Nothing here writes the device's flash: only files on the card
-// and, when asked, erasing the core dump.
+// tasks, the SD card, the I2C bus, its screen as a PNG, keys pressed as if by a finger, its last crash (core dump), files
+// on its SD card, and the board's settings (CardenzaHAL docs/SETTINGS.md). No sign-in, like flash and log. Nothing here
+// writes the device's flash itself: files on the card, and when asked, erasing the core dump; a setting changed here the
+// device writes to its flash on its own, a second after the last change.
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import {spawnSync} from "node:child_process";
-import {BoardError, OP, LIMITS, openBoard, concat, u32, readU32, lostPart} from "./board-usb.mjs";
+import {BoardError, OP, LIMITS, openBoard, concat, u32, i32, readU32, lostPart, settingsTooOld} from "./board-usb.mjs";
 import {CliError, EXIT} from "./guide.mjs";
+import {nearest} from "./checks.mjs";
 
 const EMPTY = new Uint8Array(0);
 const enc = new TextEncoder();
@@ -223,13 +225,26 @@ export function duration(ms) {
   if (m) return `${m} min ${s % 60} s`;
   return `${s} s`;
 }
-/** Rows as aligned columns; `right`: the columns aligned right. */
+/** How many columns a text takes on a terminal: CJK and fullwidth characters two, combining marks none. */
+export function textWidth(text) {
+  let n = 0;
+  for (const ch of String(text)) {
+    const c = ch.codePointAt(0);
+    if ((c >= 0x300 && c <= 0x36f) || c === 0x200d || (c >= 0xfe00 && c <= 0xfe0f)) continue;
+    n += (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff) ||
+      (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6) || (c >= 0x20000 && c <= 0x3fffd) ? 2 : 1;
+  }
+  return n;
+}
+const padEnd = (text, width) => text + " ".repeat(Math.max(0, width - textWidth(text)));
+const padStart = (text, width) => " ".repeat(Math.max(0, width - textWidth(text))) + text;
+/** Rows as aligned columns (as wide as a terminal shows them); `right`: the columns aligned right. */
 export function table(rows, right = []) {
   const widths = [];
-  for (const row of rows) row.forEach((cell, i) => { widths[i] = Math.max(widths[i] ?? 0, String(cell ?? "").length); });
+  for (const row of rows) row.forEach((cell, i) => { widths[i] = Math.max(widths[i] ?? 0, textWidth(String(cell ?? ""))); });
   return rows.map(row => row.map((cell, i) => {
     const text = String(cell ?? "");
-    return right.includes(i) ? text.padStart(widths[i]) : i === row.length - 1 ? text : text.padEnd(widths[i]);
+    return right.includes(i) ? padStart(text, widths[i]) : i === row.length - 1 ? text : padEnd(text, widths[i]);
   }).join("  ").trimEnd()).join("\n");
 }
 
@@ -237,8 +252,11 @@ export function table(rows, right = []) {
 // A command's time with the board: the channel opened, Ctrl-C answered (CANCEL, so the firmware stops sending; the command's
 // own clean-up runs: an upload aborted, a part file removed), errors said in 203cli's terms, the channel closed.
 
-/** The firmware's refusal (its reason) or the channel's trouble as a CliError. */
-export function boardCliError(error, ctx) {
+/**
+ * The firmware's refusal (its reason) or the channel's trouble as a CliError. `need` "settings": the board's settings, which
+ * every firmware on a current HAL answers (never "off"); "unknown request" there is a HAL from before them.
+ */
+export function boardCliError(error, ctx, {need = "dev", product = "the device"} = {}) {
   if (!(error instanceof BoardError)) return error;
   const again = ctx.cmd ? [ctx.cmd()] : [];
   const reason = error.reason ?? error.message;
@@ -246,8 +264,16 @@ export function boardCliError(error, ctx) {
     case "device":
       if (reason === "busy") return new CliError("board_busy", "The firmware's development channel is busy (its queue of 8 requests is full)", {exit: EXIT.later, next: again,
         hint: "Another program may be asking it too: wait a moment and run it again"});
+      if (need === "settings") {
+        if (reason === "unknown request") return settingsTooOld(product);
+        if (reason === "unknown setting") {
+          return new CliError("board_refused", `The firmware refused: ${reason}`, {exit: EXIT.refused, data: {reason},
+            hint: "This firmware's CardenzaHAL does not have that setting: 203cli board settings lists the ones it has"});
+        }
+        return new CliError("board_refused", `The firmware refused: ${reason}`, {exit: EXIT.refused, hint: "Read the reason; 203cli board settings lists what the device has", data: {reason}});
+      }
       if (reason === "off") return new CliError("dev_channel_off", "This firmware was built without the development channel (CONFIG_CARDENZA_HAL_USB_DEV is off)", {exit: EXIT.refused,
-        hint: "Turn it on (CONFIG_CARDENZA_HAL_USB_DEV=y), build and install it again"});
+        hint: "Turn it on (CONFIG_CARDENZA_HAL_USB_DEV=y), build and install it again; 203cli board settings works without it"});
       return new CliError("board_refused", `The firmware refused: ${reason}`, {exit: EXIT.refused, hint: refusalHint(reason), data: {reason}});
     case "timeout":
     case "gap":
@@ -273,9 +299,12 @@ function refusalHint(reason) {
   return "Read the reason; 203cli board status and 203cli board storage say more about the device";
 }
 
-/** Opens the channel, runs `work(board)`, closes it. ctx.boardLinks: the ways to the device (the tests' stand-in). */
-export async function session(ctx, work) {
-  const board = await openBoard({links: ctx.boardLinks ?? null});
+/**
+ * Opens the channel, runs `work(board)`, closes it. ctx.boardLinks: the ways to the device (the tests' stand-in). `need`:
+ * "dev" (the development channel's questions) or "settings" (the board's settings), as openBoard takes it.
+ */
+export async function session(ctx, work, {need = "dev"} = {}) {
+  const board = await openBoard({links: ctx.boardLinks ?? null, need});
   let stopped = false;
   const onSignal = () => {
     if (stopped) process.exit(130);
@@ -290,7 +319,7 @@ export async function session(ctx, work) {
     return await work(board);
   } catch (error) {
     if (board.interrupted) { await board.close(); process.exit(130); }
-    throw boardCliError(error, ctx);
+    throw boardCliError(error, ctx, {need, product: board.identity?.product || board.name});
   } finally {
     process.removeListener("SIGINT", onSignal);
     await board.close();
@@ -767,4 +796,201 @@ export async function filesMv(ctx) {
     const said = await board.json(OP.MV, concat(utf8(from), Uint8Array.of(0), utf8(to)), {retries: 0});
     return {json: said, text: `Moved ${said.moved ?? from} to ${said.to ?? to}.`};
   });
+}
+
+// ---------------------------------------------------------------------------------------------
+// settings: the board's settings (CardenzaHAL docs/SETTINGS.md): the volume and its limit, the screen's and the key lights'
+// brightness, the microphone's gain and the language. They are the HAL's, the same in every firmware on it and in its system
+// menu (HOME > Settings), kept in the board's flash. SETTINGS, SETTING_GET (the key), SETTING_SET (an i32, then the key) and
+// SETTINGS_RESET are answered by every firmware that starts USB on a HAL from 2026-11-23 on (protocol 3), also one built
+// without the development channel. The device keeps a value in its range and writes a change to its flash itself, a second
+// after the last one.
+
+/** The keys, in the device's order. */
+export const SETTING_KEYS = Object.freeze(["volume", "volume_limit", "screen_brightness", "key_brightness", "mic_gain", "language"]);
+// Other words taken for keys (never shown): the flash's names and short ones.
+const SETTING_ALIASES = Object.freeze({lang: "language", limit: "volume_limit", volume_max: "volume_limit", max_volume: "volume_limit",
+  brightness: "screen_brightness", backlight: "screen_brightness", key_light: "key_brightness", key_lights: "key_brightness", mic: "mic_gain"});
+// The unit a VALUE may carry (80%, +6dB).
+const SETTING_UNITS = Object.freeze({volume: "%", volume_limit: "%", screen_brightness: "%", mic_gain: "db"});
+const SETTING_EXAMPLES = Object.freeze({volume: "50", volume_limit: "80", screen_brightness: "60", key_brightness: "8", mic_gain: "-6", language: "zh"});
+/** The 203 Launcher's languages: its code, the tag the device names it by, its own name, and the words taken for it. */
+export const LANGUAGES = Object.freeze([
+  {code: 0, tag: "en", name: "English", words: ["english", "en-us", "en-gb", "英文", "英语"]},
+  {code: 1, tag: "zh-Hans", name: "简体中文", words: ["zh", "zh-cn", "zh-sg", "chinese", "simplified chinese", "中文", "简体", "简体中文"]},
+  {code: 3, tag: "ja", name: "日本語", words: ["jp", "ja-jp", "japanese", "日本語", "日语", "日文"]},
+  {code: 4, tag: "id", name: "Bahasa Indonesia", words: ["in", "id-id", "indonesian", "bahasa", "bahasa indonesia", "印尼语"]},
+  {code: 5, tag: "vi", name: "Tiếng Việt", words: ["vi-vn", "vietnamese", "tiếng việt", "tieng viet", "越南语"]},
+]);
+const LANGUAGE_LIST = LANGUAGES.map(l => `${l.tag} (${l.name})`).join(", ");
+/** A language's own name from its tag (the device's choices name them by tag); an unknown tag as it is. */
+export const languageName = tag => LANGUAGES.find(l => l.tag.toLowerCase() === String(tag).toLowerCase())?.name ?? String(tag);
+
+/** A setting's key from what was typed (any case, - for _, a few other words), or a usage error that lists them. */
+export function settingKey(text, usage, {fix = null} = {}) {
+  const typed = String(text ?? "").trim().toLowerCase().replace(/-/g, "_");
+  const key = SETTING_KEYS.includes(typed) ? typed : SETTING_ALIASES[typed];
+  if (key) return key;
+  const guess = nearest(typed, SETTING_KEYS);
+  throw usage(`"${text}" is not one of the board's settings: ${SETTING_KEYS.join(", ")}`, {field: "KEY",
+    hint: `${guess ? `Did you mean ${guess}? ` : ""}The keys: volume (0-100), volume_limit (10-100), screen_brightness (10-100 %), key_brightness (0-15), mic_gain (-12 to +36 dB), language`,
+    ...(guess && fix ? {next: [fix(guess)]} : {})});
+}
+
+/**
+ * VALUE for a key: a whole number (80, -6, +6; 80% or 6dB in the setting's unit); the language also by its tag or name (en, zh,
+ * zh-Hans, ja, id, vi, English, 日本語 …), as the Launcher's code. A number out of range is the device's to clamp (it says so).
+ */
+export function settingValue(key, text, usage) {
+  const typed = String(text ?? "").trim();
+  if (key === "language") {
+    if (/^[+-]?\d{1,9}$/.test(typed)) return Number(typed);
+    const word = typed.toLowerCase().replace(/_/g, "-");
+    const found = LANGUAGES.find(l => l.tag.toLowerCase() === word || l.words.includes(word));
+    if (found) return found.code;
+    throw usage(`"${typed}" is not a language of the board: ${LANGUAGE_LIST}`, {field: "VALUE",
+      hint: `Give its tag (en, zh, ja, id, vi), its name, or the Launcher's code (${LANGUAGES.map(l => `${l.code} ${l.tag}`).join(", ")}); e.g. 203cli board settings set language zh`});
+  }
+  const m = /^([+-]?\d{1,10})\s*(%|db)?$/i.exec(typed);
+  const n = m ? Number(m[1]) : NaN;
+  if (!m || (m[2] && m[2].toLowerCase() !== SETTING_UNITS[key]) || n < -0x80000000 || n > 0x7fffffff) {
+    throw usage(`${key} is a whole number, not "${typed}"`, {field: "VALUE",
+      hint: `e.g. 203cli board settings set ${key} ${SETTING_EXAMPLES[key]}; 203cli board settings get ${key} shows its range (the device keeps a value in it)`});
+  }
+  return n;
+}
+
+const signed = n => (n > 0 ? `+${n}` : String(n));
+/** A setting's value as people read it: 64, 80 %, +6 dB, 简体中文 (zh-Hans). */
+export function settingShown(entry, value = entry.value) {
+  if (Array.isArray(entry.choices)) {
+    const choice = entry.choices.find(c => c.value === value);
+    if (!choice) return String(value);
+    const name = languageName(choice.name);
+    return name === String(choice.name) ? name : `${name} (${choice.name})`;
+  }
+  const unit = entry.unit ?? "";
+  if (!Number.isFinite(value)) return "?";
+  if (/^db$/i.test(unit)) return `${signed(value)} ${unit}`;
+  return unit ? `${value} ${unit}` : String(value);
+}
+/** Its range (the volume's top is the limit), or its choices' tags. */
+export function settingRange(entry) {
+  if (Array.isArray(entry.choices)) return entry.choices.map(c => c.name).join(" ");
+  const unit = entry.unit ? ` ${entry.unit}` : "";
+  const span = entry.min < 0 ? `${signed(entry.min)} to ${signed(entry.max)}${unit}` : `${entry.min}-${entry.max}${unit}`;
+  return entry.key === "volume" ? `${span} (at most volume_limit)` : span;
+}
+const NOT_SAVED = "Not in the board's flash yet: the device writes it there a second after the last change (keep it on until then).";
+const ABOUT = "The board's settings: the same in every firmware on CardenzaHAL, and in its HOME menu (Settings).";
+
+export function settingsText(said) {
+  const entries = said.settings ?? [];
+  const rows = [["setting", "value", "range", "default", "stored"],
+    ...entries.map(s => [s.key, settingShown(s), settingRange(s), settingShown(s, s.default), s.stored ? "yes" : "no"])];
+  const lines = [table(rows), "", `${ABOUT} stored no: the default, not set on this board.`];
+  if (said.saved === false) lines.push(NOT_SAVED);
+  lines.push("Change one: 203cli board settings set KEY VALUE (e.g. volume 50, language zh); all but the language back to their defaults: 203cli board settings reset");
+  return lines.join("\n");
+}
+export function settingText(said) {
+  const s = said.setting ?? {};
+  const lines = [`${s.key}  ${settingShown(s)}`];
+  const row = (label, value) => lines.push(`  ${label.padEnd(8)} ${value}`);
+  if (Array.isArray(s.choices)) row("choices", s.choices.map(c => `${settingShown(s, c.value).replace(/\)$/, `, ${c.value})`)}`).join(", "));
+  else row("range", `${settingRange(s)}${Number.isFinite(s.step) && s.step > 1 ? `; the HOME menu steps by ${s.step}` : ""}`);
+  row("default", settingShown(s, s.default));
+  row("stored", s.stored ? "yes (in the board's flash, or set since it started)" : "no (the default: not set on this board)");
+  if (said.saved === false) lines.push(NOT_SAVED);
+  return lines.join("\n");
+}
+/** [{key, from, to}] for every key whose value differs between two lists of settings. */
+function settingChanges(before, after, only = null) {
+  const was = new Map((before ?? []).map(s => [s.key, s]));
+  return (after ?? []).filter(s => (!only || only.includes(s.key)) && was.has(s.key) && was.get(s.key).value !== s.value)
+    .map(s => ({key: s.key, from: was.get(s.key).value, to: s.value}));
+}
+const changeText = (entries, c) => {
+  const entry = entries.find(s => s.key === c.key) ?? {};
+  return `${c.key} ${settingShown(entry, c.from)} → ${settingShown(entry, c.to)}`;
+};
+
+export async function boardSettings(ctx) {
+  return session(ctx, async board => {
+    const said = await board.json(OP.SETTINGS);
+    return {json: said, text: settingsText(said)};
+  }, {need: "settings"});
+}
+
+export async function boardSettingsGet(ctx) {
+  const key = settingKey(ctx.args.KEY, usageOf(ctx), {fix: guess => ctx.cmd?.({args: {KEY: guess}})});
+  return session(ctx, async board => {
+    const said = await board.json(OP.SETTING_GET, utf8(key));
+    return {json: said, text: settingText(said)};
+  }, {need: "settings"});
+}
+
+export async function boardSettingsSet(ctx) {
+  const usage = usageOf(ctx);
+  const key = settingKey(ctx.args.KEY, usage, {fix: guess => ctx.cmd?.({args: {KEY: guess}})});
+  const value = settingValue(key, ctx.args.VALUE, usage);
+  return session(ctx, async board => {
+    const before = await board.json(OP.SETTINGS);
+    const said = await board.json(OP.SETTING_SET, concat(i32(value), utf8(key)), {retries: 0});
+    const changed = Array.isArray(said.changed) ? said.changed : [];
+    // What else moved with it (lowering the limit lowers the volume): its new value, read again.
+    const after = changed.some(k => k !== key) ? (await board.json(OP.SETTINGS)).settings
+      : (before.settings ?? []).map(s => (s.key === key ? {...s, ...said.setting} : s));
+    const changes = settingChanges(before.settings, after, changed);
+    const entry = said.setting ?? {};
+    const clamped = Number.isFinite(said.asked) && said.asked !== entry.value;
+    const entries = after ?? [];
+    const own = changes.find(c => c.key === key);
+    const lines = [own ? `${changeText(entries, own)}.` : `${key} is ${settingShown(entry)} already: nothing changed.`];
+    if (clamped) {
+      if (Array.isArray(entry.choices)) {
+        // A code the board does not have changes nothing; one it reads as another (2, the Launcher's old Traditional Chinese) is that one.
+        lines.push(own ? `The device took the code ${said.asked} as ${settingShown(entry)}.`
+          : `The board has no language with the code ${said.asked} (it has ${entry.choices.map(c => `${c.value} ${c.name}`).join(", ")}): it kept ${settingShown(entry)}.`);
+      } else {
+        const limit = key === "volume" ? ` (the most is volume_limit, ${entry.max})` : "";
+        lines.push(`The device kept it in its range ${settingRange(entry).replace(/ \(at most volume_limit\)$/, "")}${limit}: asked ${settingShown(entry, said.asked)}, set ${settingShown(entry)}.`);
+      }
+    }
+    const others = changes.filter(c => c.key !== key);
+    if (others.length) lines.push(`Also changed: ${others.map(c => changeText(entries, c) + (c.key === "volume" && key === "volume_limit" ? " (the volume stays under its limit)" : "")).join(", ")}.`);
+    if (said.saved === false) lines.push(NOT_SAVED);
+    return {json: {...said, changes, clamped}, text: lines.join("\n")};
+  }, {need: "settings"});
+}
+
+export async function boardSettingsReset(ctx) {
+  return session(ctx, async board => {
+    const before = await board.json(OP.SETTINGS);
+    const entries = before.settings ?? [];
+    const due = entries.filter(s => s.key !== "language" && s.value !== s.default).map(s => ({key: s.key, from: s.value, to: s.default}));
+    const language = entries.find(s => s.key === "language");
+    const stays = language ? ` (the language stays ${settingShown(language)})` : "";
+    if (!due.length) {
+      return {json: {reset: false, changes: [], settings: entries, saved: before.saved},
+        text: `Every setting but the language${language ? ` (${settingShown(language)})` : ""} is at its default already: nothing to reset.`};
+    }
+    const list = due.map(c => changeText(entries, c)).join(", ");
+    // What the user chose goes (the volume limit among it): a yes on a terminal, --yes from a program.
+    if (!ctx.flags?.yes && !(ctx.interactive && ctx.confirm && await ctx.confirm(`Put the board's settings back to their defaults: ${list}${stays}?`))) {
+      throw new CliError("needs_confirmation", `board settings reset puts back what was chosen on this board: ${list}${stays}`, {exit: EXIT.confirm,
+        hint: "Add --yes only if the user asked for it; one setting alone: 203cli board settings set KEY VALUE", next: ctx.cmd ? [ctx.cmd({add: {yes: true}})] : [],
+        data: {changes: due}});
+    }
+    const said = await board.json(OP.SETTINGS_RESET, EMPTY, {retries: 0});
+    const changes = settingChanges(entries, said.settings);
+    const after = said.settings ?? entries;
+    const lines = [changes.length ? `Back to their defaults${stays}:` : `Nothing changed${stays}.`,
+      table(changes.map(c => {
+        const entry = after.find(s => s.key === c.key) ?? {};
+        return [`  ${c.key}`, settingShown(entry, c.from), "→", settingShown(entry, c.to)];
+      }))].filter(Boolean);
+    if (said.saved === false) lines.push(NOT_SAVED);
+    return {json: {...said, changes}, text: lines.join("\n")};
+  }, {need: "settings"});
 }

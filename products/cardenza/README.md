@@ -112,7 +112,15 @@ computer's side, signed out like `flash` and `log` (macOS and Linux; Windows wit
 203cli board press down down ok        # keys as by a finger (cap names, up/down/left/right, fn+s, home)
 203cli board coredump --out crash.elf --elf build/<project>.elf  # the last crash, its backtrace decoded
 203cli board files ls CardenzaSynth    # the SD card: ls, get, put, rm, mkdir, mv
+203cli board settings                  # the board's settings: volume and its limit, brightness, key lights, mic gain, language
+203cli board settings set volume 50    # one of them (get KEY, reset); the device writes it to its flash a second later
 ```
+
+The board's settings are the HAL's, the same in every firmware on it and in the HOME menu (Settings;
+[`docs/SETTINGS.md`](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/SETTINGS.md)): `CardenzaHAL::Init`
+applies them, so a firmware does not set the volume or the brightness itself. Every firmware that starts USB answers
+`203cli board settings`, also one built without the development channel; a HAL from before 2026-11-23 says
+`hal_too_old`.
 
 Two things it needs: the firmware is **built with a current CardenzaHAL** (an older one says `hal_too_old`: update the
 submodule, build, flash), and it **starts the HAL's USB device**: `CardenzaHAL::USB::Init();` after

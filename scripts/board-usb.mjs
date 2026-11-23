@@ -22,10 +22,13 @@ import {listPorts, openSerial} from "./flash.mjs";
 import {CliError, EXIT} from "./guide.mjs";
 
 export const DEV_COMMAND = 0x45;
+// IDENTIFY's protocol: 2 from the development channel on, 3 from the board's settings on (CardenzaHAL 2026-11-23).
 export const PROTOCOL = 2;
+export const SETTINGS_PROTOCOL = 3;
 export const OP = Object.freeze({HELLO: 0x00, INFO: 0x01, PARTITIONS: 0x02, MEMORY: 0x03, STORAGE: 0x04, STATUS: 0x05, I2C: 0x06, ARG: 0x0e,
   SCREEN: 0x10, KEYS: 0x11, COREDUMP_INFO: 0x20, COREDUMP_READ: 0x21, COREDUMP_ERASE: 0x22,
-  LS: 0x30, GET: 0x31, PUT_BEGIN: 0x32, PUT_DATA: 0x33, PUT_END: 0x34, PUT_ABORT: 0x35, RM: 0x36, MKDIR: 0x37, MV: 0x38, CANCEL: 0x7f});
+  LS: 0x30, GET: 0x31, PUT_BEGIN: 0x32, PUT_DATA: 0x33, PUT_END: 0x34, PUT_ABORT: 0x35, RM: 0x36, MKDIR: 0x37, MV: 0x38,
+  SETTINGS: 0x40, SETTING_GET: 0x41, SETTING_SET: 0x42, SETTINGS_RESET: 0x43, CANCEL: 0x7f});
 export const FLAG = Object.freeze({LAST: 1, ERROR: 2});
 export const LIMITS = Object.freeze({args: 52, sysexPayload: 48, hidPayload: 57, argBuffer: 512, queue: 8, path: 255, putChunk: 48});
 export const SEQ_SPAN = 1 << 14;
@@ -44,6 +47,8 @@ export function concat(...parts) {
   return out;
 }
 export const u32 = n => Uint8Array.of(n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff);
+/** A signed 32-bit number, little-endian (two's complement: the same bytes as u32 of its unsigned value). */
+export const i32 = n => u32(n | 0);
 export const readU32 = (b, at = 0) => (b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24)) >>> 0;
 
 // ---------------------------------------------------------------------------------------------
@@ -571,6 +576,13 @@ const RELINK_HINT = "Linux: raw MIDI is the seat user's or the audio group's (su
   "(a 203cli log, a DAW, a web page with Web MIDI) and run it again";
 export const REBUILD_HINT = "Rebuild the firmware with a current CardenzaHAL (update the HAL submodule to its main branch: git -C components/CardenzaHAL pull origin main, " +
   "or the project's own way, e.g. make hal-update), install it with 203cli flash --bin build/<project>.bin, then run this again";
+export const SETTINGS_HINT = "Rebuild the firmware with a CardenzaHAL from 2026-11-23 on (the board's settings came then): update the HAL submodule to its main branch " +
+  "(git -C components/CardenzaHAL pull origin main, or the project's own way, e.g. make hal-update), install it with 203cli flash --bin build/<project>.bin, then run this again";
+/** The firmware's HAL predates the board's settings (protocol 2 answers their requests "unknown request"). */
+export const settingsTooOld = (product, protocol = null) => new CliError("hal_too_old",
+  `The firmware on ${product} was built with a CardenzaHAL older than the board's settings${protocol !== null ? ` (its USB protocol is ${protocol}; 203cli board settings needs ${SETTINGS_PROTOCOL})` : ""}`,
+  {exit: EXIT.refused, hint: SETTINGS_HINT, data: {protocol, needs: SETTINGS_PROTOCOL}});
+const DEV_OFF_HINT = "Turn it on (idf.py menuconfig, or CONFIG_CARDENZA_HAL_USB_DEV=y in sdkconfig.defaults), build and install it again; 203cli board settings works without it";
 
 /** The ways to this computer's Cardenza running a firmware: [{via, where, open(): link}] ([] when there is none), or a CliError. */
 export function boardLinks({platform = process.platform} = {}) {
@@ -599,10 +611,12 @@ export function boardLinks({platform = process.platform} = {}) {
 
 /**
  * Opens the development channel to the board: the first way that opens and answers IDENTIFY, then HELLO. Throws a CliError
- * that says what to do: hal_too_old (its HAL is older than the channel), dev_channel_off, firmware_unreachable.
- * `links`: the ways to try (boardLinks; the tests give a stand-in device).
+ * that says what to do: hal_too_old (its HAL is older than the channel, or than the settings), dev_channel_off,
+ * firmware_unreachable. `links`: the ways to try (boardLinks; the tests give a stand-in device). `need`: "dev", the
+ * development channel's questions (protocol 2; a firmware built without them is dev_channel_off), or "settings", the
+ * board's settings (protocol 3; answered with the development channel off too).
  */
-export async function openBoard({links = null, platform = process.platform, timeout = 5000} = {}) {
+export async function openBoard({links = null, platform = process.platform, timeout = 5000, need = "dev"} = {}) {
   const ways = links ?? boardLinks({platform});
   if (!ways.length) throw await withoutChannel(platform);
   const tried = [];
@@ -635,6 +649,10 @@ export async function openBoard({links = null, platform = process.platform, time
       continue;
     }
     board.identity = identity;
+    if (need === "settings" && identity.protocol < SETTINGS_PROTOCOL) {
+      await board.close();
+      throw settingsTooOld(identity.product || board.name, identity.protocol);
+    }
     if (identity.protocol < PROTOCOL) {
       await board.close();
       throw new CliError("hal_too_old", `The firmware on ${identity.product || board.name} was built with a CardenzaHAL older than the development channel (its USB protocol is ${identity.protocol}; 203cli board needs ${PROTOCOL})`, {
@@ -644,12 +662,19 @@ export async function openBoard({links = null, platform = process.platform, time
       board.helloed = await board.hello();
     } catch (error) {
       await board.close();
-      if (error.code === "device" && error.reason === "off") {
+      // Protocol 2 answered every request "off" (HELLO too) in a firmware built without the channel; 3 answers HELLO.
+      if (need !== "settings" && error.code === "device" && error.reason === "off") {
         throw new CliError("dev_channel_off", "This firmware was built without the development channel (CONFIG_CARDENZA_HAL_USB_DEV is off in its sdkconfig)", {exit: EXIT.refused,
-          hint: "Turn it on (idf.py menuconfig, or CONFIG_CARDENZA_HAL_USB_DEV=y in sdkconfig.defaults), build and install it again"});
+          hint: DEV_OFF_HINT});
       }
       throw new CliError("hal_too_old", `The firmware on ${identity.product || board.name} does not answer the development channel's HELLO (${error.message}): its CardenzaHAL is older than the channel, or the firmware is stuck`, {
-        exit: EXIT.refused, hint: REBUILD_HINT + "; if it is a current build, restart the device (press HOME, or unplug it) and try again"});
+        exit: EXIT.refused, hint: (need === "settings" ? SETTINGS_HINT : REBUILD_HINT) + "; if it is a current build, restart the device (press HOME, or unplug it) and try again"});
+    }
+    // Protocol 3: HELLO says whether the development channel's questions are answered (dev) beside the settings.
+    if (need !== "settings" && board.helloed?.dev === false) {
+      await board.close();
+      throw new CliError("dev_channel_off", "This firmware was built without the development channel (CONFIG_CARDENZA_HAL_USB_DEV is off in its sdkconfig)", {exit: EXIT.refused,
+        hint: DEV_OFF_HINT});
     }
     return board;
   }

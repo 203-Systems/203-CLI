@@ -111,8 +111,8 @@ export const ERROR_CODES = [
   ["board_not_found", 1, "board: no Cardenza on USB (no firmware with CardenzaHAL's USB device, and no serial port either)", "plug it in with a data cable (not a charging-only one), turn it on, start the firmware"],
   ["board_no_usb", 1, "board: the firmware does not start CardenzaHAL's USB device (only its serial port is there, as with the template), so it has no development channel", "add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main, rebuild, flash; `log` reads its console meanwhile"],
   ["board_in_launcher", 1, "board: the device is in its 203 Launcher, not running a firmware", "start the firmware from the Launcher (or `flash --bin` a build), run it again"],
-  ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the development channel (IDENTIFY says protocol 1, or no answer to HELLO)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again"],
-  ["dev_channel_off", 1, "board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off", "turn it on in its sdkconfig, build and install it again"],
+  ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again"],
+  ["dev_channel_off", 1, "board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works)", "turn it on in its sdkconfig, build and install it again"],
   ["hidapi_missing", 1, "board on Windows: python's hidapi package (or python) is missing", "`pip install hidapi`"],
   ["board_refused", 1, "board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …)", "read `error` and `hint`"],
   ["board_busy", 3, "board: the firmware's development channel has 8 requests queued", "wait a moment, run it again"],
@@ -170,6 +170,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   see why a version was sent back                  {P} versions check VCODE --json
   try a build on your Cardenza (USB cable)         {P} flash --bin build/<project>.bin --json   then   {P} log --json
   look inside it running: screen, keys, memory, SD {P} board info --json, board screen, board press …   ({P} help board)
+  the device's volume, brightness, language (USB)  {P} board settings --json, then board settings set volume 50 --json
   everything about this project's firmware (an AI) {P} sync --json   (.203/community.md: page, versions, requests, comments, forks)
   what users asked for and said since last time    {P} inbox --json   ({P} help project)
   compare a fork (魔改版) with this project          {P} project forks --json   then   {P} project diff FORK --patch
@@ -592,6 +593,13 @@ CoreMIDI through python3); Windows through python's hidapi (pip install hidapi).
                                           (xtensa-esp32s3-elf-addr2line on PATH: ESP-IDF's export); --erase after
 {P} board files ls CardenzaSynth          the SD card: ls, get PATH [LOCAL], put LOCAL [PATH], rm, mkdir, mv FROM TO
                                           (paths from the card's root; a progress line on a terminal)
+{P} board settings                        the board's settings: volume, volume_limit, screen_brightness, key_brightness,
+                                          mic_gain, language (value, range or choices, default, stored); get KEY, set KEY VALUE
+                                          (the device keeps it in range and says so; language: en zh ja id vi), reset (all but
+                                          the language; asks, --yes from a program). The HAL's, the same in every firmware and
+                                          in HOME > Settings; the device writes a change to its flash a second after the last
+                                          one. Every firmware that starts USB answers them, also one built without the
+                                          development channel; a HAL from before 2026-11-23 does not (hal_too_old)
 A test with screenshots: {P} flash --bin …, {P} log --until "ready" --seconds 30, then board press … and board screen.
 Only a serial port there? board_no_usb: the firmware does not start CardenzaHAL's USB device (the template does not): add
 CardenzaHAL::USB::Init(); after CardenzaHAL::Init() in app_main, rebuild, flash ({P} log reads its console meanwhile);

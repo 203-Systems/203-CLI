@@ -1399,7 +1399,7 @@ What people asked for and said: requests (votes, status, answered or not, the di
 
 ### `203cli project forks [CODE]`
 
-The forks (魔改版) of the firmware, forks of forks too: each one's base version, newest versions, counts, and the command that compares it
+The forks of the firmware, forks of forks too: each one's base version, newest versions, counts, and the command that compares it
 
     203cli project forks
     203cli project forks V6QK28 --json

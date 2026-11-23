@@ -64,7 +64,7 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool 
 203cli publish
 203cli tutorial new             # how to use it: a tutorial (lessons, keys, screenshots); tutorial check, tutorial publish
 203cli sync                     # later: the page, versions, requests, comments and forks in .203/community.md
-203cli project diff FORK        # what a fork (魔改版) changed
+203cli project diff FORK        # what a fork changed
 203cli help start               # what to run for what (every command takes --help)
 ```
 

@@ -8,7 +8,7 @@
 
 给 203 Systems 的设备做固件、并分享到 203 社区，开发者（或者 AI 编程助手）需要的东西都在这里：
 
-- **`203cli`**：社区的命令行。登录、新建或魔改（fork）固件项目、在电脑上或 CI 里发布版本（可信发布，不存任何密钥）、设置固件页、封面和图片、用 USB 线刷固件、回复需求、分享音色包、作品和 3D 模型。加 `--json` 时每个回答都是 JSON，每个错误都写明下一步该运行什么：这就是给 AI 用的工具。
+- **`203cli`**：社区的命令行。登录、新建或 Fork 固件项目、在电脑上或 CI 里发布版本（可信发布，不存任何密钥）、设置固件页、封面和图片、用 USB 线刷固件、回复需求、分享音色包、作品和 3D 模型。加 `--json` 时每个回答都是 JSON，每个错误都写明下一步该运行什么：这就是给 AI 用的工具。
 - **每个产品的开发指引**：基于什么开发、工具链、怎样试运行而不弄坏设备、怎样发布、硬件资料。
 - **Agent Skill**（[`SKILL.md`](SKILL.md)）：给 Claude Code、Codex、Cursor 等 AI 的规则和流程，和命令行一起安装。
 
@@ -50,8 +50,8 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # HAL 的编译工具�
 203cli publish --dry-run        # 先按社区的检查全部检查一遍
 203cli publish
 203cli tutorial new             # 怎么用：写成教程（一课课、按键、截图）；tutorial check、tutorial publish
-203cli sync                     # 之后：页面、版本、需求、评论和魔改版，写进 .203/community.md
-203cli project diff FORK        # 某个魔改版改了什么
+203cli sync                     # 之后：页面、版本、需求、评论和 Fork，写进 .203/community.md
+203cli project diff FORK        # 某个 Fork 改了什么
 203cli help start               # 想做什么就运行什么（每个命令都能加 --help）
 ```
 

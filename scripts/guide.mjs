@@ -173,7 +173,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   the device's volume, brightness, language (USB)  {P} board settings --json, then board settings set volume 50 --json
   everything about this project's firmware (an AI) {P} sync --json   (.203/community.md: page, versions, requests, comments, forks)
   what users asked for and said since last time    {P} inbox --json   ({P} help project)
-  compare a fork (魔改版) with this project          {P} project forks --json   then   {P} project diff FORK --patch
+  compare a fork with this project                 {P} project forks --json   then   {P} project diff FORK --patch
   link this project to its firmware / move it      {P} link --dry-run --json   ({P} help link)
   share a sound pack / project / work              {P} sounds upload bank.ccpreset --firmware OFFICIAL --title "…" --dry-run --json
   find the official firmware's code                {P} firmware list --official --json
@@ -209,7 +209,7 @@ In the project's folder (203.json's code; or give CODE), read-only, plain text o
 {P} project versions --page 2 --json  every version with its notes, status, checks and source archive (24 a page)
 {P} project feedback --new --json     requests (votes, status, answered?, discussion) and comment threads (replies, likes),
                                      merge requests; --since last|all|DATE; each with the version newest when it was written
-{P} project forks --json              its forks (魔改版), forks of forks too: base version, newest versions, counts
+{P} project forks --json              its forks, forks of forks too: base version, newest versions, counts
 {P} project diff FORK                 a fork against this folder, file by file (+/- lines); --patch for the unified diff
 {P} project diff 1.0.0 1.1.0          two versions of this firmware (their source archives: publish_source: true)
 {P} inbox --json                      only what is new since the last look (and versions sent back, notifications)
@@ -382,7 +382,7 @@ What people see first: the cover (16:9 picture) and the summary (≤ 100 charact
 {P} firmware cover CODE cover.png --json        (owner; admins for any firmware)
 {P} firmware cover CODE --remove --yes --json   (then: a fork shows its original's, else the screen after boot, else grey)
 PNG, JPEG or WebP up to 2 MB, shown 16:9 cropped to the centre: 1280x720 is ideal. --dry-run checks it.
-Without a picture of its own a fork shows its original's, marked Fork (魔改版) in the top-left corner; else the
+Without a picture of its own a fork shows its original's, marked Fork in the top-left corner; else the
 screen after boot of its web build; else a plain grey cover. A stable version needs one of them: publish stops with
 cover_required (give --cover cover.png, or send the web build); --without-cover only when the user wants none.
 Beta and dev versions (CI's builds) never need one. The checklist says what shows now: {P} firmware checklist CODE --json`},

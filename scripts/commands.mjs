@@ -508,7 +508,7 @@ cmd("project feedback [CODE]", "What people asked for and said: requests (votes,
   flags: {since: V("last|all|DATE", "What is marked new (default last: since the previous sync or inbox)"), new: B("Only what is new"),
     "no-threads": B("Leave out the discussions and the replies beyond the newest (faster)")},
   run: projectFeedback, topic: "project", examples: ["project feedback --json", "project feedback --new --json", "project feedback V6QK28 --since 2026-11-01"]});
-cmd("project forks [CODE]", "The forks (魔改版) of the firmware, forks of forks too: each one's base version, newest versions, counts, and the command that compares it", {group: "Project",
+cmd("project forks [CODE]", "The forks of the firmware, forks of forks too: each one's base version, newest versions, counts, and the command that compares it", {group: "Project",
   run: projectForks, topic: "project", examples: ["project forks", "project forks V6QK28 --json"]});
 cmd("project diff [A] [B]", "Compare two sources file by file (+/- lines; --patch the unified diff): A and B are a fork's code, a version of this firmware (label or code), or local (this folder, B's default)", {group: "Project",
   flags: {patch: B("Also the unified diff"), max: V("N", "Cut the patch at N characters (default 400000)", {type: "int"}), firmware: V("CODE", "The firmware whose versions labels name (default 203.json's)")},

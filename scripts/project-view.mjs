@@ -5,7 +5,7 @@
 //   project versions  every version with its notes, status, checks and source archive (paged)
 //   project feedback  requests (votes, status, answered, their discussion) and comments with every reply and like, merge
 //                     requests; each marked new since the last look and with the version that was newest when written
-//   project forks     the forks (魔改版) of it, forks of forks too: base version, newest versions, counts
+//   project forks     the forks of it, forks of forks too: base version, newest versions, counts
 //   project diff      two sources compared, file by file (--patch: the unified diff): this folder, a version of this
 //                     firmware (label or code), a fork (its newest source archive, else its repository)
 //   sync              all of it in one report for an agent: .203/community.md and .203/community.json in the project

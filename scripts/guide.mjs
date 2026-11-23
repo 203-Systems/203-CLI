@@ -449,14 +449,14 @@ On the site: the tab's 写教程 / Write a tutorial (an editor that checks while
   sounds: {title: "Sound packs (official firmware only; the section may not be open yet)", text: `
 {P} firmware list --official --json            → the official firmware's code (e.g. CardenzaSynth)
 {P} sounds upload pads.ccpreset more.ccpreset pad-c3.wav --firmware CODE --title "Warm pads" --tags pad --dry-run --json
-Banks are CardenzaSynth's .ccpreset files (from the card: CardenzaSynth/Presets/<engine>/); samples .wav;
+Banks are CardenzaSynth's .ccpreset files (from the card: Apps/CardenzaSynth/Presets/<engine>/; CardenzaSynth/Presets/ on an older version's card); samples .wav;
 --preview demo.mp3 (a recording). The engine is read from the banks (several engines: mixed).
 Community firmware are refused: sounds belong to official firmware. Sounds, projects and works open later: until
 then only admins can share there (section_closed; {P} sections --json shows "open" for each).`},
 
   projects: {title: "Projects (official firmware only)", text: `
 {P} projects upload SONG.ccproj kick.wav --firmware CODE --title "Night drive" --preview song.mp3 --dry-run --json
-Exactly one .ccproj (from the card: CardenzaSynth/Projects/) and its .wav samples; format and tempo are read
+Exactly one .ccproj (from the card: Apps/CardenzaSynth/Projects/; CardenzaSynth/Projects/ on an older version's card) and its .wav samples; format and tempo are read
 from the file.`},
 
   works: {title: "Works (official firmware only)", text: `

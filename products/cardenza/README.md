@@ -111,7 +111,7 @@ computer's side, signed out like `flash` and `log` (macOS and Linux; Windows wit
 203cli board screen --out shot.png     # the next frame as a PNG: check what you drew
 203cli board press down down ok        # keys as by a finger (cap names, up/down/left/right, fn+s, home)
 203cli board coredump --out crash.elf --elf build/<project>.elf  # the last crash, its backtrace decoded
-203cli board files ls CardenzaSynth    # the SD card: ls, get, put, rm, mkdir, mv
+203cli board files ls Apps            # the SD card: ls, get, put, rm, mkdir, mv
 203cli board settings                  # the board's settings: volume and its limit, brightness, key lights, mic gain, language
 203cli board settings set volume 50    # one of them (get KEY, reset); the device writes it to its flash a second later
 ```
@@ -207,7 +207,7 @@ What each part does and where it is in the HAL (header, functions, README sectio
 | Buttons | HOME, the side key, on GPIO0 (the HAL's Func button; held at reset it starts the ROM download mode) |
 | Audio out | ES8156 codec, 44.1 kHz 16-bit, mono speaker (stereo I2S slots available) |
 | Microphone | PDM, 44.1 kHz mono; its clock shares GPIO43 with the speaker's word select |
-| Storage | microSD, 4-bit SDMMC, FAT at `/sdcard` |
+| Storage | microSD, 4-bit SDMMC, FAT at `/sdcard`; each firmware's files in `/sdcard/Apps/<AppName>/`, the 203 Launcher's in `/sdcard/Launcher/` ([`docs/SD-CARD.md`](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/SD-CARD.md), `storage/app_dir.h`) |
 | IR | transmitter on GPIO44 (NEC, 38 kHz) |
 | USB | the chip's USB PHY: USB-Serial-JTAG, or the HAL's composite device (MIDI 1.0, Audio 2.0 both ways, HID), VID 0x0203 |
 | Pins | [`board/pins.h`](https://github.com/203-Systems/CardenzaHAL/blob/main/board/pins.h) is the source; the HAL README's "Hardware resource ownership" lists which peripheral the HAL owns |

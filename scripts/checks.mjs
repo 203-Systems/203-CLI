@@ -656,11 +656,11 @@ export function inspectPack(kind, entries, {engine} = {}) {
     if (max && entry.bytes.length > max) problem("pack.too_large", `${entry.name} is ${size(entry.bytes.length)}: a ${entry.kind} is at most ${size(max)}`, "Make it smaller");
     if (entry.kind === "preset") {
       if (info.type !== "preset") problem("pack.not_bank", `${entry.name} is not a CardenzaSynth preset bank (its first line is not CARDENZA_PRESETS 1 "<engine>")`,
-        "Copy the bank from the card's CardenzaSynth/Presets/<engine>/ folder as the device wrote it");
+        "Copy the bank from the card's Apps/CardenzaSynth/Presets/<engine>/ folder (CardenzaSynth/Presets/<engine>/ on a card an older version wrote) as the device wrote it");
       else if (!info.known_engine) problem("pack.engine", `${entry.name} is a bank of the engine "${info.engine}", which CardenzaSynth does not have`, "Engines: " + ENGINES.join(", "));
       else if (!info.presets) report.warnings.push({code: "pack.empty_bank", message: `${entry.name} holds no presets`, hint: "Save some presets into it on the device first"});
     } else if (entry.kind === "project" && info.type !== "project") {
-      problem("pack.not_project", `${entry.name} is not a CardenzaSynth project (its first line is not CARDENZA_PROJECT <n>)`, "Copy the .ccproj from the card's CardenzaSynth/Projects/ folder");
+      problem("pack.not_project", `${entry.name} is not a CardenzaSynth project (its first line is not CARDENZA_PROJECT <n>)`, "Copy the .ccproj from the card's Apps/CardenzaSynth/Projects/ folder (CardenzaSynth/Projects/ on a card an older version wrote)");
     } else if (entry.kind === "sample" && info.type !== "wav") {
       problem("pack.not_wav", `${entry.name} is not a WAV file inside`, "Samples are .wav files (RIFF/WAVE)");
     } else if (entry.kind === "preview" && !["wav", "mp3", "ogg"].includes(info.type)) {
@@ -689,7 +689,7 @@ export function inspectPack(kind, entries, {engine} = {}) {
     const given = new Set(report.files.filter(f => f.kind === "sample").map(f => f.name.toLowerCase()));
     const missing = (project?.samples ?? []).filter(name => !given.has(path.basename(name.replace(/\\/g, "/")).toLowerCase()));
     if (missing.length) report.warnings.push({code: "pack.missing_sample", message: `${project.name} plays ${missing.join(", ")}, which ${missing.length > 1 ? "are" : "is"} not in this upload`,
-      hint: "Add the .wav files from the card's CardenzaSynth/Samples/ folder, or that track is silent for whoever downloads it"});
+      hint: "Add the .wav files from the card's Apps/CardenzaSynth/Samples/ folder (CardenzaSynth/Samples/ on a card an older version wrote), or that track is silent for whoever downloads it"});
   }
   report.ok = report.problems.length === 0;
   return report;

@@ -1746,42 +1746,42 @@ The last crash's core dump: whether there is one, its task and backtrace; --out 
 
 ### `203cli board files ls [PATH]`
 
-The files in a folder of the SD card (default its root; paths are from the card's root, a leading / or /sdcard/ is dropped)
+The files in a folder of the SD card (default its root; paths are from the card's root, a leading / or /sdcard/ is dropped; a firmware's files are in Apps/<its name>/, the Launcher's in Launcher/)
 
     203cli board files ls
-    203cli board files ls CardenzaSynth/Projects --json
+    203cli board files ls Apps/CardenzaSynth/Projects --json
 
 ### `203cli board files get PATH [LOCAL]`
 
 Copy a file from the SD card here (LOCAL: a file or folder; default its name in the current folder)
 
-    203cli board files get CardenzaSynth/Logs/log.txt
-    203cli board files get CardenzaSynth/Projects/DEMO.ccproj backup/ --json
+    203cli board files get Apps/CardenzaSynth/Logs/log.txt
+    203cli board files get Apps/CardenzaSynth/Projects/DEMO.ccproj backup/ --json
 
 ### `203cli board files put LOCAL [PATH]`
 
 Copy a file onto the SD card (PATH: the file, or a folder it goes into; default its name at the root)
 
-    203cli board files put kick.wav CardenzaSynth/Samples/
-    203cli board files put song.ccproj CardenzaSynth/Projects/song.ccproj --json
+    203cli board files put kick.wav Apps/CardenzaSynth/Samples/
+    203cli board files put song.ccproj Apps/CardenzaSynth/Projects/song.ccproj --json
 
 ### `203cli board files rm PATH`
 
 Remove a file (or an empty folder) from the SD card
 
-    203cli board files rm CardenzaSynth/Samples/old.wav --json
+    203cli board files rm Apps/CardenzaSynth/Samples/old.wav --json
 
 ### `203cli board files mkdir PATH`
 
 Make a folder on the SD card
 
-    203cli board files mkdir CardenzaSynth/Samples/drums --json
+    203cli board files mkdir Apps/CardenzaSynth/Samples/drums --json
 
 ### `203cli board files mv FROM TO`
 
 Rename or move a file or folder on the SD card
 
-    203cli board files mv Samples/a.wav Samples/kick.wav --json
+    203cli board files mv Apps/CardenzaSynth/Samples/a.wav Apps/CardenzaSynth/Samples/kick.wav --json
 
 ### `203cli board settings`
 

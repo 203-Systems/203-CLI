@@ -250,7 +250,7 @@ test("keys: the caps' names to the HAL's numbers (y * 14 + x + 1), the arrows, c
 });
 
 test("paths on the card", () => {
-  assert.equal(cardPath("/sdcard/CardenzaSynth/Projects/", usage), "CardenzaSynth/Projects");
+  assert.equal(cardPath("/sdcard/Apps/CardenzaSynth/Projects/", usage), "Apps/CardenzaSynth/Projects");
   assert.equal(cardPath("//a//b", usage), "a/b");
   assert.equal(cardPath("", usage), "");
   assert.equal(cardPath("sdcard/x", usage), "sdcard/x", "only a leading /sdcard/ is the mount point");

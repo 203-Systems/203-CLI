@@ -623,14 +623,14 @@ cmd("board coredump", "The last crash's core dump: whether there is one, its tas
   flags: {out: V("FILE", "Save the dump (for esp-coredump info_corefile -c FILE ELF)"), elf: V("FILE", "The firmware's ELF (build/<project>.elf): decode the backtrace with xtensa-esp32s3-elf-addr2line"),
     erase: B("Erase the dump afterwards (after --out saved it)")},
   run: boardCoredump, examples: ["board coredump", "board coredump --out crash.elf --elf build/my_synth.elf --json", "board coredump --out crash.elf --erase"]});
-cmd("board files ls [PATH]", "The files in a folder of the SD card (default its root; paths are from the card's root, a leading / or /sdcard/ is dropped)", {...BOARD, run: filesLs, examples: ["board files ls", "board files ls CardenzaSynth/Projects --json"]});
+cmd("board files ls [PATH]", "The files in a folder of the SD card (default its root; paths are from the card's root, a leading / or /sdcard/ is dropped; a firmware's files are in Apps/<its name>/, the Launcher's in Launcher/)", {...BOARD, run: filesLs, examples: ["board files ls", "board files ls Apps/CardenzaSynth/Projects --json"]});
 cmd("board files get PATH [LOCAL]", "Copy a file from the SD card here (LOCAL: a file or folder; default its name in the current folder)", {...BOARD, run: filesGet,
-  examples: ["board files get CardenzaSynth/Logs/log.txt", "board files get CardenzaSynth/Projects/DEMO.ccproj backup/ --json"]});
+  examples: ["board files get Apps/CardenzaSynth/Logs/log.txt", "board files get Apps/CardenzaSynth/Projects/DEMO.ccproj backup/ --json"]});
 cmd("board files put LOCAL [PATH]", "Copy a file onto the SD card (PATH: the file, or a folder it goes into; default its name at the root)", {...BOARD, run: filesPut,
-  examples: ["board files put kick.wav CardenzaSynth/Samples/", "board files put song.ccproj CardenzaSynth/Projects/song.ccproj --json"]});
-cmd("board files rm PATH", "Remove a file (or an empty folder) from the SD card", {...BOARD, run: filesRm, examples: ["board files rm CardenzaSynth/Samples/old.wav --json"]});
-cmd("board files mkdir PATH", "Make a folder on the SD card", {...BOARD, run: filesMkdir, examples: ["board files mkdir CardenzaSynth/Samples/drums --json"]});
-cmd("board files mv FROM TO", "Rename or move a file or folder on the SD card", {...BOARD, run: filesMv, examples: ["board files mv Samples/a.wav Samples/kick.wav --json"]});
+  examples: ["board files put kick.wav Apps/CardenzaSynth/Samples/", "board files put song.ccproj Apps/CardenzaSynth/Projects/song.ccproj --json"]});
+cmd("board files rm PATH", "Remove a file (or an empty folder) from the SD card", {...BOARD, run: filesRm, examples: ["board files rm Apps/CardenzaSynth/Samples/old.wav --json"]});
+cmd("board files mkdir PATH", "Make a folder on the SD card", {...BOARD, run: filesMkdir, examples: ["board files mkdir Apps/CardenzaSynth/Samples/drums --json"]});
+cmd("board files mv FROM TO", "Rename or move a file or folder on the SD card", {...BOARD, run: filesMv, examples: ["board files mv Apps/CardenzaSynth/Samples/a.wav Apps/CardenzaSynth/Samples/kick.wav --json"]});
 // The board's settings (CardenzaHAL docs/SETTINGS.md): the HAL's, in every firmware that starts USB on a HAL from 2026-11-23 on,
 // also one built without the development channel. The user may say "device settings": the cable's commands are board's.
 const SETTINGS_ABOUT = "The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one";

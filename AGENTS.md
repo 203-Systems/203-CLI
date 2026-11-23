@@ -20,7 +20,9 @@ or config folder. Do not add one back.
   codes are the table in `scripts/guide.mjs` (`EXIT_TEXT`) and `SKILL.md`. Commands, flags, error codes and help
   topics are an interface agents rely on: add, do not rename or remove.
 - Re-runs change nothing (`already_published`, `already_deleted`), `--dry-run` checks what the server will check.
-- Never print a token; never ask for one in a chat.
+- Never print a token; never ask for one in a chat. The one exception: `admin bots create` and `admin bots rotate` without
+  `--token-file` print the new bot token once, because the admin asked for it (the user, 2026-11-23); `--token-file` writes it
+  to a file (mode 600) and prints only the path.
 
 ## Files
 

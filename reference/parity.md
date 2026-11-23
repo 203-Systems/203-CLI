@@ -34,7 +34,8 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203cli` is the 
 | Play (the simulator version) | `sim check VCODE --json` (`play_url`) |
 | Like, favourite | `like firmware CODE`, `favorite firmware CODE` (`--off`) |
 | Discussion | `comments list firmware CODE`, `comments add firmware CODE --body …` |
-| Requests (public) | `requests list CODE`, `requests show CODE N`, `requests create CODE`, `requests vote CODE N 1` |
+| Requests (public): the list with each one's status (未处理, 正在完成, 已完成, 已拒绝) and its filter, a request, a new one with attachments | `requests list CODE --status 正在完成`, `requests show CODE N`, `requests create CODE --attach FILE`, `requests vote CODE N 1` |
+| Attachments under a comment, a post, a request or feedback (pick, drag, paste; up to 9) | `--attach FILE` (repeated) on `comments add`, `posts create`, `requests create`, `feedback`; the ops `attachment_upload`, `attachment_delete` (`POST /attachments`, `/attachments/{id}/done`, `/attachments/{id}/delete`) |
 | Forks (the tree) | `firmware tree CODE --json` |
 | Works made with it | `firmware works CODE --json` |
 | Merge requests | `merges list CODE`, `merges show CODE N`, `merges open PARENT --from FORK`, `merges status CODE N merged` |
@@ -122,7 +123,7 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203cli` is the 
 
 | Site | 203cli |
 |---|---|
-| The internal tracker of your firmware's requests | `dev list`, `dev read CODE N`, `dev update CODE N --status … --note …` |
+| The internal tracker of your firmware's requests | `dev list` (`--author ID|NAME`), `dev read CODE N`, `dev update CODE N --status … --note …` |
 
 ## Admins (admin.js, item-menu.js)
 
@@ -134,7 +135,8 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203cli` is the 
 | Sections: tree of tags, open or close | `admin section-set ID --categories … --open` |
 | Titles, badges, XP | `admin titles`, `admin title-create`, `admin grant-title`, `admin badge-create`, `admin grant-badge`, `admin xp` |
 | Reports | `admin reports`, `admin resolve N ACTION` |
-| The community tracker (appeals, feedback) | `admin issues`, `admin issue N`, `admin issue-update N`, `admin override VCODE`, `admin recheck VCODE` |
+| The community tracker (appeals, feedback) | `admin issues` (`--author ID|NAME`), `admin issue N`, `admin issue-update N`, `admin override VCODE`, `admin recheck VCODE` |
+| Bot accounts (role bot): make one with its token, list, a new token (`GET`/`POST /admin/bots`, `POST /admin/bots/{id}/token`) | `admin bots create NAME --token-file PATH`, `admin bots list`, `admin bots rotate ID --token-file PATH` |
 | Audit log | `admin audit` |
 | Devices in the picker | `api POST /admin/targets/TARGET --body '{"listed":true}'` |
 

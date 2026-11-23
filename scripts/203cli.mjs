@@ -12,7 +12,7 @@ import path from "node:path";
 import readline from "node:readline";
 import {fileURLToPath} from "node:url";
 import {Client, ApiError, DEFAULT_API, CLI_VERSION, OPS, opsByName, loadToken, saveToken, forgetToken, tokenFile, loginStart, loginPoll, browserLogin, browserProblem,
-  oidcExchange, oidcAvailable, inGithubActions, runCredentialOf, saveRunCredential, forgetRunCredential, runCredentialFile, defaultLang} from "./lib.mjs";
+  oidcExchange, oidcAvailable, inGithubActions, runCredentialOf, saveRunCredential, forgetRunCredential, runCredentialFile, defaultLang, attachmentSize} from "./lib.mjs";
 import {COMMANDS, GLOBAL_FLAGS, GROUPS, GROUP_DEFAULT, ALIASES, findCommand} from "./commands.mjs";
 import {CliError, EXIT, EXIT_TEXT, ERROR_CODES, TOPICS, explainApiError, topicText, usage} from "./guide.mjs";
 import {isPlaceholder, nearest, normalizeChannel, normalizeCode, normalizeTags} from "./checks.mjs";
@@ -25,7 +25,7 @@ const FLAG_SYNONYMS = {binary: "bin", image: "bin", file: "bin", "bin-file": "bi
   id: "firmware", repo: "source-url", source: "source-url", url: "source-url", "repo-url": "source-url", desc: "description", text: "body", msg: "message",
   dry: "dry-run", dryrun: "dry-run", "dry-mode": "dry-run", check: "dry-run", "no-wait-checks": "no-wait", confirm: "yes", y: "yes", f: "force", picture: "cover",
   title: "name", label: "version", device: "target", engine_: "engine", licence: "license", "no-simulator": "no-sim", nosim: "no-sim",
-  "simulator-dir": "sim-dir", "web-dir": "sim-dir", "hal-dir": "hal"};
+  "simulator-dir": "sim-dir", "web-dir": "sim-dir", "hal-dir": "hal", attachment: "attach", attachments: "attach", attached: "attach"};
 
 // ---------------------------------------------------------------------------------------------
 // How 203cli was run (for the commands it prints) and quoting.
@@ -418,7 +418,50 @@ export function referenceMarkdown() {
 // ---------------------------------------------------------------------------------------------
 // Human output of API answers (custom workflows bring their own text).
 
-const who = u => u ? `${u.title ? "[" + u.title.text + "] " : ""}${u.name}${u.badges?.length ? " " + u.badges.map(x => "‹" + x.name + "›").join("") : ""} (Lv${u.level ?? "?"})` : "—";
+// The language of what 203cli itself says in its text answers (the client's: --lang, COMMUNITY_LANG, the locale).
+let outputLang = "en";
+const zh = () => outputLang === "zh";
+// A bot account (role bot) is tagged as the site tags it: 机器人.
+const who = u => u ? `${u.title ? "[" + u.title.text + "] " : ""}${u.name}${u.role === "bot" ? (zh() ? " [机器人]" : " [bot]") : ""}` +
+  `${u.badges?.length ? " " + u.badges.map(x => "‹" + x.name + "›").join("") : ""}${u.role === "bot" ? "" : ` (Lv${u.level ?? "?"})`}` : "—";
+// A request's public status (COMMUNITY.md "Requests (public)") in words.
+const REQUEST_WORDS = {zh: {new: "未处理", in_progress: "正在完成", done: "已完成", rejected: "已拒绝"}, en: {new: "New", in_progress: "In progress", done: "Done", rejected: "Rejected"}};
+const statusWord = status => status ? `[${REQUEST_WORDS[zh() ? "zh" : "en"][status] ?? status}]` : "";
+const day = at => at ? String(at).slice(0, 16).replace("T", " ") : "";
+// Attachments under an item: kind, name, size and where it is (a picture or video shows inline there; a file downloads).
+function attachmentLines(list, indent = "  ") {
+  if (!Array.isArray(list) || !list.length) return [];
+  return [`${indent}${zh() ? "附件" : "Attachments"} (${list.length}):`,
+    ...list.map(x => `${indent}  ${String(x.kind ?? "file").padEnd(5)}  ${x.name}  ${attachmentSize(Number(x.size) || 0)}  ${x.url ?? x.download_url ?? ""}`)];
+}
+const withAttachments = (text, item, indent = "  ") => [text, ...attachmentLines(item?.attachments, indent)].join("\n");
+const bodyLines = (text, indent = "  ") => String(text ?? "").trim() ? String(text).trim().split("\n").map(l => indent + l) : [];
+function requestText(r) {
+  const lines = [`#${r.number}  ${statusWord(r.status)}  ${r.title}${r.firmware ? `  (${r.firmware.code} ${r.firmware.name})` : ""}`,
+    `${zh() ? "提出者" : "by"} ${who(r.author)} · ${day(r.created)} · ▲ ${r.votes?.up ?? 0} ▼ ${r.votes?.down ?? 0} · ${r.comments ?? 0} ${zh() ? "条评论" : "comments"}`,
+    ...bodyLines(r.body), ...attachmentLines(r.attachments)];
+  const i = r.internal;
+  if (i) {
+    lines.push(`internal: ${i.status} · ${i.progress ?? 0}%${i.labels?.length ? " · labels " + i.labels.join(", ") : ""}${i.links?.length ? " · links " + i.links.join(" ") : ""}`);
+    for (const n of i.notes ?? []) lines.push(`  note ${day(n.at)} ${who(n.by)}: ${String(n.text).replace(/\s+/g, " ")}`);
+  }
+  if (Array.isArray(r.discussion)) {
+    lines.push(`${zh() ? "讨论" : "Discussion"} (${r.discussion.length}):`);
+    for (const c of r.discussion) lines.push(withAttachments(`  ${commentLine(c)}`, c, "    "));
+  }
+  return lines.join("\n");
+}
+function issueText(x) {
+  return [`#${x.number}  ${x.kind}  ${x.status}  ${x.title}`, `${zh() ? "提出者" : "by"} ${who(x.author)} · ${day(x.created)}${x.page ? " · page " + x.page : ""}` +
+      `${x.version ? ` · ${x.version.firmware?.name ?? ""} ${x.version.code}` : ""}`,
+    ...bodyLines(x.message), ...attachmentLines(x.attachments), ...(x.reply ? [`reply: ${x.reply}`] : []),
+    ...(x.notes ?? []).map(n => `  note ${day(n.at)} ${who(n.by)}: ${String(n.text).replace(/\s+/g, " ")}`), ...(x.links ?? []).map(l => "  link " + l)].join("\n");
+}
+function postText(x) {
+  return [`${x.id}  ${x.title}`, `${zh() ? "作者" : "by"} ${who(x.author)} · ${day(x.created)}${x.tags?.length ? " · " + x.tags.join(", ") : ""}`,
+    ...bodyLines(x.body), ...attachmentLines(x.attachments)].join("\n");
+}
+const commentLine = c => `#${c.id}  ${who(c.author)}: ${c.deleted ? (zh() ? "(已删除)" : "(deleted)") : String(c.body ?? "").replace(/\s+/g, " ").slice(0, 100)}`;
 function human(name, value) {
   if (value === null || value === undefined) return "done";
   if (typeof value !== "object") return String(value);
@@ -442,6 +485,10 @@ function human(name, value) {
       : "off or not online"}${d.last_seen ? "  last seen " + String(d.last_seen).slice(0, 16).replace("T", " ") : ""}`).join("\n")
       : "No device is signed in to this account (a Launcher signs in from Account on its home screen, older Launchers System Settings › Account › Bind account; the user approves its code on the site).";
   }
+  if (["request_show", "request_create", "dev_request_read"].includes(name) && value.number) return requestText(value);
+  if (["community_issue_read", "feedback"].includes(name) && value.number) return issueText(value);
+  if (["post_show", "post_create", "post_edit"].includes(name) && value.id) return postText(value);
+  if (["comment_add", "comment_edit"].includes(name) && value.id) return withAttachments(commentLine(value), value);
   if (value.code && value.summary !== undefined) {
     const latest = Object.entries(value.latest ?? {}).filter(([, v]) => v).map(([c, v]) => `${c} ${v.version} (${v.code})`).join(", ");
     return `${value.code}  ${value.name}${value.official ? "  [official]" : ""}${value.visibility === "private" ? "  [private]" : ""}\n${value.summary}\n` +
@@ -454,13 +501,22 @@ function line(item) {
   if (item.code && item.channel) return `${item.code}  ${item.version}  ${item.channel}  ${item.status ?? ""}  build ${item.build ?? ""}`;
   if (item.kind && item.subject) return `${item.read ? " " : "•"} ${item.kind}  ${item.subject.title || item.subject.ref}  ${item.text ?? ""}`;
   if (item.number && item.from) return `!${item.number}  ${item.status}  ${item.title}  (${who(item.author)})`;
+  if (item.number && item.votes) {
+    return withAttachments(`#${item.number}  ${statusWord(item.status)}  ${item.title}  ▲ ${item.votes.up ?? 0} ▼ ${item.votes.down ?? 0}  ${item.comments ?? 0} ${zh() ? "评论" : "comments"}` +
+      `  (${who(item.author)})${item.firmware ? `  ${item.firmware.code}` : ""}${item.internal ? `  internal ${item.internal.status} ${item.internal.progress ?? 0}%` : ""}`, item, "    ");
+  }
+  if (item.number && item.kind && item.message !== undefined) return withAttachments(`#${item.number}  ${item.kind}  ${item.status}  ${item.title}  (${who(item.author)})`, item, "    ");
+  if (item.role === "bot" && "credential" in item) {
+    const c = item.credential;
+    return `${item.id}  ${item.name} [${zh() ? "机器人" : "bot"}]  ${item.status ?? ""}  ${c ? `token made ${day(c.created)}${c.last_used ? ", last used " + day(c.last_used) : ", never used"}` : "no token"}`;
+  }
   if (item.license) return `${item.id}  ${item.title}  ${item.license}  ⇩ ${item.counts?.downloads}  (${who(item.author)})`;
   if (item.engine) return `${item.id}  ${item.title}  ${item.engine}  ${item.presets} presets  ⇩ ${item.counts?.downloads}  (${who(item.author)})`;
   if ("format" in item && "bpm" in item) return `${item.id}  ${item.title}  ${item.bpm ? item.bpm + " BPM" : ""}  ⇩ ${item.counts?.downloads}  (${who(item.author)})`;
   if (item.label !== undefined && item.count !== undefined && item.id) return `${item.id}  ${item.label}  ${item.count}${item.open === false ? "  (not open yet: admins only)" : ""}`;
   if (item.media) return `${item.id}  ${item.title}  ${item.kind}  ▶ ${item.counts?.plays}  (${who(item.author)})`;
-  if (item.excerpt !== undefined) return `${item.id}  ${item.pinned ? "📌 " : ""}${item.title}  (${who(item.author)})`;
-  if (item.body !== undefined && item.target) return `#${item.id}  ${who(item.author)}: ${item.body.replace(/\s+/g, " ").slice(0, 100)}`;
+  if (item.excerpt !== undefined) return withAttachments(`${item.id}  ${item.pinned ? "📌 " : ""}${item.title}  (${who(item.author)})`, item, "    ");
+  if (item.body !== undefined && item.target) return withAttachments(commentLine(item), item, "    ");
   if (item.action && item.xp !== undefined) return `${item.at}  ${item.xp > 0 ? "+" : ""}${item.xp}  ${item.action}${item.revoked ? " (taken back)" : ""}`;
   return JSON.stringify(item);
 }
@@ -801,6 +857,7 @@ async function main(argv) {
   const {flags, order, positional} = parsed;
   const lang = typeof flags.lang === "string" ? flags.lang : undefined;
   const client = new Client({api: flags.api || undefined, token: typeof flags.token === "string" ? flags.token : undefined, ...(lang ? {lang} : {})});
+  outputLang = client.lang === "zh" ? "zh" : "en";
   const tokenSource = typeof flags.token === "string" ? "flag" : process.env.COMMUNITY_TOKEN ? "env" : client.run ? "oidc" : client.token ? "file" : null;
   // The token travels only over https (plain http only to this machine, for a local dev stack).
   let apiUrl = null;

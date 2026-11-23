@@ -643,6 +643,104 @@ export async function uploadTutorialPicture(client, code, bytes, mime) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Attachments (COMMUNITY.md "Attachments", the user 2026-11-23): pictures, videos and other files under a comment, a post,
+// a request or a feedback issue, up to 9 an item. Each is a signed upload: POST /attachments {name, size, type, kind} →
+// {attachment, upload}, PUT the bytes, POST /attachments/<id>/done → the Attachment; the item's body then names them
+// (attachments: [id, …]). One not used by an item within 24 hours expires on the server.
+export const ATTACHMENT_LIMITS = {image: 10 * 1024 * 1024, video: 100 * 1024 * 1024, file: 20 * 1024 * 1024, per_item: 9};
+// Names the community refuses (pages and programs a browser or a system would open as such); the same list as the server's.
+export const REFUSED_EXTENSIONS = ["html", "htm", "xhtml", "shtml", "svg", "svgz", "exe", "msi", "bat", "cmd", "com", "scr", "ps1", "vbs",
+  "js", "mjs", "jar", "apk", "dmg", "pkg", "lnk", "hta", "wsf", "app"];
+const FILE_TYPES = {txt: "text/plain", log: "text/plain", md: "text/markdown", csv: "text/csv", tsv: "text/tab-separated-values", json: "application/json",
+  pdf: "application/pdf", zip: "application/zip", gz: "application/gzip", tgz: "application/gzip", "7z": "application/x-7z-compressed",
+  wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg", flac: "audio/flac", yaml: "application/yaml", yml: "application/yaml", xml: "application/xml"};
+const sizeText = bytes => bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1) + " MB"
+  : bytes >= 1024 ? Math.round(bytes / 1024) + " KB" : bytes + " B";
+export {sizeText as attachmentSize};
+
+/** What a file is as an attachment, from its first bytes (and its name for other files): {kind, type}. */
+export function attachmentType(first, name = "") {
+  const ascii = (at, text) => [...text].every((ch, i) => first[at + i] === ch.charCodeAt(0));
+  if (first[0] === 0x89 && ascii(1, "PNG\r\n\x1a\n")) return {kind: "image", type: "image/png"};
+  if (first[0] === 0xff && first[1] === 0xd8 && first[2] === 0xff) return {kind: "image", type: "image/jpeg"};
+  if (ascii(0, "RIFF") && ascii(8, "WEBP")) return {kind: "image", type: "image/webp"};
+  if (ascii(0, "GIF87a") || ascii(0, "GIF89a")) return {kind: "image", type: "image/gif"};
+  if (ascii(4, "ftyp")) return {kind: "video", type: ascii(8, "qt  ") ? "video/quicktime" : "video/mp4"};
+  if (first[0] === 0x1a && first[1] === 0x45 && first[2] === 0xdf && first[3] === 0xa3 &&
+      new TextDecoder("latin1").decode(first.subarray(0, 64)).includes("webm")) return {kind: "video", type: "video/webm"};
+  const ext = path.extname(name).slice(1).toLowerCase();
+  return {kind: "file", type: FILE_TYPES[ext] ?? "application/octet-stream"};
+}
+
+/**
+ * The local files to attach, checked before anything is sent: at most 9, each there, a name the community takes, within its
+ * kind's limit. Answers [{file, name, size, kind, type}]; a problem is an ApiError "usage" (field attach) naming the file.
+ */
+export function checkAttachments(files) {
+  const list = [files ?? []].flat().filter(f => f !== undefined && f !== null && f !== "");
+  const fail = (message, extra = {}) => new ApiError(0, "usage", message, {field: "attach", ...extra});
+  if (list.length > ATTACHMENT_LIMITS.per_item) throw fail(`At most ${ATTACHMENT_LIMITS.per_item} attachments an item (${list.length} given)`);
+  return list.map(file => {
+    const name = path.basename(String(file));
+    let stat;
+    try { stat = fs.statSync(file); } catch { throw new ApiError(0, "file_not_found", `${file}: no such file`, {field: "attach"}); }
+    if (!stat.isFile()) throw fail(`${file}: not a file`);
+    if (!stat.size) throw fail(`${name}: the file is empty`);
+    if (name.length > 120) throw fail(`${name}: the name is longer than 120 characters: rename it`);
+    const ext = path.extname(name).slice(1).toLowerCase();
+    if (REFUSED_EXTENSIONS.includes(ext)) {
+      throw fail(`${name}: .${ext} files are not taken as attachments (pages and programs: ${REFUSED_EXTENSIONS.map(x => "." + x).join(" ")})`);
+    }
+    const head = new Uint8Array(64);
+    const fd = fs.openSync(file, "r");
+    try { fs.readSync(fd, head, 0, 64, 0); } finally { fs.closeSync(fd); }
+    const {kind, type} = attachmentType(head, name);
+    if (stat.size > ATTACHMENT_LIMITS[kind]) {
+      throw fail(`${name}: ${stat.size} bytes, more than the ${sizeText(ATTACHMENT_LIMITS[kind])} a ${{image: "picture", video: "video", file: "file"}[kind]} may have`,
+        {limits: {image: ATTACHMENT_LIMITS.image, video: ATTACHMENT_LIMITS.video, file: ATTACHMENT_LIMITS.file}});
+    }
+    return {file: String(file), name, size: stat.size, kind, type};
+  });
+}
+
+/**
+ * Uploads the local files as attachments (checkAttachments first): each started, sent to its signed URL and checked (done).
+ * Answers the Attachments in order. A failure names its file; what was already up is removed again (best effort).
+ */
+export async function uploadAttachments(client, files) {
+  const checked = checkAttachments(files);
+  const done = [];
+  for (const item of checked) {
+    try {
+      const bytes = readFile(item.file);
+      const made = await client.post("/attachments", {name: item.name, size: bytes.length, type: item.type, kind: item.kind});
+      try {
+        await put(client, made.upload, bytes);
+        done.push(await client.post(`/attachments/${enc(made.attachment.id)}/done`));
+      } catch (error) {
+        await client.post(`/attachments/${enc(made.attachment.id)}/delete`).catch(() => {});
+        throw error;
+      }
+    } catch (error) {
+      for (const up of done) await client.post(`/attachments/${enc(up.id)}/delete`).catch(() => {});
+      if (error instanceof ApiError) {
+        const named = new ApiError(error.status, error.code, `${item.name}: ${error.message}`, {...error.data, file: item.file}, {hint: error.hint});
+        throw named;
+      }
+      throw error;
+    }
+  }
+  return done;
+}
+
+// An item's body with its attachments: the local files in x.attach uploaded, their ids as attachments (none: as it was).
+async function withAttachments(c, x, keys) {
+  const body = pick(x, keys);
+  if (Array.isArray(x.attach) && x.attach.length) body.attachments = (await uploadAttachments(c, x.attach)).map(item => item.id);
+  return body;
+}
+
 // A version: a draft, each device's BIN to its upload ticket, then publish.
 export async function publishVersion(client, {code, channel = "stable", version, bins, notices, notes, source_commit, source_url,
   wait = true, poll_seconds = 5, timeout_seconds = 1200, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
@@ -930,9 +1028,11 @@ for (const [kind, plural, what] of [["sound", "sounds", "sound pack"], ["project
 op("posts_list", "Forum posts (pinned first); the answer's next_cursor gives the next page", {q: s("Words"), tag: s("A category or tag"),
   firmware: s("A firmware code"), sort: s("new or hot"), page, cursor, limit}, [], (c, x) => c.get("/posts", pick(x, ["q", "tag", "firmware", "sort", ...SECTION])));
 op("post_show", "A post", {id: s("Post id")}, ["id"], (c, x) => c.get("/posts/" + enc(x.id)));
-op("post_create", "Write a post", {title: s("1-120 characters"), body: s("Markdown, 1-20000 characters"), tags: a("Up to 5"), firmware: s("A firmware code")},
-  ["title", "body"], (c, x) => c.post("/posts", x), {write: true});
-op("post_edit", "Change a post", {id: s("Post id"), title: s("Title"), body: s("Markdown"), tags: a("Tags"), firmware: s("Code")}, ["id"],
+op("post_create", "Write a post (attach: local files uploaded as its attachments)", {title: s("1-120 characters"), body: s("Markdown, 1-20000 characters"), tags: a("Up to 5"), firmware: s("A firmware code"),
+  attach: a("Local files to attach first (images, videos, other files; at most 9): uploaded, then named in attachments"), attachments: a("Attachment ids already uploaded (attachment_upload)")},
+  ["title", "body"], async (c, x) => c.post("/posts", await withAttachments(c, x, ["title", "body", "tags", "firmware", "attachments"])), {write: true});
+op("post_edit", "Change a post", {id: s("Post id"), title: s("Title"), body: s("Markdown"), tags: a("Tags"), firmware: s("Code"),
+  attachments: a("Its attachments' ids, the whole new list (absent: kept as they are)")}, ["id"],
   (c, x) => { const {id, ...rest} = x; return c.post(`/posts/${enc(id)}/edit`, rest); }, {write: true});
 op("post_delete", "Delete a post", {id: s("Post id")}, ["id"], (c, x) => c.post(`/posts/${enc(x.id)}/delete`), {write: true});
 const thingPath = (kind, ref) => kind === "firmware" ? `/firmware/${enc(ref)}`
@@ -947,10 +1047,16 @@ op("react", "Like or favourite something (on: false to undo); comments can be li
 op("comments_list", "Comments on something (newest first, with their newest replies)", {kind: thingKind, ref: s("Code, id or CODE/n"), page}, ["kind", "ref"],
   (c, x) => c.get(`${thingPath(x.kind, x.ref)}/comments`, {page: x.page}));
 op("comment_replies", "Replies to a comment", {id: n("Comment id"), page}, ["id"], (c, x) => c.get(`/comments/${x.id}/replies`, {page: x.page}));
-op("comment_add", "Comment on something (parent: reply to a comment)", {kind: thingKind, ref: s("Code, id or CODE/n"), body: s("1-4000 characters"),
-  parent: n("Comment id")}, ["kind", "ref", "body"], (c, x) => c.post(`${thingPath(x.kind, x.ref)}/comments`, pick(x, ["body", "parent"])), {write: true});
-op("comment_edit", "Change your comment", {id: n("Comment id"), body: s("Text")}, ["id", "body"], (c, x) => c.post(`/comments/${x.id}/edit`, {body: x.body}), {write: true});
+op("comment_add", "Comment on something (parent: reply to a comment; attach: local files uploaded as its attachments; the body may be empty with one)", {kind: thingKind, ref: s("Code, id or CODE/n"), body: s("0-4000 characters (at least 1 without an attachment)"),
+  parent: n("Comment id"), attach: a("Local files to attach first (images, videos, other files; at most 9): uploaded, then named in attachments"), attachments: a("Attachment ids already uploaded (attachment_upload)")}, ["kind", "ref"],
+  async (c, x) => c.post(`${thingPath(x.kind, x.ref)}/comments`, await withAttachments(c, x, ["body", "parent", "attachments"])), {write: true});
+op("comment_edit", "Change your comment", {id: n("Comment id"), body: s("Text"), attachments: a("Its attachments' ids, the whole new list (absent: kept as they are)")},
+  ["id", "body"], (c, x) => c.post(`/comments/${x.id}/edit`, pick(x, ["body", "attachments"])), {write: true});
 op("comment_delete", "Delete a comment", {id: n("Comment id")}, ["id"], (c, x) => c.post(`/comments/${x.id}/delete`), {write: true});
+op("attachment_upload", "Upload local files as attachments (images ≤ 10 MB, videos ≤ 100 MB, other files ≤ 20 MB; at most 9): their ids go in an item's attachments",
+  {files: a("Local paths")}, ["files"], (c, x) => uploadAttachments(c, x.files), {write: true});
+op("attachment_delete", "Remove an attachment of yours that is on nothing yet", {id: s("Attachment id")}, ["id"],
+  (c, x) => c.post(`/attachments/${enc(x.id)}/delete`), {write: true});
 op("report", "Report something", {kind: s("firmware, version, post, work, model, sound, project, comment, request or user"), ref: s("Code or id"),
   reason: s("spam, abuse, illegal, malware, copyright or other"), detail: s("Up to 1000 characters")}, ["kind", "ref", "reason"],
   (c, x) => c.post("/reports", x), {write: true});
@@ -968,6 +1074,13 @@ op("admin_ban", "Admin: ban (days 1, 7, 30; absent: until lifted)", {id: s("User
 op("admin_unban", "Admin: lift a ban", {id: s("User id")}, ["id"], (c, x) => c.post(`/admin/users/${enc(x.id)}/unban`), {write: true});
 op("admin_delete_user", "Admin: close an account (注销)", {id: s("User id"), reason: s("Reason")}, ["id", "reason"],
   (c, x) => c.post(`/admin/users/${enc(x.id)}/delete`, {confirm: x.id, reason: x.reason}), {write: true});
+// Bot accounts (COMMUNITY.md "Bots", the user 2026-11-23): role bot, made by an admin with its token (shown once); a bot posts,
+// comments, files requests and feedback with attachments and reads, nothing else (no votes, likes, reports, publishing, admin).
+op("admin_bots", "Admin: the bot accounts (closed ones left out), each with its token's dates", {page}, [], (c, x) => c.get("/admin/bots", pick(x, ["page"])));
+op("admin_bot_create", "Admin: make a bot account (role bot): answers the bot and its token, shown once", {name: s("2-24 characters, as any account's name"),
+  bio: s("Up to 300 characters")}, ["name"], (c, x) => c.post("/admin/bots", pick(x, ["name", "bio"])), {write: true});
+op("admin_bot_rotate", "Admin: a new token for a bot (the old one stops working at once): answers the bot and the token, shown once", {id: s("The bot's user id")},
+  ["id"], (c, x) => c.post(`/admin/bots/${enc(x.id)}/token`), {write: true});
 op("admin_content", "Admin: hide, unhide or delete firmware, a version, post, work, model, sound, project or comment",
   {kind: s("firmware, version, post, work, model, sound, project or comment"),
   ref: s("Code or id"), action: s("hide, unhide or delete", {enum: ["hide", "unhide", "delete"]}), reason: s("Reason")}, ["kind", "ref", "action"],
@@ -1077,8 +1190,9 @@ op("version_check", "A version's status and check report (its owner and admins):
 op("version_appeal", "Appeal a version the checks sent back (a false positive): say why the check is wrong (10-2000 characters)",
   {version_code: code, message: s("Why the check is wrong")}, ["version_code", "message"],
   (c, x) => c.post(`/versions/${enc(x.version_code)}/appeal`, {message: x.message}), {write: true});
-op("feedback", "Send feedback about the community itself (a bug or an idea)", {kind: s("bug or idea", {enum: ["bug", "idea"]}), title: s("1-120 characters"),
-  message: s("1-2000 characters"), page: s("Where on the site")}, ["kind", "title", "message"], (c, x) => c.post("/feedback", x), {write: true});
+op("feedback", "Send feedback about the community itself (a bug or an idea; attach: local files uploaded as its attachments)", {kind: s("bug or idea", {enum: ["bug", "idea"]}), title: s("1-120 characters"),
+  message: s("1-2000 characters"), page: s("Where on the site"), attach: a("Local files to attach first (images, videos, other files; at most 9): uploaded, then named in attachments"), attachments: a("Attachment ids already uploaded (attachment_upload)")}, ["kind", "title", "message"],
+  async (c, x) => c.post("/feedback", await withAttachments(c, x, ["kind", "title", "message", "page", "attachments"])), {write: true});
 op("my_feedback", "Your appeals and feedback, with their status and our reply", {page}, [], (c, x) => c.get("/me/feedback", {page: x.page}));
 
 // Tutorials (COMMUNITY.md "Tutorials"): a guide (the tutorial format, reference/tutorial-format.md) or a link, the firmware's
@@ -1105,16 +1219,19 @@ op("tutorials_all", "Firmware that have tutorials, the most downloaded first, ea
   q: s("Words in a firmware's name or a tutorial's title"), page}, [], (c, x) => c.get("/tutorials", pick(x, ["target", "q", "page"])));
 
 // Requests (public) and the developer tracker (the firmware's owner, or an admin)
-op("requests_list", "Requests under a firmware", {code, sort: s("top or new"), page}, ["code"],
-  (c, x) => c.get(`/firmware/${enc(x.code)}/requests`, pick(x, ["sort", "page"])));
+op("requests_list", "Requests under a firmware, each with its public status (new 未处理, in_progress 正在完成, done 已完成, rejected 已拒绝)",
+  {code, sort: s("top or new"), status: s("new, in_progress, done or rejected", {enum: ["new", "in_progress", "done", "rejected"]}), page}, ["code"],
+  (c, x) => c.get(`/firmware/${enc(x.code)}/requests`, pick(x, ["sort", "status", "page"])));
 op("request_show", "A request", {code, number: n("Its number")}, ["code", "number"], (c, x) => c.get(`/firmware/${enc(x.code)}/requests/${x.number}`));
-op("request_create", "Ask for something in a firmware", {code, title: s("4-80 characters"), body: s("Markdown")}, ["code", "title"],
-  (c, x) => c.post(`/firmware/${enc(x.code)}/requests`, pick(x, ["title", "body"])), {write: true});
+op("request_create", "Ask for something in a firmware (attach: local files uploaded as its attachments)", {code, title: s("4-80 characters"), body: s("Markdown"),
+  attach: a("Local files to attach first (images, videos, other files; at most 9): uploaded, then named in attachments"), attachments: a("Attachment ids already uploaded (attachment_upload)")}, ["code", "title"],
+  async (c, x) => c.post(`/firmware/${enc(x.code)}/requests`, await withAttachments(c, x, ["title", "body", "attachments"])), {write: true});
 op("request_vote", "Vote a request up (1), down (-1) or take the vote back (0)", {code, number: n("Its number"), vote: n("1, -1 or 0")},
   ["code", "number", "vote"], (c, x) => c.post(`/firmware/${enc(x.code)}/requests/${x.number}/vote`, {vote: x.vote}), {write: true});
 op("dev_requests", "Tracker: requests of your firmware with their internal status (admins: all)", {firmware: s("A firmware code"),
-  status: s("new, accepted, planned, in_progress, done or rejected"), sort: s("top, new or updated"), page}, [],
-  (c, x) => c.get("/dev/requests", pick(x, ["firmware", "status", "sort", "page"])));
+  status: s("new, accepted, planned, in_progress, done or rejected"), author: s("Only those this person filed: a user id or an exact name"),
+  sort: s("top, new or updated"), page}, [],
+  (c, x) => c.get("/dev/requests", pick(x, ["firmware", "status", "author", "sort", "page"])));
 op("dev_request_read", "Tracker: a request as a specification (body, votes, internal notes and the whole discussion)", {code, number: n("Its number")},
   ["code", "number"], (c, x) => c.get(`/dev/requests/${enc(x.code)}/${x.number}`));
 op("dev_request_update", "Tracker: set status, progress, labels; add a note or a link (never notifies anyone)",
@@ -1124,8 +1241,8 @@ op("dev_request_update", "Tracker: set status, progress, labels; add a note or a
 
 // The community tracker (admins)
 op("community_issues", "Admin: the community's issues (appeals, bugs, ideas)", {kind: s("false_positive, bug or idea"),
-  status: s("new, investigating, false_positive, confirmed, fixed or wont_fix"), page}, [],
-  (c, x) => c.get("/dev/community/issues", pick(x, ["kind", "status", "page"])));
+  status: s("new, investigating, false_positive, confirmed, fixed or wont_fix"), author: s("Only those this person filed: a user id or an exact name"), page}, [],
+  (c, x) => c.get("/dev/community/issues", pick(x, ["kind", "status", "author", "page"])));
 op("community_issue_read", "Admin: an issue with its full check report, log and the version's BINs", {number: n("Issue number")}, ["number"],
   (c, x) => c.get(`/dev/community/issues/${x.number}`));
 op("community_issue_update", "Admin: status, a note, a link, or a reply (the author sees the reply and is notified)",

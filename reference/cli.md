@@ -41,6 +41,7 @@ all of them) as JSON.
 | `oidc_invalid` | 4 | login --github-oidc: the community did not take GitHub's token (`reason`: audience, expired, replayed, …) | run login --github-oidc again; audience: --api must be the community's API base |
 | `oidc_unavailable` | 2 | login --github-oidc outside GitHub Actions, or a job without permissions: id-token: write | give the job permissions: id-token: write (help ci) |
 | `publish_only` | 1 | a trusted-publishing credential tried something else than publishing its firmware's versions (page edits, other firmware, account actions) | do that with the owner's own sign-in (on the site, or 203cli login on a computer) |
+| `bot_not_allowed` | 1 | a bot account (role bot) tried what bots may not: vote, like, favourite, report, publish, change its profile, anything admin | a bot only writes posts, comments, requests and feedback (with --attach) and reads; the rest needs a person's sign-in |
 | `invalid_token` | 4 | login --with-token / --token: not a personal token (cct_ and 64 hex digits) | copy the whole token, or the user makes a new one on the site (设置 › 个人令牌, /me/tokens) |
 | `web_only` | 1 | personal tokens, bind codes, devices and personal data are managed on the website only | ask the user to open the page in `url` |
 | `reauth_required` | 4 | the website needs a recent sign-in for this | the user signs in again on the site |
@@ -1251,15 +1252,17 @@ A post
 
 ### `203cli posts create`
 
-Write a post (sign-in with write)
+Write a post (--attach: pictures, videos or files under it) (sign-in with write)
 
 - `--title TEXT` 1-120 characters (required)
 - `--body TEXT` Markdown
 - `--body-file PATH` Markdown file
 - `--tags a,b` Up to 5
 - `--firmware CODE` A firmware it is about
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli posts create --title "1.4.0 is out" --body "What changed: …" --tags announcement --json
+    203cli posts create --title "My desk setup" --body-file post.md --attach desk.jpg --attach demo.mp4 --json
 
 ### `203cli posts edit ID`
 
@@ -1298,13 +1301,16 @@ Replies to a comment
 
 ### `203cli comments add KIND REF`
 
-Comment on something (sign-in with write)
+Comment on something, or reply (--parent); --attach: pictures, videos or files under it (the body may then be empty) (sign-in with write)
 
-- `--body TEXT` 1-4000 characters
+- `--body TEXT` 1-4000 characters (may be left out with --attach)
 - `--body-file PATH` Text file
 - `--parent COMMENT` Reply to this comment id
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli comments add request K7M2QX/3 --body "Done in 1.5.0" --json
+    203cli comments add post ab12cd34 --body "The log of the crash" --attach log.txt --json
+    203cli comments add request K7M2QX/3 --parent 42 --attach screen.png --json
 
 ### `203cli comments edit COMMENT`
 
@@ -1426,28 +1432,33 @@ What the community said about this project's firmware (203.json, or CODE) since 
 
 ### `203cli requests list CODE`
 
-Requests under a firmware
+Requests under a firmware, each with its status (未处理 new, 正在完成 in_progress, 已完成 done, 已拒绝 rejected)
 
+- `--status STATUS` Only these: 未处理|正在完成|进行中|已完成|已拒绝 or new|in_progress|done|rejected
 - `--sort top|new` Order
 - `--page N` Page, from 1 (24 a page)
 
     203cli requests list K7M2QX --sort top --json
+    203cli requests list K7M2QX --status 正在完成 --json
+    203cli requests list K7M2QX --status done --json
 
 ### `203cli requests show CODE N`
 
-A request
+A request: its status, words, votes and attachments
 
     203cli requests show K7M2QX 3 --json
 
 ### `203cli requests create CODE`
 
-Ask for something in a firmware (sign-in with write)
+Ask for something in a firmware (--attach: pictures, videos or files under it) (sign-in with write)
 
 - `--title TEXT` 4-80 characters (required)
 - `--body TEXT` Markdown
 - `--body-file PATH` File
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli requests create K7M2QX --title "Swing for the arpeggiator" --json
+    203cli requests create K7M2QX --title "Crash when saving" --body-file report.md --attach log.txt --attach screen.png --json
 
 ### `203cli requests vote CODE N VOTE`
 
@@ -1461,10 +1472,12 @@ Tracker: your firmware's requests with their internal status
 
 - `--firmware CODE` One firmware
 - `--status STATUS` new, accepted, planned, in_progress, done or rejected
+- `--author ID|NAME` Only those this person (or bot) filed: a user id or an exact name
 - `--sort top|new|updated` Order
 - `--page N` Page, from 1 (24 a page)
 
     203cli dev list --firmware K7M2QX --sort top --json
+    203cli dev list --author 大肥鱼 --sort new --json
 
 ### `203cli dev read CODE N`
 
@@ -1523,15 +1536,17 @@ Merge, close or reopen a merge request (STATUS: merged, closed, open) (sign-in w
 
 ### `203cli feedback`
 
-Send feedback about the community (a bug or an idea) (sign-in with write)
+Send feedback about the community (a bug or an idea; --attach: pictures, videos or files with it) (sign-in with write)
 
 - `--kind bug|idea` Which (required)
 - `--title TEXT` 1-120 characters (required)
 - `--message TEXT` 1-2000 characters
 - `--message-file PATH` File
 - `--page PATH` Where on the site
+- `--attach FILE` Attach a local file (repeat, at most 9): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made (repeatable)
 
     203cli feedback --kind bug --title "Typo on /levels" --message "Experiance" --json
+    203cli feedback --kind bug --title "Upload stops at 90%" --message-file report.txt --attach screen.png --json
 
 ### `203cli feedback mine`
 
@@ -2027,13 +2042,15 @@ Admin: adjust a person's XP (audited) (sign-in with write)
 
 ### `203cli admin issues`
 
-Admin: appeals, bug reports and ideas
+Admin: appeals, bug reports and ideas, with their attachments
 
 - `--kind false_positive|bug|idea` Which
 - `--status STATUS` Status
+- `--author ID|NAME` Only those this person (or bot) filed: a user id or an exact name
 - `--page N` Page, from 1 (24 a page)
 
     203cli admin issues --kind false_positive --json
+    203cli admin issues --author 大肥鱼 --json
 
 ### `203cli admin issue N`
 
@@ -2068,6 +2085,36 @@ Admin: publish a version the checks sent back (a false positive) (sign-in with w
 Admin: run a version's checks again (sign-in with write)
 
     203cli admin recheck V3X9PA --json
+
+### `203cli admin bots create NAME`
+
+Admin: make a bot account (role bot, tagged 机器人; it posts, comments, files requests and feedback with attachments, and reads; no votes, likes, reports, publishing or admin) and its token, shown once (sign-in with write)
+
+- `--bio TEXT` Up to 300 characters
+- `--bio-file PATH` The bio from a file
+- `--token-file PATH` Write the token to this file (mode 600) and print only the path, instead of printing the token
+- `--overwrite` With --token-file: replace a file that is there
+
+    203cli admin bots create 大肥鱼 --bio "203 的客服机器人" --token-file ~/.config/dafeiyu/token --json
+    203cli admin bots create 大肥鱼 --json
+
+### `203cli admin bots list`
+
+Admin: the bot accounts, with when each one's token was made and last used
+
+- `--page N` Page, from 1 (24 a page)
+
+    203cli admin bots list --json
+
+### `203cli admin bots rotate ID`
+
+Admin: a new token for a bot (ID: its id or name); the old one stops working at once (sign-in with write)
+
+- `--token-file PATH` Write the token to this file (mode 600) and print only the path, instead of printing the token
+- `--overwrite` With --token-file: replace a file that is there
+
+    203cli admin bots rotate 大肥鱼 --token-file ~/.config/dafeiyu/token --overwrite --json
+    203cli admin bots rotate ab12cd34 --json
 
 ## Other
 

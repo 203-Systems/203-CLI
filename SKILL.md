@@ -93,6 +93,9 @@ whole chip of a device that has the 203 Launcher (install through it: `flash --b
 | see why a version was sent back | `versions check VCODE --json` |
 | share a sound pack / project / work | `sounds upload … --firmware OFFICIAL --title "…" --dry-run --json` (workflow 4) |
 | change your name or bio | `me edit --name "…" --bio "…" --json` |
+| ask for something in a firmware, or report a problem with it, with pictures, a video or a log | `requests create CODE --title "…" --body-file report.md --attach screen.png --attach log.txt --json` (`--attach` repeats, at most 9: pictures ≤ 10 MB, videos ≤ 100 MB, other files ≤ 20 MB; `posts create`, `comments add` and `feedback` take it too) |
+| feedback about the community itself (not a firmware) | `feedback --kind bug|idea --title "…" --message-file report.txt --attach shot.png --json` |
+| where a request stands | `requests list CODE --status 正在完成 --json` (`status`: new 未处理, in_progress 正在完成, done 已完成, rejected 已拒绝), `requests show CODE N --json` |
 | an admin action (`admin …`) | an admin sign-in has the admin scope: `login --admin --json` (exit 4 `admin_scope_required` says so) |
 | anything else | `help start`, `help <topic>`, `<command> --help --json` |
 
@@ -378,4 +381,4 @@ session follows within a minute: then run `next[0]`. Meanwhile what needs no net
 - Requests like pull requests (the owner): `dev list --firmware CODE --json`, `dev read CODE N --json` (the spec and its discussion), `dev update CODE N --status in_progress --progress 10 --note "…" --json` (`help requests`).
 - Devices: over a USB cable, signed in or not: `flash CODE --json` (or `--bin FILE`; a running firmware is restarted into its Launcher first; `firmware_unreachable` or `launcher_countdown`: ask the user to press HOME (the key left of the screen) and choose Back to Launcher, then run it again (a firmware without that menu: hold FN while it restarts or is plugged in); `help devices`); over Wi-Fi to a bound device: `devices list --json`, `devices send ID CODE --start --json`, its Launcher to the newest: `devices update-launcher ID --json` (`--no-wait`: only send it, then `devices status ID COMMAND --wait --json`; `help devices`); a device that no longer starts: `devices recover --dry-run --json`, then `--out DIR` or `--port PORT --yes` (erases its internal flash; esptool writes it).
 - 3D models: `models upload case.stl --title "…" --license CC-BY-4.0 --target cardenza --dry-run --json` (`help models`).
-- Admins: `help admin`.
+- Admins: `help admin`. Bot accounts (role `bot`, shown with a 机器人 tag; never an admin): `admin bots create NAME --token-file PATH --json` (its token, shown once, into PATH with mode 600), `admin bots list --json`, `admin bots rotate ID|NAME --token-file PATH --overwrite --json`. A bot signs in only with its token, as `COMMUNITY_TOKEN`: it writes posts, comments, requests and feedback with attachments and reads; anything else is refused (`bot_not_allowed`). What it filed: `admin issues --author NAME --json`, `dev list --author NAME --json`.

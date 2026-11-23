@@ -15,6 +15,10 @@ import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff
 import {skillInstall} from "./skill.mjs";
 import {updatesCommand} from "./updates.mjs";
 import {tutorialNew, tutorialCheck, tutorialPublish, tutorialLink, tutorialList, tutorialShow, tutorialRm, tutorialHide} from "./tutorial.mjs";
+import {checkAttachments, ATTACHMENT_LIMITS, attachmentSize} from "./lib.mjs";
+import {CliError, EXIT} from "./guide.mjs";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const B = help => ({bool: true, help});
@@ -25,6 +29,40 @@ const SORT = choices => ({sort: V(choices.join("|"), "Order", {choices})});
 const YES = {yes: B("Yes, do it (it cannot be undone)")};
 const DRY = {"dry-run": B("Check everything (files, values, permissions) and print the plan; change nothing")};
 const FORCE = {force: B("Go on despite a quality warning (only when that is really meant)")};
+// Attachments (COMMUNITY.md "Attachments", the user 2026-11-23): local files uploaded first, then named by the item.
+const ATTACH = {attach: V("FILE", `Attach a local file (repeat, at most ${ATTACHMENT_LIMITS.per_item}): a picture (PNG, JPEG, WebP, GIF ≤ 10 MB), a video (MP4, WebM, MOV ≤ 100 MB) or another file (a log, .txt, .zip, .ccproj, .bin, .elf, .json, .csv, .pdf … ≤ 20 MB); uploaded before the item is made`, {repeat: true})};
+// --attach checked here (each there, a name the community takes, within its limit, at most 9) so a wrong one stops the
+// command before anything is sent. Answers the absolute paths (none: undefined).
+function attachArg(ctx) {
+  const given = ctx.flags.attach;
+  if (!Array.isArray(given) || !given.length) return undefined;
+  const files = given.map(file => path.resolve(ctx.cwd, String(file)));
+  try { checkAttachments(files); }
+  catch (error) {
+    if (error.code === "file_not_found") {
+      throw new CliError("file_not_found", `--attach ${error.message}`, {field: "attach", hint: "Paths are relative to the current folder"});
+    }
+    throw ctx.usage(`--attach ${error.message}`, {field: "attach",
+      hint: `Up to ${ATTACHMENT_LIMITS.per_item} files an item: pictures (PNG, JPEG, WebP, GIF) up to ${attachmentSize(ATTACHMENT_LIMITS.image)}, ` +
+        `videos (MP4, WebM, MOV) up to ${attachmentSize(ATTACHMENT_LIMITS.video)}, other files up to ${attachmentSize(ATTACHMENT_LIMITS.file)} ` +
+        "(no pages or programs: .html, .svg, .exe, .js …); more files or a larger log: put them in a .zip"});
+  }
+  return files;
+}
+// Requests' public status (COMMUNITY.md "Requests (public)"): the API's ids, and the words people use for them.
+export const REQUEST_STATUS = {"未处理": "new", "正在完成": "in_progress", "进行中": "in_progress", "已完成": "done", "完成": "done", "已拒绝": "rejected",
+  "拒绝": "rejected", new: "new", open: "new", in_progress: "in_progress", "in-progress": "in_progress", "in progress": "in_progress", progress: "in_progress",
+  done: "done", rejected: "rejected", declined: "rejected"};
+function requestStatus(ctx) {
+  const given = ctx.flags.status;
+  if (given === undefined) return undefined;
+  const found = REQUEST_STATUS[String(given).trim().toLowerCase()] ?? REQUEST_STATUS[String(given).trim()];
+  if (!found) {
+    throw ctx.usage(`--status ${given} is not a request's status: 未处理 (new), 正在完成 or 进行中 (in_progress), 已完成 (done), 已拒绝 (rejected)`, {field: "status",
+      hint: "Use one of: new, in_progress, done, rejected (or 未处理, 正在完成, 进行中, 已完成, 已拒绝)"});
+  }
+  return found;
+}
 const FIRMWARE_FIELDS = {
   name: V("NAME", "The firmware's name, 1-64 characters"),
   summary: V("TEXT", "The cover blurb, 1-100 characters: what it does (not just the name)"),
@@ -420,10 +458,11 @@ cmd("posts list", "Forum posts", {group: "Community", flags: {q: V("WORDS", "Sea
   op: "posts_list", args: ctx => ({q: ctx.flags.q, tag: ctx.flags.tag, firmware: ctx.flags.firmware, sort: ctx.flags.sort, page: ctx.flags.page,
     cursor: ctx.flags.cursor, limit: ctx.flags.limit}), examples: ["posts list --json"]});
 cmd("posts show ID", "A post", {group: "Community", op: "post_show", args: ctx => ({id: ctx.args.ID}), examples: ["posts show ab12cd34 --json"]});
-cmd("posts create", "Write a post", {group: "Community", flags: {title: V("TEXT", "1-120 characters"), body: V("TEXT", "Markdown"), "body-file": V("PATH", "Markdown file"),
-  tags: V("a,b", "Up to 5", {type: "list"}), firmware: V("CODE", "A firmware it is about")}, need: ["title"], op: "post_create", write: true,
-  args: ctx => ({title: ctx.flags.title, body: ctx.text("body", {need: true}), tags: ctx.flags.tags, firmware: ctx.flags.firmware}),
-  examples: ['posts create --title "1.4.0 is out" --body "What changed: …" --tags announcement --json']});
+cmd("posts create", "Write a post (--attach: pictures, videos or files under it)", {group: "Community", flags: {title: V("TEXT", "1-120 characters"), body: V("TEXT", "Markdown"), "body-file": V("PATH", "Markdown file"),
+  tags: V("a,b", "Up to 5", {type: "list"}), firmware: V("CODE", "A firmware it is about"), ...ATTACH}, need: ["title"], op: "post_create", write: true,
+  args: ctx => ({title: ctx.flags.title, body: ctx.text("body", {need: true}), tags: ctx.flags.tags, firmware: ctx.flags.firmware, attach: attachArg(ctx)}),
+  examples: ['posts create --title "1.4.0 is out" --body "What changed: …" --tags announcement --json',
+    'posts create --title "My desk setup" --body-file post.md --attach desk.jpg --attach demo.mp4 --json']});
 cmd("posts edit ID", "Change a post", {group: "Community", flags: {title: V("TEXT", "Title"), body: V("TEXT", "Markdown"), "body-file": V("PATH", "Markdown file"),
   tags: V("a,b", "Tags", {type: "list"})}, op: "post_edit", write: true,
   args: ctx => ({id: ctx.args.ID, title: ctx.flags.title, body: ctx.text("body"), tags: ctx.flags.tags}), examples: ['posts edit ab12cd34 --title "1.4.1 is out" --json']});
@@ -433,10 +472,12 @@ cmd("comments list KIND REF", "Comments on something (REF: a code, an id or CODE
   args: ctx => ({kind: ctx.args.KIND, ref: ctx.args.REF, page: ctx.flags.page}), examples: ["comments list firmware K7M2QX --json"]});
 cmd("comments replies COMMENT", "Replies to a comment", {group: "Community", flags: PAGE, op: "comment_replies", args: ctx => ({id: ctx.args.COMMENT, page: ctx.flags.page}),
   examples: ["comments replies 42 --json"]});
-cmd("comments add KIND REF", "Comment on something", {group: "Community", flags: {body: V("TEXT", "1-4000 characters"), "body-file": V("PATH", "Text file"),
-  parent: V("COMMENT", "Reply to this comment id", {type: "int"})}, choices: {KIND: KINDS}, op: "comment_add", write: true,
-  args: ctx => ({kind: ctx.args.KIND, ref: ctx.args.REF, body: ctx.text("body", {need: true}), parent: ctx.flags.parent}),
-  examples: ['comments add request K7M2QX/3 --body "Done in 1.5.0" --json']});
+cmd("comments add KIND REF", "Comment on something, or reply (--parent); --attach: pictures, videos or files under it (the body may then be empty)", {group: "Community",
+  flags: {body: V("TEXT", "1-4000 characters (may be left out with --attach)"), "body-file": V("PATH", "Text file"),
+  parent: V("COMMENT", "Reply to this comment id", {type: "int"}), ...ATTACH}, choices: {KIND: KINDS}, op: "comment_add", write: true,
+  args: ctx => { const attach = attachArg(ctx); return {kind: ctx.args.KIND, ref: ctx.args.REF, body: ctx.text("body", {need: !attach}) ?? (attach ? "" : undefined), parent: ctx.flags.parent, attach}; },
+  examples: ['comments add request K7M2QX/3 --body "Done in 1.5.0" --json', 'comments add post ab12cd34 --body "The log of the crash" --attach log.txt --json',
+    'comments add request K7M2QX/3 --parent 42 --attach screen.png --json']});
 cmd("comments edit COMMENT", "Change your comment", {group: "Community", flags: {body: V("TEXT", "Text"), "body-file": V("PATH", "Text file")}, op: "comment_edit", write: true,
   args: ctx => ({id: ctx.args.COMMENT, body: ctx.text("body", {need: true})}), examples: ['comments edit 42 --body "…" --json']});
 cmd("comments delete COMMENT", "Delete a comment", {group: "Community", flags: YES, confirm: true, op: "comment_delete", args: ctx => ({id: ctx.args.COMMENT}),
@@ -476,18 +517,21 @@ cmd("inbox [CODE]", "What the community said about this project's firmware (203.
   flags: {all: B("Everything there is, not only what is new since the last inbox"), out: V("FILE", "Also write it as Markdown (e.g. .203/inbox.md: git-ignore .203/)"),
     "no-mark": B("Do not remember this look: the next inbox shows the same as new")},
   run: inbox, topic: "requests", examples: ["inbox", "inbox --out .203/inbox.md --json", "inbox K7M2QX --all --json"]});
-cmd("requests list CODE", "Requests under a firmware", {group: "Requests", flags: {...SORT(["top", "new"]), ...PAGE}, op: "requests_list",
-  args: ctx => ({code: ctx.args.CODE, sort: ctx.flags.sort, page: ctx.flags.page}), examples: ["requests list K7M2QX --sort top --json"]});
-cmd("requests show CODE N", "A request", {group: "Requests", op: "request_show", args: ctx => ({code: ctx.args.CODE, number: ctx.args.N}), examples: ["requests show K7M2QX 3 --json"]});
-cmd("requests create CODE", "Ask for something in a firmware", {group: "Requests", flags: {title: V("TEXT", "4-80 characters"), body: V("TEXT", "Markdown"), "body-file": V("PATH", "File")},
-  need: ["title"], op: "request_create", write: true, args: ctx => ({code: ctx.args.CODE, title: ctx.flags.title, body: ctx.text("body")}),
-  examples: ['requests create K7M2QX --title "Swing for the arpeggiator" --json']});
+cmd("requests list CODE", "Requests under a firmware, each with its status (未处理 new, 正在完成 in_progress, 已完成 done, 已拒绝 rejected)", {group: "Requests",
+  flags: {status: V("STATUS", "Only these: 未处理|正在完成|进行中|已完成|已拒绝 or new|in_progress|done|rejected"), ...SORT(["top", "new"]), ...PAGE}, op: "requests_list",
+  args: ctx => ({code: ctx.args.CODE, status: requestStatus(ctx), sort: ctx.flags.sort, page: ctx.flags.page}),
+  examples: ["requests list K7M2QX --sort top --json", "requests list K7M2QX --status 正在完成 --json", "requests list K7M2QX --status done --json"]});
+cmd("requests show CODE N", "A request: its status, words, votes and attachments", {group: "Requests", op: "request_show", args: ctx => ({code: ctx.args.CODE, number: ctx.args.N}), examples: ["requests show K7M2QX 3 --json"]});
+cmd("requests create CODE", "Ask for something in a firmware (--attach: pictures, videos or files under it)", {group: "Requests", flags: {title: V("TEXT", "4-80 characters"), body: V("TEXT", "Markdown"), "body-file": V("PATH", "File"), ...ATTACH},
+  need: ["title"], op: "request_create", write: true, args: ctx => ({code: ctx.args.CODE, title: ctx.flags.title, body: ctx.text("body"), attach: attachArg(ctx)}),
+  examples: ['requests create K7M2QX --title "Swing for the arpeggiator" --json', 'requests create K7M2QX --title "Crash when saving" --body-file report.md --attach log.txt --attach screen.png --json']});
 cmd("requests vote CODE N VOTE", "Vote a request up (1), down (-1) or take it back (0)", {group: "Requests", op: "request_vote", write: true,
   args: ctx => ({code: ctx.args.CODE, number: ctx.args.N, vote: ctx.args.VOTE}), examples: ["requests vote K7M2QX 3 1 --json"]});
 cmd("dev list", "Tracker: your firmware's requests with their internal status", {group: "Requests",
-  flags: {firmware: V("CODE", "One firmware"), status: V("STATUS", "new, accepted, planned, in_progress, done or rejected"), ...SORT(["top", "new", "updated"]), ...PAGE},
-  op: "dev_requests", topic: "requests", args: ctx => ({firmware: ctx.flags.firmware, status: ctx.flags.status, sort: ctx.flags.sort, page: ctx.flags.page}),
-  examples: ["dev list --firmware K7M2QX --sort top --json"]});
+  flags: {firmware: V("CODE", "One firmware"), status: V("STATUS", "new, accepted, planned, in_progress, done or rejected"),
+    author: V("ID|NAME", "Only those this person (or bot) filed: a user id or an exact name"), ...SORT(["top", "new", "updated"]), ...PAGE},
+  op: "dev_requests", topic: "requests", args: ctx => ({firmware: ctx.flags.firmware, status: ctx.flags.status, author: ctx.flags.author, sort: ctx.flags.sort, page: ctx.flags.page}),
+  examples: ["dev list --firmware K7M2QX --sort top --json", "dev list --author 大肥鱼 --sort new --json"]});
 cmd("dev read CODE N", "Tracker: a request with votes, internal notes and the whole discussion", {group: "Requests", op: "dev_request_read", topic: "requests",
   args: ctx => ({code: ctx.args.CODE, number: ctx.args.N}), examples: ["dev read K7M2QX 3 --json"]});
 cmd("dev update CODE N", "Tracker: status, progress, labels, a note, a link (never notifies anyone)", {group: "Requests",
@@ -506,11 +550,11 @@ cmd("merges open PARENT", "Offer your fork back to its parent", {group: "Request
 cmd("merges status CODE N STATUS", "Merge, close or reopen a merge request (STATUS: merged, closed, open)", {group: "Requests",
   flags: {"merged-version": V("VCODE", "For merged: the version that has it")}, choices: {STATUS: ["merged", "closed", "open"]}, op: "merge_status", write: true,
   args: ctx => ({code: ctx.args.CODE, number: ctx.args.N, status: ctx.args.STATUS, merged_version: ctx.flags.merged_version}), examples: ["merges status K7M2QX 1 merged --json"]});
-cmd("feedback", "Send feedback about the community (a bug or an idea)", {group: "Requests",
+cmd("feedback", "Send feedback about the community (a bug or an idea; --attach: pictures, videos or files with it)", {group: "Requests",
   flags: {kind: V("bug|idea", "Which", {choices: ["bug", "idea"]}), title: V("TEXT", "1-120 characters"), message: V("TEXT", "1-2000 characters"),
-    "message-file": V("PATH", "File"), page: V("PATH", "Where on the site")}, need: ["kind", "title"], op: "feedback", write: true,
-  args: ctx => ({kind: ctx.flags.kind, title: ctx.flags.title, message: ctx.text("message", {need: true}), page: ctx.flags.page}),
-  examples: ['feedback --kind bug --title "Typo on /levels" --message "Experiance" --json']});
+    "message-file": V("PATH", "File"), page: V("PATH", "Where on the site"), ...ATTACH}, need: ["kind", "title"], op: "feedback", write: true,
+  args: ctx => ({kind: ctx.flags.kind, title: ctx.flags.title, message: ctx.text("message", {need: true}), page: ctx.flags.page, attach: attachArg(ctx)}),
+  examples: ['feedback --kind bug --title "Typo on /levels" --message "Experiance" --json', 'feedback --kind bug --title "Upload stops at 90%" --message-file report.txt --attach screen.png --json']});
 cmd("feedback mine", "Your appeals and feedback, with their status and our reply", {group: "Requests", flags: PAGE, op: "my_feedback", args: ctx => ({page: ctx.flags.page}),
   examples: ["feedback mine --json"]});
 
@@ -673,8 +717,10 @@ cmd("admin xp USER DELTA", "Admin: adjust a person's XP (audited)", {...ADMIN, f
     if (!Number.isInteger(delta)) throw ctx.usage("DELTA is a whole number, e.g. 50 or -20");
     return {user: ctx.args.USER, delta, reason: ctx.flags.reason};
   }, examples: ['admin xp ab12cd34 50 --reason "Helped with the docs" --json']});
-cmd("admin issues", "Admin: appeals, bug reports and ideas", {...ADMIN, flags: {kind: V("false_positive|bug|idea", "Which"), status: V("STATUS", "Status"), ...PAGE},
-  op: "community_issues", args: ctx => ({kind: ctx.flags.kind, status: ctx.flags.status, page: ctx.flags.page}), examples: ["admin issues --kind false_positive --json"]});
+cmd("admin issues", "Admin: appeals, bug reports and ideas, with their attachments", {...ADMIN, flags: {kind: V("false_positive|bug|idea", "Which"), status: V("STATUS", "Status"),
+  author: V("ID|NAME", "Only those this person (or bot) filed: a user id or an exact name"), ...PAGE},
+  op: "community_issues", args: ctx => ({kind: ctx.flags.kind, status: ctx.flags.status, author: ctx.flags.author, page: ctx.flags.page}),
+  examples: ["admin issues --kind false_positive --json", "admin issues --author 大肥鱼 --json"]});
 cmd("admin issue N", "Admin: an issue with the full check report, log and BINs", {...ADMIN, op: "community_issue_read", args: ctx => ({number: ctx.args.N}),
   examples: ["admin issue 7 --json"]});
 cmd("admin issue-update N", "Admin: status, note, link, or a reply the author sees", {...ADMIN,
@@ -687,6 +733,84 @@ cmd("admin override VCODE", "Admin: publish a version the checks sent back (a fa
   examples: ['admin override V3X9PA --note "Touch IC missing in QEMU" --json']});
 cmd("admin recheck VCODE", "Admin: run a version's checks again", {...ADMIN, op: "admin_version_recheck", write: true, args: ctx => ({version_code: ctx.args.VCODE}),
   examples: ["admin recheck V3X9PA --json"]});
+
+// Bot accounts (COMMUNITY.md "Bots", the user 2026-11-23: "dsh只能有一个独立账号，并且标注为机器人，不能有管理员权限，只是机器人权限"): an
+// account of role bot an admin makes, with a token of its own (kind bot, read and write) that the bot uses as COMMUNITY_TOKEN.
+// The token is shown once: printed (the one time 203cli prints a token, because the admin asked for it), or with
+// --token-file written to that file (mode 600; made before the API is asked, so a path that cannot be written stops the
+// command before a token exists) and only the path printed.
+function tokenSink(ctx) {
+  if (ctx.flags.token_file === undefined) return null;
+  const given = String(ctx.flags.token_file);
+  // ~/… as a shell would read it (quoted, it comes as it is).
+  const file = /^~(?=$|[\\/])/.test(given) ? path.join(os.homedir(), given.slice(1)) : path.resolve(ctx.cwd, given);
+  const existed = fs.existsSync(file);
+  if (existed && !ctx.flags.overwrite) {
+    throw new CliError("conflict", `--token-file ${file} exists: 203cli does not write a token over a file`, {field: "token-file",
+      hint: "Give a path that does not exist yet, or add --overwrite to replace that file (only if that is what the user wants)"});
+  }
+  let fd;
+  try {
+    fs.mkdirSync(path.dirname(file), {recursive: true, mode: 0o700});
+    fd = fs.openSync(file, existed ? "w" : "wx", 0o600);
+    try { fs.fchmodSync(fd, 0o600); } catch { /* Windows */ }
+  } catch (error) {
+    throw new CliError("file_not_found", `--token-file ${file} cannot be written (${error.code || error.message})`, {field: "token-file", hint: "Choose a folder you can write to"});
+  }
+  return {file, fd, existed};
+}
+function tokenOut(ctx, sink, answer, verb) {
+  const bot = answer.bot ?? {};
+  const named = `${bot.name ?? "?"} (${bot.id ?? "?"})`;
+  if (process.env.GITHUB_ACTIONS === "true" && answer.token) process.stderr.write("::add-mask::" + answer.token + "\n");
+  if (sink) {
+    fs.writeSync(sink.fd, answer.token + "\n");
+    fs.closeSync(sink.fd);
+    return {json: {bot, token_file: sink.file},
+      text: `Bot ${named} ${verb}; its token is in ${sink.file} (mode 600): the bot uses it as COMMUNITY_TOKEN.`};
+  }
+  ctx.say("203cli: the token is shown only now; --token-file PATH writes it to a file (mode 600) instead of printing it");
+  return {json: answer, text: `Bot ${named} ${verb}. Its token, shown only now (keep it secret; the bot uses it as COMMUNITY_TOKEN):\n${answer.token}`};
+}
+async function withSink(ctx, sink, call) {
+  try { return await call(); }
+  catch (error) {
+    if (sink) { try { fs.closeSync(sink.fd); } catch { /* closed */ } if (!sink.existed) fs.rmSync(sink.file, {force: true}); }
+    throw error;
+  }
+}
+async function botCreate(ctx) {
+  const sink = tokenSink(ctx);
+  const answer = await withSink(ctx, sink, () => ctx.op("admin_bot_create", {name: ctx.args.NAME, bio: ctx.text("bio")}));
+  return tokenOut(ctx, sink, answer, "made (role bot)");
+}
+// ID: a bot's id, or its exact name (any case), found in GET /admin/bots.
+async function findBot(ctx, wanted) {
+  const want = String(wanted).trim();
+  const bots = [];
+  for (let page = 1; page <= 20; page++) {
+    const got = await ctx.op("admin_bots", {page});
+    bots.push(...(got.items ?? []));
+    const hit = bots.find(b => b.id === want.toLowerCase()) ?? bots.find(b => String(b.name).toLowerCase() === want.toLowerCase());
+    if (hit) return hit;
+    if (!got.items?.length || page * (got.page_size || 24) >= (got.total ?? 0)) break;
+  }
+  throw new CliError("not_found", `No bot has the id or name ${want}`, {hint: "admin bots list shows the bots (their ids and names)", next: [ctx.run(["admin", "bots", "list"])]});
+}
+async function botRotate(ctx) {
+  const sink = tokenSink(ctx);
+  const answer = await withSink(ctx, sink, async () => ctx.op("admin_bot_rotate", {id: (await findBot(ctx, ctx.args.ID)).id}));
+  return tokenOut(ctx, sink, answer, "has a new token (the old one stopped working)");
+}
+const TOKEN_FILE = {"token-file": V("PATH", "Write the token to this file (mode 600) and print only the path, instead of printing the token"),
+  overwrite: B("With --token-file: replace a file that is there")};
+cmd("admin bots create NAME", "Admin: make a bot account (role bot, tagged 机器人; it posts, comments, files requests and feedback with attachments, and reads; no votes, likes, reports, publishing or admin) and its token, shown once",
+  {...ADMIN, flags: {bio: V("TEXT", "Up to 300 characters"), "bio-file": V("PATH", "The bio from a file"), ...TOKEN_FILE}, run: botCreate, write: true,
+    examples: ['admin bots create 大肥鱼 --bio "203 的客服机器人" --token-file ~/.config/dafeiyu/token --json', "admin bots create 大肥鱼 --json"]});
+cmd("admin bots list", "Admin: the bot accounts, with when each one's token was made and last used", {...ADMIN, flags: PAGE, op: "admin_bots",
+  args: ctx => ({page: ctx.flags.page}), examples: ["admin bots list --json"]});
+cmd("admin bots rotate ID", "Admin: a new token for a bot (ID: its id or name); the old one stops working at once", {...ADMIN, flags: TOKEN_FILE, run: botRotate, write: true,
+  examples: ["admin bots rotate 大肥鱼 --token-file ~/.config/dafeiyu/token --overwrite --json", "admin bots rotate ab12cd34 --json"]});
 
 // ---------------------------------------------------------------------------------------------
 // Anything else

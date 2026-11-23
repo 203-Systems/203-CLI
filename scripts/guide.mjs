@@ -36,6 +36,7 @@ export const ERROR_CODES = [
   ["oidc_invalid", 4, "login --github-oidc: the community did not take GitHub's token (`reason`: audience, expired, replayed, …)", "run login --github-oidc again; audience: --api must be the community's API base"],
   ["oidc_unavailable", 2, "login --github-oidc outside GitHub Actions, or a job without permissions: id-token: write", "give the job permissions: id-token: write (help ci)"],
   ["publish_only", 1, "a trusted-publishing credential tried something else than publishing its firmware's versions (page edits, other firmware, account actions)", "do that with the owner's own sign-in (on the site, or 203cli login on a computer)"],
+  ["bot_not_allowed", 1, "a bot account (role bot) tried what bots may not: vote, like, favourite, report, publish, change its profile, anything admin", "a bot only writes posts, comments, requests and feedback (with --attach) and reads; the rest needs a person's sign-in"],
   ["invalid_token", 4, "login --with-token / --token: not a personal token (cct_ and 64 hex digits)", "copy the whole token, or the user makes a new one on the site (设置 › 个人令牌, /me/tokens)"],
   ["web_only", 1, "personal tokens, bind codes, devices and personal data are managed on the website only", "ask the user to open the page in `url`"],
   ["reauth_required", 4, "the website needs a recent sign-in for this", "the user signs in again on the site"],
@@ -607,7 +608,13 @@ board_refused (the firmware's reason), board_busy, board_timeout, board_lost.`},
 {P} dev read CODE N --json                                the request, votes and discussion (the specification)
 {P} dev update CODE N --status in_progress --progress 10 --note "Plan: …" --json
 {P} dev update CODE N --status done --progress 100 --note "In 1.5.0 (VCODE)" --json
-The tracker is internal (nobody is notified); tell users with {P} comments add request CODE/N --body "…" --json.`},
+The tracker is internal (nobody is notified); tell users with {P} comments add request CODE/N --body "…" --json.
+Its status shows publicly as one of four: new 未处理, in_progress 正在完成 (accepted, planned, in_progress), done 已完成, rejected 已拒绝:
+{P} requests list CODE --status 正在完成 --json             (also --status new|in_progress|done|rejected)
+{P} dev list --author NAME --json                          what one person (or bot) filed
+Attachments (pictures ≤ 10 MB, videos ≤ 100 MB, other files ≤ 20 MB; at most 9): --attach FILE, repeated:
+{P} requests create CODE --title "…" --body-file report.md --attach log.txt --attach screen.png --json
+{P} comments add request CODE/N --body "…" --attach shot.png --json   ({P} posts create and {P} feedback take --attach too)`},
 
   sandbox: {title: "Running in a sandboxed agent (Claude Code on the web, Codex cloud…): allowing the community's hosts", text: `
 A coding agent in a sandbox reaches only the hosts its environment allows. Claude Code's default environment allows
@@ -624,7 +631,10 @@ script); the 203 community is on no default list: the user allows ${COMMUNITY_HO
   admin: {title: "Admins", text: `
 {P} admin issues --json, {P} admin issue N --json, {P} admin issue-update N --status false_positive --reply "…"
 {P} admin override VCODE --note "…" (publish a false positive), {P} admin recheck VCODE
-{P} admin official CODE (the official tag on a firmware published here: its owner keeps publishing it with 203cli), {P} admin reports, {P} admin hide|unhide|delete KIND REF --reason …`},
+{P} admin official CODE (the official tag on a firmware published here: its owner keeps publishing it with 203cli), {P} admin reports, {P} admin hide|unhide|delete KIND REF --reason …
+Bot accounts (role bot, tagged 机器人; never an admin): {P} admin bots create NAME --token-file PATH (the token, shown once, into PATH, mode 600),
+{P} admin bots list, {P} admin bots rotate ID|NAME --token-file PATH --overwrite (the old token stops working). The bot uses its token as COMMUNITY_TOKEN.
+What a bot filed: {P} admin issues --author NAME --json, {P} dev list --author NAME --json (attachments are listed with each).`},
 };
 
 export function topicText(name, prog, lang = defaultLang()) {
@@ -688,7 +698,11 @@ export function explainApiError(error, ctx) {
       out.next = [ctx.run(["login"]), ctx.run(["login", "--no-browser"])];
       return out;
     case "forbidden":
-      if (error.data?.reason === "publish_only") {
+      if (error.data?.reason === "bot") {
+        out.code = "bot_not_allowed";
+        out.hint = "This is a bot account (role bot): it writes posts, comments, requests and feedback (with attachments) and reads; it does not vote, like, " +
+          "favourite, report, publish firmware or versions, change its profile, or do anything an admin does. Do that with a person's own sign-in.";
+      } else if (error.data?.reason === "publish_only") {
         out.code = "publish_only";
         out.hint = "This is a run's trusted-publishing credential (GitHub Actions): it publishes its firmware's versions and nothing else. Page edits, other firmware and account actions need the owner's own sign-in (the site, or 203cli login on a computer).";
       } else if (/only read|write scope|没有 write 权限/i.test(message)) {

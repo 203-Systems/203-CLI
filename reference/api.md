@@ -160,10 +160,10 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 
 | | | auth | answer |
 |---|---|---|---|
-| `GET /firmware/{code}/requests?sort` | Requests under a firmware |  | List&lt;Request&gt; |
-| `POST /firmware/{code}/requests` | Ask for something; 10 a day — body: title, body? | write | 201 Request |
+| `GET /firmware/{code}/requests?sort&status` | Requests under a firmware |  | List&lt;Request&gt; |
+| `POST /firmware/{code}/requests` | Ask for something; 10 a day (a bot 200) — body: title, body?, attachments? | write | 201 Request |
 | `GET /firmware/{code}/requests/{n}` | A request |  | Request |
-| `POST /firmware/{code}/requests/{n}/edit` | Change a request (author) — body: title?, body? | write | Request |
+| `POST /firmware/{code}/requests/{n}/edit` | Change a request (author) — body: title?, body?, attachments? | write | Request |
 | `POST /firmware/{code}/requests/{n}/delete` | Delete a request (author, the firmware's owner, admin) | write | Status |
 | `POST /firmware/{code}/requests/{n}/vote` | Vote up (1), down (-1) or take the vote back (0) — body: vote | write | Votes |
 
@@ -171,7 +171,7 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 
 | | | auth | answer |
 |---|---|---|---|
-| `GET /dev/requests?firmware&status&sort` | Internal: requests of your firmware with their tracker (admins: all) | read | List&lt;DevRequest&gt; |
+| `GET /dev/requests?firmware&status&sort&author` | Internal: requests of your firmware with their tracker (admins: all) | read | List&lt;DevRequest&gt; |
 | `GET /dev/requests/{code}/{n}` | Internal: a request with its tracker and whole discussion (the specification) | read | DevRequestFull |
 | `POST /dev/requests/{code}/{n}` | Internal: set status, progress, labels; add a note or a link (never notifies) — body: status?, progress?, labels?, note?, link? | write | DevRequest |
 
@@ -264,9 +264,9 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | | | auth | answer |
 |---|---|---|---|
 | `GET /posts?q&tag&firmware&sort&featured&tags` | Posts, pinned first (endless: cursor) |  | Section&lt;PostSummary&gt; |
-| `POST /posts` | Write a post; 20 a day — body: title, body, tags?, firmware? | write | 201 Post |
+| `POST /posts` | Write a post; 20 a day (a bot 200) — body: title, body, tags?, firmware?, attachments? | write | 201 Post |
 | `GET /posts/{id}` | A post |  | Post |
-| `POST /posts/{id}/edit` | Change a post (author, admin) — body: title?, body?, tags?, firmware? | write | Post |
+| `POST /posts/{id}/edit` | Change a post (author, admin) — body: title?, body?, tags?, firmware?, attachments? | write | Post |
 | `POST /posts/{id}/delete` | Delete a post (author, admin) | write | Status |
 | `POST /posts/{id}/like` | Like or unlike — body: on | write | Reaction |
 | `POST /posts/{id}/favorite` | Favourite or not — body: on | write | Reaction |
@@ -276,23 +276,26 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | | | auth | answer |
 |---|---|---|---|
 | `GET /firmware/{code}/requests/{n}/comments` | Discussion of a request |  | List&lt;Comment&gt; |
-| `POST /firmware/{code}/requests/{n}/comments` | Comment on a request — body: body, parent? | write | 201 Comment |
+| `POST /firmware/{code}/requests/{n}/comments` | Comment on a request — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /firmware/{code}/comments` | Comments on a firmware |  | List&lt;Comment&gt; |
-| `POST /firmware/{code}/comments` | Comment on a firmware — body: body, parent? | write | 201 Comment |
+| `POST /firmware/{code}/comments` | Comment on a firmware — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /firmware/{code}/merges/{n}/comments` | Comments on a merge request |  | List&lt;Comment&gt; |
-| `POST /firmware/{code}/merges/{n}/comments` | Comment on a merge request — body: body, parent? | write | 201 Comment |
+| `POST /firmware/{code}/merges/{n}/comments` | Comment on a merge request — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /works/{id}/comments` | Comments on a work |  | List&lt;Comment&gt; |
-| `POST /works/{id}/comments` | Comment on a work — body: body, parent? | write | 201 Comment |
+| `POST /works/{id}/comments` | Comment on a work — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /models/{id}/comments` | Comments on a model |  | List&lt;Comment&gt; |
-| `POST /models/{id}/comments` | Comment on a model — body: body, parent? | write | 201 Comment |
+| `POST /models/{id}/comments` | Comment on a model — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /sounds/{id}/comments` | Comments on a sound pack |  | List&lt;Comment&gt; |
-| `POST /sounds/{id}/comments` | Comment on a sound pack — body: body, parent? | write | 201 Comment |
+| `POST /sounds/{id}/comments` | Comment on a sound pack — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /projects/{id}/comments` | Comments on a project |  | List&lt;Comment&gt; |
-| `POST /projects/{id}/comments` | Comment on a project — body: body, parent? | write | 201 Comment |
+| `POST /projects/{id}/comments` | Comment on a project — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /posts/{id}/comments` | Comments on a post |  | List&lt;Comment&gt; |
-| `POST /posts/{id}/comments` | Comment on a post (refused when locked) — body: body, parent? | write | 201 Comment |
+| `POST /posts/{id}/comments` | Comment on a post (refused when locked) — body: body, parent?, attachments? | write | 201 Comment |
 | `GET /comments/{id}/replies` | Replies to a comment, oldest first |  | List&lt;Comment&gt; |
-| `POST /comments/{id}/edit` | Change a comment (author) — body: body | write | Comment |
+| `POST /attachments` | A signed upload for an attachment (a picture up to 10 MB, a video up to 100 MB, another file up to 20 MB); bots too — body: name, size, type?, kind? | write | AttachmentUpload |
+| `POST /attachments/{id}/done` | The attachment is uploaded: check it (size; a picture's or video's type from its first bytes) | write | Attachment |
+| `POST /attachments/{id}/delete` | Remove an attachment of yours that is on nothing (one on something goes with an edit of it) | write | Status |
+| `POST /comments/{id}/edit` | Change a comment (author) — body: body?, attachments? | write | Comment |
 | `POST /comments/{id}/delete` | Delete a comment (author, the thing's owner, admin) | write | Status |
 | `POST /comments/{id}/like` | Like or unlike — body: on | write | Reaction |
 
@@ -306,7 +309,7 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 
 | | | auth | answer |
 |---|---|---|---|
-| `POST /feedback` | Feedback about the community itself (a bug or an idea) — body: kind, title, message, page? | write | 201 Issue |
+| `POST /feedback` | Feedback about the community itself (a bug or an idea) — body: kind, title, message, page?, attachments? | write | 201 Issue |
 | `GET /me/feedback` | Your appeals and feedback, with their status and our reply | read | List&lt;Issue&gt; |
 
 ## Launcher and devices

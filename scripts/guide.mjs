@@ -103,7 +103,8 @@ export const ERROR_CODES = [
   ["not_an_app", 1, "flash --bin: not an application image (a merged image, bootloader, ELF …)", "give build/<project>.bin; a Launcher comes back with `devices recover`"],
   ["launcher_image", 1, "flash: the code or the file is a launcher, which the Launcher does not install this way", "give the firmware's build/<project>.bin; the Launcher updates itself; `devices recover` restores the official Launcher"],
   ["download_only", 1, "flash: the device takes a UF2 file copied onto it (Mystrix), no Launcher", "`versions download VCODE --target …` and copy it onto the device"],
-  ["unsupported_platform", 1, "flash and log: the USB cable is used on macOS and Linux only (board: also Windows, through python's hidapi)", "on Windows: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file); the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi)"],
+  ["unsupported_platform", 1, "log on Windows (the USB cable's log is macOS and Linux only; flash and board work there), or flash on a system other than macOS, Linux and Windows", "on Windows the log: CardenzaHAL's tools/cardenza_usb.py console (pip install hidapi); elsewhere: the website in Chrome or Edge (a firmware's page: 用 USB 线安装; a local BIN: /firmware › Flash a local file)"],
+  ["serial_missing", 1, "flash on Windows: @serialport/bindings-cpp (203cli's optional dependency for COM ports, prebuilt) is not installed", "install 203cli again (`npm install -g 203cli`); or the website in Chrome or Edge"],
   ["launcher_full", 1, "flash: no room on the device for the file (the Launcher names what to delete)", "delete that, or other software, on the device; then run it again"],
   ["device_crashed", 1, "log: the device printed a panic, an abort or a restart", "read log_tail; decode the backtrace with the build's ELF (xtensa-esp32s3-elf-addr2line -pfiaC -e build/<project>.elf …)"],
   ["log_timeout", 1, "log --until: no line matched before --seconds ran out", "read log_tail: the firmware did not print it (or starts slower: a longer --seconds)"],
@@ -113,7 +114,7 @@ export const ERROR_CODES = [
   ["board_in_launcher", 1, "board: the device is in its 203 Launcher, not running a firmware", "start the firmware from the Launcher (or `flash --bin` a build), run it again"],
   ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again"],
   ["dev_channel_off", 1, "board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works)", "turn it on in its sdkconfig, build and install it again"],
-  ["hidapi_missing", 1, "board on Windows: python's hidapi package (or python) is missing", "`pip install hidapi`"],
+  ["hidapi_missing", 1, "board on Windows: python's hidapi package (or python) is missing (flash there restarts a running firmware through it too, and says firmware_unreachable)", "`pip install hidapi`"],
   ["board_refused", 1, "board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …)", "read `error` and `hint`"],
   ["board_busy", 3, "board: the firmware's development channel has 8 requests queued", "wait a moment, run it again"],
   ["board_timeout", 3, "board: the device stopped answering, or part of an answer was lost more than once", "run it again; if it keeps happening, read its log (`log`)"],
@@ -538,14 +539,15 @@ releases are published like any launcher by an admin: {P} publish with "launcher
 the app in it becomes the Launcher image its own update installs).`},
 
   devices: {title: "Installing firmware on a device: over a USB cable (no sign-in) or sent over Wi-Fi", text: `
-Over a USB cable (线刷), signed in or not, no bound device: the device on, on a cable to this computer (macOS or Linux;
-Windows: the firmware's page on the website, 用 USB 线安装, in Chrome or Edge), in its 203 Launcher or running a firmware:
+Over a USB cable (线刷), signed in or not, no bound device: the device on, on a cable to this computer (macOS, Linux or
+Windows: there a running firmware is restarted through python's hidapi, pip install hidapi; or the firmware's page on
+the website, 用 USB 线安装, in Chrome or Edge), in its 203 Launcher or running a firmware:
 {P} flash CODE --json                                     a firmware's newest build for that device (--channel beta|dev) or a version,
                                                           downloaded with the community's signature: the Launcher updates it later
 {P} flash --bin build/app.bin --json                       a local application image
 {P} flash CODE --dry-run --json                            what it would write (nothing downloaded, no device needed)
-{P} log --json                                            what it prints: a running firmware's console (CardenzaHAL's system channel,
-                                                          over its MIDI or HID), else the serial port (the Launcher, a firmware without USB)
+{P} log --json                                            what it prints (macOS and Linux): a running firmware's console (CardenzaHAL's
+                                                          system channel, over its MIDI or HID), else the serial port (the Launcher, a firmware without USB)
 {P} log --until "ready" --seconds 30 --json                a test: exit 0 at the line, 1 at a crash or when it never comes
 The port: --port PORT, else the one USB serial port there is. Nothing to switch on: the Launcher's console runs from power-on.
 A device running a firmware (CardenzaHAL: no serial port) is restarted into its Launcher first, over its MIDI (Linux: ALSA

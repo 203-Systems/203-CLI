@@ -10,16 +10,19 @@
 // file: tests/cli-flash.test.mjs): `nav EscPress` and `version` until the Launcher answers (Esc stops its boot
 // countdown), `account` for the device (an older Launcher: its version's suffix), then `flash firmware <name> <size>`,
 // READY, 2 KB chunks each acknowledged, OK flashed (it restarts into the firmware).
-// The port: --port, else the one USB serial port there is (/dev/ttyACM* on Linux, /dev/cu.usbmodem* on macOS). A device
-// running a firmware on CardenzaHAL has none: it is restarted into its Launcher first (restart.mjs: its MIDI or HID; the
-// user, 2026-11-18) and the port it comes back on is taken, held against the countdown of a HAL that restarts plainly
-// (hold()); lost to that countdown, it is restarted once more. Node has no serial port API and 203cli no dependencies: the
-// tty is put in raw mode with stty and read and written as a file, so macOS and Linux only (Windows: the website).
+// The port: --port, else the one USB serial port there is (/dev/ttyACM* on Linux, /dev/cu.usbmodem* on macOS, Espressif's
+// COM port on Windows). A device running a firmware on CardenzaHAL has none: it is restarted into its Launcher first
+// (restart.mjs: its MIDI or HID; Windows: its HID through python's hidapi; the user, 2026-11-18) and the port it comes
+// back on is taken, held against the countdown of a HAL that restarts plainly (hold()); lost to that countdown, it is
+// restarted once more. Node has no serial port API: on macOS and Linux the tty is put
+// in raw mode with stty and read and written as a file; on Windows (the user, 2026-11-23: "可以有依赖") a COM port is opened
+// through @serialport/bindings-cpp, an optional dependency with prebuilt binaries (no compiler), loaded only there.
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
 import tty from "node:tty";
 import crypto from "node:crypto";
+import {pathToFileURL} from "node:url";
 import {spawnSync} from "node:child_process";
 import {LauncherConsole, LauncherError} from "./launcher-usb.mjs";
 import {findFirmware, restartFirmware, waitForPort, HAL_COMMAND} from "./restart.mjs";
@@ -93,6 +96,93 @@ export function openSerial(file) {
   };
 }
 
+// ---- Windows: COM ports through @serialport/bindings-cpp ----------------------------------------------------------------
+
+// Espressif's USB serial (vendor 303A: the ESP32-S3's USB-Serial-JTAG, where a 203 Launcher's console and the ROM's download
+// mode are). Only those are offered: a Mystrix, an Arduino or a modem never gets the Launcher's commands.
+const ESPRESSIF = "303a";
+let binding = null;
+
+/** The serial binding: @serialport/bindings-cpp's (C203_SERIAL: a module whose default export stands in for it, for the tests). */
+export async function windowsBinding() {
+  if (binding) return binding;
+  const standIn = process.env.C203_SERIAL;
+  try {
+    if (standIn) binding = (await import(pathToFileURL(path.resolve(standIn)).href)).default;
+    else binding = (await import("@serialport/bindings-cpp")).autoDetect();
+  } catch (error) {
+    throw new CliError("serial_missing", "203cli opens a COM port on Windows through @serialport/bindings-cpp, which is not installed with it", {exit: EXIT.refused,
+      hint: `Install 203cli again (npm install -g 203cli): the package comes with it, prebuilt (${error.code || error.message}). Or use ${WEBSITE}`});
+  }
+  return binding;
+}
+
+/** The COM ports a 203 device's Launcher (or the ROM's download mode) can be on, in number order: Espressif's USB serial. */
+export function launcherPorts(list) {
+  const number = p => Number((/(\d+)$/.exec(p) || [])[1] || 0);
+  return list.filter(p => String(p.vendorId || "").toLowerCase() === ESPRESSIF || /\bVID_303A&/i.test(String(p.pnpId || "")))
+    .map(p => p.path).sort((a, b) => number(a) - number(b) || a.localeCompare(b));
+}
+
+/** The serial ports there are now: listPorts on macOS and Linux, the Launcher's COM ports on Windows. */
+export async function serialPorts(platform = process.platform) {
+  if (platform !== "win32") return listPorts(platform);
+  return launcherPorts(await (await windowsBinding()).list());
+}
+
+/**
+ * A COM port as Web Serial has it ({readable, writable, close}) for LauncherConsole, through the binding. DTR and RTS stay
+ * off (hupcl, no rtscts): on the ESP32-S3's USB-Serial-JTAG some of their changes reset the chip, and the Launcher needs
+ * neither.
+ */
+export async function openWindowsSerial(file) {
+  const serial = await windowsBinding();
+  let port;
+  try { port = await serial.open({path: file, baudRate: 115200, hupcl: false, rtscts: false}); } catch (error) {
+    const text = String(error.message || error);
+    throw new CliError("port_unavailable", `The port ${file} cannot be opened: ${text}`, {exit: EXIT.refused, field: "port",
+      hint: /access|denied|busy/i.test(text) ? "Another program has it open (a serial monitor, idf.py monitor, the website): close it"
+        : "Plug the device in and check the port (203cli flash --port COM…)"});
+  }
+  let closed = false;
+  const buffer = Buffer.alloc(4096);
+  const readable = new ReadableStream({
+    async pull(controller) {
+      for (;;) {
+        if (closed) return;
+        let got;
+        try { got = await port.read(buffer, 0, buffer.length); } catch {
+          // The port was closed, or the device restarted or went away.
+          closed = true;
+          try { controller.close(); } catch { /* closed */ }
+          return;
+        }
+        if (got.bytesRead > 0) { controller.enqueue(Uint8Array.from(buffer.subarray(0, got.bytesRead))); return; }
+        await sleep(5);
+      }
+    },
+    cancel() { closed = true; },
+  });
+  const writable = new WritableStream({
+    async write(chunk) {
+      try { await port.write(Buffer.from(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk))); } catch (error) {
+        // As a tty's write fails: the cable's error (port_failed).
+        throw Object.assign(new Error(String(error.message || error)), {code: "EIO", syscall: "write"});
+      }
+    },
+  });
+  return {
+    readable, writable, path: file,
+    async open() {},
+    async close() { closed = true; try { await port.close(); } catch { /* closed */ } },
+  };
+}
+
+/** A port opened for LauncherConsole, on any of the three. */
+export function openPort(file, platform = process.platform) {
+  return platform === "win32" ? openWindowsSerial(file) : openSerial(file);
+}
+
 /** What went wrong over the cable, as a CliError with what to do. */
 function cableError(error, ctx, port) {
   if (error instanceof CliError) return error;
@@ -139,7 +229,7 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
     throw new CliError("firmware_unreachable", `${found.name} is running a firmware, and 203cli finds neither its MIDI nor its HID`, {exit: EXIT.refused,
       hint: `Put it in its Launcher yourself: ${BY_HAND}; then run it again`});
   }
-  const before = listPorts();
+  const before = await serialPorts();
   ctx.say(`${found.name} is running a firmware: restarting it into ${into}…`);
   let sent;
   try { sent = await restartFirmware(found, command); } catch (error) {
@@ -147,12 +237,13 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
     const denied = (error.tried || []).some(w => /EACCES|EPERM/.test(String(w.error)));
     throw new CliError("firmware_unreachable", `${found.name} is running a firmware and cannot be asked to restart (${tried || "no way to reach it"})`, {exit: EXIT.refused,
       hint: process.platform === "darwin" ? `203cli needs python3 for CoreMIDI (xcode-select --install); or put it in its Launcher yourself: ${BY_HAND}`
+        : process.platform === "win32" ? `203cli reaches it on Windows through Python's hidapi: install Python 3 (python.org), then pip install hidapi; or put it in its Launcher yourself: ${BY_HAND}`
         : denied ? `No permission for its MIDI or HID: add yourself to the audio group (sudo usermod -aG audio $USER, then log in again); or put it in its Launcher yourself: ${BY_HAND}`
           : `Close programs that hold its MIDI (a DAW); or put it in its Launcher yourself: ${BY_HAND}`,
       data: {tried: error.tried || []}});
   }
   if (sent.via !== "coremidi") ctx.say(`Sent over ${sent.via} (${sent.path})${sent.answered ? ": it is restarting" : ""}`);
-  const port = await waitForPort(before, listPorts, {want});
+  const port = await waitForPort(before, () => serialPorts(), {want});
   if (!port) {
     throw new CliError("no_launcher_port", `${found.name} was asked to restart, and no serial port came up`, {exit: EXIT.later, next: [ctx.cmd()],
       hint: sent.answered ? "Unplug the cable and plug it in again, then run it again" : `This firmware may not take the command: put the device in its Launcher yourself (${BY_HAND}), then run it again`});
@@ -163,8 +254,8 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
 /** Opens the port a restarted device came back on: the system may need a moment to give it its permissions. */
 async function openSoon(port, ms = 3000) {
   for (const end = Date.now() + ms; ;) {
-    try { return openSerial(port); } catch (error) {
-      if (Date.now() >= end || !/EACCES|EBUSY|ENOENT|ENXIO/.test(String(error.message))) throw error;
+    try { return await openPort(port); } catch (error) {
+      if (Date.now() >= end || !/EACCES|EBUSY|ENOENT|ENXIO|cannot be opened/.test(String(error.message))) throw error;
       await sleep(100);
     }
   }
@@ -228,20 +319,22 @@ export async function flashDevice(ctx) {
   // only says which it would be.
   let port = o.port ? String(o.port) : null;
   let restarted = null;
-  const supported = ["linux", "darwin"].includes(process.platform);
-  const firmware = (!port || !fs.existsSync(port)) && supported ? findFirmware() : null;
+  const windows = process.platform === "win32";
+  const supported = ["linux", "darwin", "win32"].includes(process.platform);
+  // A COM port is not a file: on Windows the binding says whether the one given is there (not in a dry run).
+  const there = !port ? false : windows ? !o.dry_run && (await serialPorts()).includes(port) : fs.existsSync(port);
+  const firmware = !there && supported ? findFirmware() : null;
   if (!o.dry_run) {
-    // Windows: Node has no serial port API (no native modules here), a COM port included: the website does it.
     if (!supported) {
-      throw new CliError("unsupported_platform", "203cli flash talks to the serial port on macOS and Linux", {exit: EXIT.refused,
-        hint: o.bin ? `On Windows the website does it in Chrome or Edge: ${siteOf(ctx.api)}/firmware › Flash a local file (烧录本地固件), and choose ${o.bin}`
-          : "On Windows use " + WEBSITE, data: {url: siteOf(ctx.api) + (o.bin ? "/firmware" : "/" + code)}});
+      throw new CliError("unsupported_platform", "203cli flash talks to the serial port on macOS, Linux and Windows", {exit: EXIT.refused,
+        hint: o.bin ? `Here the website does it in Chrome or Edge: ${siteOf(ctx.api)}/firmware › Flash a local file (烧录本地固件), and choose ${o.bin}`
+          : "Here use " + WEBSITE, data: {url: siteOf(ctx.api) + (o.bin ? "/firmware" : "/" + code)}});
     }
     if (firmware) {
       restarted = await restartToPort(ctx, {want: port, found: firmware});
       port = restarted.port;
     } else if (!port) {
-      const ports = listPorts();
+      const ports = await serialPorts();
       if (ports.length !== 1) {
         throw new CliError(ports.length ? "port_ambiguous" : "port_not_found", ports.length ? `Several USB serial ports: ${ports.join(", ")}` : "No USB serial port and no device running a firmware: is the device plugged in and on?",
           {exit: EXIT.refused, field: "port", hint: ports.length ? "Say which with --port" : "Plug it in with a data cable (not a charging-only one) and turn it on (in its Launcher or running a firmware); then run it again or give --port",
@@ -262,7 +355,7 @@ export async function flashDevice(ctx) {
       ctx.say(`Looking for the 203 Launcher on ${port}…`);
       for (let attempt = 0; ; attempt++) {
         try {
-          dev = new LauncherConsole(restarted ? await openSoon(port) : openSerial(port), line => lines.push(line));
+          dev = new LauncherConsole(restarted ? await openSoon(port) : await openPort(port), line => lines.push(line));
           launcher = await dev.find();
           // Restarted plainly (a HAL from before 2026-11-18), the Launcher counts down to the firmware: Esc keeps it.
           if (restarted) await dev.hold();

@@ -16,7 +16,7 @@
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import {spawn, spawnSync} from "node:child_process";
-import {findFirmware, macPython, COREMIDI_PRELUDE} from "./restart.mjs";
+import {findFirmware, macPython, windowsPython, COREMIDI_PRELUDE, PYTHON_USER_SITE} from "./restart.mjs";
 import {HAL_COMMAND, HAL_REPORT, halReport, halSysex, LauncherConsole} from "./launcher-usb.mjs";
 import {listPorts, openSerial} from "./flash.mjs";
 import {CliError, EXIT} from "./guide.mjs";
@@ -464,8 +464,9 @@ for line in sys.stdin:
 time.sleep(0.05)
 `;
 // hidapi (Windows; the pip package hidapi, as CardenzaHAL's tools/cardenza_usb.py uses it): the vendor collection (usage page
-// 0xFF00) of the first device of vendor 0x0203 named Cardenza; reports of 64 bytes, the report ID first, both ways.
-export const HIDAPI_BRIDGE = BRIDGE_HEAD + String.raw`
+// 0xFF00) of the first device of vendor 0x0203 named Cardenza; reports of 64 bytes, the report ID first, both ways. The user's
+// own site-packages are put back on the path (PYTHON_USER_SITE): pip installs hidapi there for a Python installed for everyone.
+export const HIDAPI_BRIDGE = BRIDGE_HEAD + PYTHON_USER_SITE + String.raw`
 import threading
 try:
     import hid
@@ -560,14 +561,8 @@ export function bridgeLink([command, ...pre], script, {kind, via, ms = 15000}) {
   });
 }
 
-/** A python 3 on Windows: [command, …its arguments], or null. */
-export function windowsPython() {
-  for (const candidate of [["py", "-3"], ["python"], ["python3"]]) {
-    const run = spawnSync(candidate[0], [...candidate.slice(1), "-c", "import sys; print(sys.version_info[0])"], {encoding: "utf8", windowsHide: true});
-    if (run.status === 0 && String(run.stdout).trim() === "3") return candidate;
-  }
-  return null;
-}
+// A python 3 on Windows: restart.mjs (flash uses it there too).
+export {windowsPython};
 
 // ---------------------------------------------------------------------------------------------
 // Finding the board and opening the channel

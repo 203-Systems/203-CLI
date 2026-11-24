@@ -29,7 +29,7 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203cli` is the 
 | The downloads list (sends followed in the background) | `devices send DEVICE CODE --no-wait --json`, then `devices status DEVICE COMMAND [--wait] --json` |
 | Send to my device over a USB cable (通过 USB 线发送: the device's chip checked, the build with its signature written with the Launcher's `flash firmware`, then recorded with `POST /me/devices/<id>/installed`) | **web only** (Web Serial to the Launcher's USB console; Node has no serial port, and recording it needs the website's session); over Wi-Fi: `devices send` |
 | Install with the Launcher (the code) | the code from `firmware show`; nothing to run |
-| 用 USB 线安装 Install over USB (线刷: through the Launcher's console, `flash firmware`; no sign-in, no bound device) | `flash CODE --json` (or `--bin FILE`, `--channel`, `--port`; macOS and Linux: the tty in raw mode) |
+| 用 USB 线安装 Install over USB (线刷: through the Launcher's console, `flash firmware`; no sign-in, no bound device) | `flash CODE --json` (or `--bin FILE`, `--channel`, `--port`; macOS and Linux: the tty in raw mode; Windows: the COM port through @serialport/bindings-cpp) |
 | A launcher's page: flash it over USB (Web Serial, esptool-js) | web only (a browser API); `versions download` then esptool; the official Launcher: `devices recover` |
 | Play (the simulator version) | `sim check VCODE --json` (`play_url`) |
 | Like, favourite | `like firmware CODE`, `favorite firmware CODE` (`--off`) |

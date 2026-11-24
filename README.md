@@ -38,10 +38,12 @@ npm install -g 203cli  # the 203cli command
 203cli says when a newer one is out (and when a firmware project's CardenzaHAL is behind its `main`): a line on stderr
 after the commands of the work, at most one check a day; `203cli updates` asks now, `NO_UPDATE_NOTIFIER=1` turns it off.
 
-`203cli` has no dependencies and no install scripts. `skill install` copies the skill into `~/.claude/skills/203-community`
-(`CLAUDE_SKILLS_DIR` to choose; `~/.codex/skills` too when Codex is there; `--dir` for another agent's folder). The USB
-cable (`flash`, `log`) is used on macOS and Linux; on Windows the website does it in Chrome or Edge, and every other
-command works as anywhere (`board`, a running firmware over USB: also on Windows, with `pip install hidapi`).
+`203cli` has no install scripts and one dependency, optional: `@serialport/bindings-cpp` (prebuilt), for `flash` over a
+COM port on Windows. `skill install` copies the skill into `~/.claude/skills/203-community` (`CLAUDE_SKILLS_DIR` to
+choose; `~/.codex/skills` too when Codex is there; `--dir` for another agent's folder). The USB cable works on macOS,
+Linux and Windows: `flash` everywhere (on Windows a running firmware is restarted into its Launcher through python's
+hidapi, `pip install hidapi`, or put it there yourself), `board` everywhere (Windows: `pip install hidapi`), `log` on
+macOS and Linux.
 
 From a clone instead (to read the code first, or to try a change to `203cli`): `git clone
 https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203cli skill install`, or run it in place
@@ -83,7 +85,7 @@ device's guide first, follow its rules, check with `--dry-run` and never handle 
 | | |
 |---|---|
 | [`SKILL.md`](SKILL.md) | the Agent Skill: hard rules, what to run, workflows, errors |
-| [`scripts/`](scripts) | `203cli` (`scripts/203cli.mjs`), zero dependencies |
+| [`scripts/`](scripts) | `203cli` (`scripts/203cli.mjs`), no dependencies but Windows' optional serial port |
 | [`reference/`](reference) | `cli.md` (generated from the command table), `api.md` (the community's API), `parity.md` (each page of the site and its command), `firmware-project.md` (the firmware project rules, CardenzaHAL's `docs/FIRMWARE-PROJECT.md`), `tutorial-format.md` (the tutorial format) |
 | [`products/`](products) | one development guide per device |
 | [`tests/`](tests) | `npm test`: the CLI against stand-in APIs and a demo Launcher on a pseudo-terminal, the local checks, the documents |

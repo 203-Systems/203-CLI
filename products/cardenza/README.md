@@ -81,8 +81,8 @@ python3 components/CardenzaHAL/tools/cardenza_web.py serve build-web/site   # ht
 On a board: install your build through the Launcher, the way users get it, and read what it prints.
 
 ```sh
-203cli flash --bin build/<project>.bin --json  # over a USB cable, no sign-in (macOS, Linux; Windows: the website)
-203cli log --json                             # its log: the firmware's console over USB, or the serial port
+203cli flash --bin build/<project>.bin --json  # over a USB cable, no sign-in (macOS, Linux, Windows)
+203cli log --json                             # its log: the firmware's console over USB, or the serial port (macOS, Linux)
 203cli log --until "ready" --seconds 30 --json  # a test: exit 0 at the line, 1 at a panic or when it never comes
 ```
 

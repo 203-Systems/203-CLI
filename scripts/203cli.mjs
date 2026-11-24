@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 203cli: the firmware community from a terminal or an agent (the Agent Skill skill/203-community).
-// Zero dependencies, Node 18+. Commands, flags and help: commands.mjs; errors and help topics:
+// No dependencies (but flash's optional serial port on Windows, flash.mjs), Node 18+. Commands, flags and help: commands.mjs; errors and help topics:
 // guide.mjs; local checks: checks.mjs; the guided workflows (doctor, publish, …): publish.mjs.
 //   node scripts/203cli.mjs doctor --json          is everything ready?
 //   node scripts/203cli.mjs help start             what to run for what

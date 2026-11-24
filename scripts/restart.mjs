@@ -10,6 +10,8 @@
 //   macOS  the USB device found with ioreg (no permission needed); the command sent through CoreMIDI with Python's ctypes
 //          (python3 of the Command Line Tools or Homebrew: no package; as CardenzaSynth's tools/usb/cardenza_usb.py does).
 //          HID is not used there (macOS asks for Input Monitoring for a device that is also a keyboard).
+//   Windows  the device found with PowerShell's Get-PnpDevice (present, USB\VID_0203, a name with Cardenza); the command sent
+//          as HID report 0xCB through Python's hidapi package (pip install hidapi), as `203cli board` reaches it there.
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
@@ -23,11 +25,28 @@ const real = file => { try { return fs.realpathSync(file); } catch { return null
 const list = dir => { try { return fs.readdirSync(dir); } catch { return []; } };
 const VENDOR = HAL_VENDOR.toString(16).padStart(4, "0");
 
+/** The present USB devices of vendor 0203 as PowerShell's Get-PnpDevice lists them: "InstanceId|FriendlyName" lines. */
+export function windowsPnp() {
+  const script = "Get-PnpDevice -PresentOnly -InstanceId 'USB\\VID_0203*' -ErrorAction SilentlyContinue | " +
+    "ForEach-Object { $_.InstanceId + '|' + $_.FriendlyName }";
+  const run = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {encoding: "utf8", windowsHide: true, timeout: 20000});
+  return run.status === 0 ? run.stdout : "";
+}
+
 /**
- * A firmware on CardenzaHAL on this computer's USB: {name, usb, candidates: [{via: rawmidi|hidraw|coremidi, path?}]}, or
- * null. The tests give `sys` and `dev` (or C203_SYS, C203_DEV) instead of /sys and /dev, and `ioreg`: its output.
+ * A firmware on CardenzaHAL on this computer's USB: {name, usb, candidates: [{via: rawmidi|hidraw|coremidi|hidapi, path?}]}, or
+ * null. The tests give `sys` and `dev` (or C203_SYS, C203_DEV) instead of /sys and /dev, `ioreg`: its output, and `pnp`:
+ * windowsPnp's (or C203_PNP).
  */
-export function findFirmware({platform = process.platform, sys = process.env.C203_SYS || "/sys", dev = process.env.C203_DEV || "/dev", ioreg = null} = {}) {
+export function findFirmware({platform = process.platform, sys = process.env.C203_SYS || "/sys", dev = process.env.C203_DEV || "/dev", ioreg = null,
+  pnp = process.env.C203_PNP ?? null} = {}) {
+  if (platform === "win32") {
+    for (const line of String(pnp ?? windowsPnp()).split(/\r?\n/)) {
+      const [id = "", name = ""] = line.split("|");
+      if (/^USB\\VID_0203&/i.test(id) && isCardenza(name)) return {name: name.trim(), usb: null, candidates: [{via: "hidapi"}]};
+    }
+    return null;
+  }
   if (platform === "linux") {
     for (const entry of list(path.join(sys, "bus/usb/devices"))) {
       const dir = path.join(sys, "bus/usb/devices", entry);
@@ -93,6 +112,68 @@ async function exchange(file, bytes, done, ms) {
   } finally {
     try { fs.closeSync(fd); } catch { /* gone */ }
   }
+}
+
+// Python runs with -I (no current folder, no environment on the path), which also leaves out the user's own site-packages,
+// where `pip install hidapi` puts the package on a Windows whose Python is installed for everyone: that one is put back.
+export const PYTHON_USER_SITE = String.raw`
+import site as _site, sys as _sys
+try:
+    _user = _site.getusersitepackages()
+    if _user not in _sys.path:
+        _sys.path.append(_user)
+except Exception:
+    pass
+`;
+
+// Windows: one HAL system command as HID report 0xCB through Python's hidapi (the vendor interface, usage page 0xFF00, of the
+// first device of vendor 0203 whose product has Cardenza), and its answer read for argv[2] seconds. Prints one JSON line:
+// {sent, answered} or {error}.
+export const HIDAPI_SEND = PYTHON_USER_SITE + String.raw`
+import json, sys, time
+def out(value):
+    print(json.dumps(value)); sys.stdout.flush(); sys.exit(0)
+try:
+    import hid
+except ImportError:
+    out({"error": "no_hidapi"})
+if not hasattr(hid, "device"):
+    out({"error": "no_hidapi"})
+report = bytes.fromhex(sys.argv[1])
+wait = float(sys.argv[2])
+found = [d for d in hid.enumerate(0x0203, 0) if "cardenza" in (d.get("product_string") or "").lower()]
+vendor = [d for d in found if d.get("usage_page") == 0xFF00] or found
+if not vendor:
+    out({"error": "not_found"})
+device = hid.device()
+try:
+    device.open_path(vendor[0]["path"])
+    device.write(report)
+except (IOError, OSError, ValueError) as error:
+    out({"error": "open: %s" % error})
+answered = False
+end = time.time() + wait
+while time.time() < end and not answered:
+    try:
+        data = device.read(64, 50)
+    except (IOError, OSError, ValueError):
+        break   # gone: it is restarting
+    if data and data[0] == report[0] and data[1] == (report[1] | 0x80):
+        answered = True
+try:
+    device.close()
+except Exception:
+    pass
+out({"sent": True, "answered": answered})
+`;
+
+/** A python 3 on Windows: [command, …its arguments], or null. */
+export function windowsPython() {
+  for (const candidate of [["py", "-3"], ["python"], ["python3"]]) {
+    const run = spawnSync(candidate[0], [...candidate.slice(1), "-c", "import sys; print(sys.version_info[0])"], {encoding: "utf8", windowsHide: true});
+    if (run.status === 0 && String(run.stdout).trim() === "3") return candidate;
+  }
+  return null;
 }
 
 // CoreMIDI through Python's ctypes, the part every use shares: the first destination and source whose name has "Cardenza",
@@ -230,6 +311,19 @@ export async function restartFirmware(found, command = HAL_COMMAND.launcher, {ms
         tried.push({via: way.via, error: (said && said.error) || String(run.stderr || run.error?.message || run.status).trim().split("\n").at(-1)});
         continue;
       }
+      if (way.via === "hidapi") {
+        const python = windowsPython();
+        if (!python) { tried.push({via: way.via, error: "no python (python.org), then pip install hidapi"}); continue; }
+        const [command0, ...pre] = python;
+        const run = spawnSync(command0, [...pre, "-I", "-c", HIDAPI_SEND, Buffer.from(halReport(command)).toString("hex"), String(ms / 1000)],
+          {encoding: "utf8", windowsHide: true, timeout: ms + 15000});
+        let said = null;
+        try { said = JSON.parse(String(run.stdout || "").trim().split("\n").at(-1)); } catch { said = null; }
+        if (said && said.sent) return {via: way.via, path: "hidapi", answered: !!said.answered};
+        const error = (said && said.error) || String(run.stderr || run.error?.message || run.status).trim().split("\n").at(-1);
+        tried.push({via: way.via, error: error === "no_hidapi" ? "no hidapi: pip install hidapi" : error});
+        continue;
+      }
     } catch (error) {
       tried.push({via: way.via, path: way.path, error: error.code || error.message});
     }
@@ -239,19 +333,19 @@ export async function restartFirmware(found, command = HAL_COMMAND.launcher, {ms
 
 /**
  * The serial port the device comes back on: `want` when it appears, else the first one that was not there `before`;
- * null after `ms`. `ports()`: the ports there are now (flash.mjs listPorts).
+ * null after `ms`. `ports()`: the ports there are now, or a promise of them (flash.mjs serialPorts).
  */
 export async function waitForPort(before, ports, {want = null, ms = 15000, every = 50} = {}) {
   const had = new Set(before);
   for (const end = Date.now() + ms; Date.now() < end;) {
-    const now = ports();
+    const now = await ports();
     if (want && now.includes(want)) return want;
     const fresh = now.find(p => !had.has(p));
     if (fresh && !want) return fresh;
     if (fresh && want) {
       // Another name than the one given (a second device, a renumbered tty): give the given one a moment.
       await sleep(1000);
-      const again = ports();
+      const again = await ports();
       return again.includes(want) ? want : again.find(p => !had.has(p)) || null;
     }
     await sleep(every);

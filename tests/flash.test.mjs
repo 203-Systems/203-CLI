@@ -431,13 +431,62 @@ test("log on Windows says what to use there", async () => {
   assert.equal(hidConsole(Uint8Array.from([0xcb, 0xc3, 2, 0x68, 0x69, ...new Array(59).fill(0)])).text, "hi");
 });
 
-test("flash on Windows: the website, for a COM port too", {skip: process.platform !== "win32" && "Windows"}, async () => {
-  const file = path.join(dir, "win.bin");
-  fs.writeFileSync(file, app);
-  const r = await cli(["flash", "--bin", "win.bin", "--port", "COM5", "--json"]);
-  assert.equal(r.code, 1, r.stderr);
-  assert.equal(r.error.code, "unsupported_platform");
-  assert.match(r.error.hint, /Flash a local file/);
+// Windows: COM ports through @serialport/bindings-cpp, here its stand-in (tests/serial-standin.mjs: the demo Launcher on COM7,
+// an Arduino on COM3). These run everywhere; the whole command only on Windows, where flash takes that way.
+const STAND_IN = path.join(ROOT, "tests/serial-standin.mjs");
+
+test("Windows: only Espressif's USB serial is offered, in number order; the firmware found in PnP (never a Mystrix)", async () => {
+  const {launcherPorts} = await import("../scripts/flash.mjs");
+  assert.deepEqual(launcherPorts([
+    {path: "COM12", vendorId: "303a"}, {path: "COM3", vendorId: "2341", pnpId: String.raw`USB\VID_2341&PID_0043\1`},
+    {path: "COM4", pnpId: String.raw`USB\VID_303A&PID_1001&MI_00\6&2B&0&0000`}, {path: "COM60", vendorId: "0203", pnpId: String.raw`USB\VID_0203&PID_1080\1`},
+  ]), ["COM4", "COM12"], "the Launcher's ports, never a Mystrix or an Arduino");
+  const {findFirmware} = await import("../scripts/restart.mjs");
+  const lines = [String.raw`USB\VID_0203&PID_1080\5&1|203 Systems Mystrix 2`, String.raw`USB\VID_303A&PID_1001\7&2|USB JTAG/serial debug unit`,
+    String.raw`USB\VID_0203&PID_2040\6&3|203 Systems Cardenza`];
+  assert.deepEqual(findFirmware({platform: "win32", pnp: lines.join("\r\n")}), {name: "203 Systems Cardenza", usb: null, candidates: [{via: "hidapi"}]});
+  assert.equal(findFirmware({platform: "win32", pnp: lines.slice(0, 2).join("\r\n")}), null, "a Mystrix or the Launcher is no Cardenza firmware");
+});
+
+test("Windows: a COM port through the binding, DTR and RTS left alone, talks to the Launcher as a tty does", async () => {
+  const record = path.join(dir, "serial-unit.json");
+  process.env.C203_SERIAL = STAND_IN;
+  process.env.C203_SERIAL_STATE = record;
+  try {
+    const {serialPorts, openPort} = await import("../scripts/flash.mjs");
+    const {LauncherConsole} = await import("../scripts/launcher-usb.mjs");
+    assert.deepEqual(await serialPorts("win32"), ["COM7"]);
+    const dev = new LauncherConsole(await openPort("COM7", "win32"));
+    const launcher = await dev.find();
+    assert.match(launcher, /0\.3\.0-cardenza/);
+    assert.equal(await dev.flash("Win_Synth", new Uint8Array(app)), "OK flashed, rebooting");
+    await dev.close();
+    const seen = JSON.parse(fs.readFileSync(record, "utf8"));
+    assert.deepEqual(seen.opened, [{path: "COM7", baudRate: 115200, hupcl: false, rtscts: false}]);
+    assert.deepEqual(seen.apps.map(a => [a.name, a.size]), [["Win_Synth", app.length]]);
+    await assert.rejects(openPort("COM3", "win32"), e => e.code === "port_unavailable" && /Another program/.test(e.hint));
+  } finally {
+    delete process.env.C203_SERIAL;
+    delete process.env.C203_SERIAL_STATE;
+  }
+});
+
+test("flash on Windows: over the COM port, the one there is or --port; log says what to use there", {skip: process.platform !== "win32" && "Windows"}, async () => {
+  fs.writeFileSync(path.join(dir, "win.bin"), app);
+  const record = path.join(dir, "serial-cli.json");
+  const env = {C203_SERIAL: STAND_IN, C203_SERIAL_STATE: record, C203_PNP: ""};
+  for (const args of [["--port", "COM7"], []]) {
+    const r = await cli(["flash", "--bin", "win.bin", ...args, "--json"], env);
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.json.status, "installed");
+    assert.equal(r.json.port, "COM7", "the Launcher's port, not the Arduino's");
+    const seen = JSON.parse(fs.readFileSync(record, "utf8"));
+    assert.deepEqual(seen.opened.map(o => [o.path, o.hupcl, o.rtscts]), [["COM7", false, false]], "nothing else opened");
+    assert.equal(seen.apps.at(-1).size, app.length);
+  }
+  const missing = await cli(["flash", "--bin", "win.bin", "--json"], {...env, C203_SERIAL: path.join(dir, "no-such-binding.mjs")});
+  assert.equal(missing.error.code, "serial_missing");
+  assert.match(missing.error.hint, /npm install -g 203cli/);
   const log = await cli(["log", "--json"]);
   assert.equal(log.error.code, "unsupported_platform");
   assert.match(log.error.hint, /cardenza_usb\.py console/);

@@ -13,8 +13,12 @@ or config folder. Do not add one back.
 
 ## What 203cli promises (keep it)
 
-- Zero dependencies, no install scripts, Node 18 or later, macOS, Linux and Windows (on Windows everything but the USB
-  cable, which the website does there); CI tests all three. No build step.
+- One dependency, optional and for Windows' COM ports only: `@serialport/bindings-cpp`, pinned (prebuilt N-API binaries;
+  its install step only picks the prebuilt one), imported by `flash` on Windows alone (decided 2026-11-23: Node has no
+  serial port API there). Nothing else may depend on it, and without it everything works but `flash` on Windows
+  (`serial_missing`). No other dependency, no install scripts of 203cli's own, Node 18 or later, macOS, Linux and
+  Windows (on Windows everything but `log`; `board`, and `flash` restarting a running firmware, through python's
+  hidapi); CI tests all three. No build step.
 - With `--json` every answer is JSON on stdout and an error is one JSON line on stderr, its last line, with
   `error`, `code`, `hint`, `exit` and `next` (commands ready to run; never `--force` / `--yes` from a guess). The exit
   codes are the table in `scripts/guide.mjs` (`EXIT_TEXT`) and `SKILL.md`. Commands, flags, error codes and help

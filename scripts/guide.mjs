@@ -114,7 +114,7 @@ export const ERROR_CODES = [
   ["board_in_launcher", 1, "board: the device is in its 203 Launcher, not running a firmware", "start the firmware from the Launcher (or `flash --bin` a build), run it again"],
   ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again"],
   ["dev_channel_off", 1, "board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works)", "turn it on in its sdkconfig, build and install it again"],
-  ["hidapi_missing", 1, "board on Windows: python's hidapi package (or python) is missing (flash there restarts a running firmware through it too, and says firmware_unreachable)", "`pip install hidapi`"],
+  ["hidapi_missing", 1, "board on Windows: node-hid (hidapi; 203cli's optional dependency for a running firmware's HID, prebuilt) is not installed (flash there restarts a running firmware through it too, and says firmware_unreachable)", "install 203cli again (`npm install -g 203cli`)"],
   ["board_refused", 1, "board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …)", "read `error` and `hint`"],
   ["board_busy", 3, "board: the firmware's development channel has 8 requests queued", "wait a moment, run it again"],
   ["board_timeout", 3, "board: the device stopped answering, or part of an answer was lost more than once", "run it again; if it keeps happening, read its log (`log`)"],
@@ -540,8 +540,8 @@ the app in it becomes the Launcher image its own update installs).`},
 
   devices: {title: "Installing firmware on a device: over a USB cable (no sign-in) or sent over Wi-Fi", text: `
 Over a USB cable (线刷), signed in or not, no bound device: the device on, on a cable to this computer (macOS, Linux or
-Windows: there a running firmware is restarted through python's hidapi, pip install hidapi; or the firmware's page on
-the website, 用 USB 线安装, in Chrome or Edge), in its 203 Launcher or running a firmware:
+Windows; or the firmware's page on the website, 用 USB 线安装, in Chrome or Edge), in its 203 Launcher or running a
+firmware:
 {P} flash CODE --json                                     a firmware's newest build for that device (--channel beta|dev) or a version,
                                                           downloaded with the community's signature: the Launcher updates it later
 {P} flash --bin build/app.bin --json                       a local application image
@@ -580,7 +580,7 @@ A firmware on CardenzaHAL that starts USB answers these over the HAL's developme
 without a line of its own and at no cost until asked. No sign-in. The firmware must be built with a current CardenzaHAL
 (hal_too_old otherwise: update the HAL submodule, build, {P} flash --bin build/<project>.bin). The device on the cable,
 running the firmware (not in its Launcher). macOS and Linux over its MIDI (Linux: ALSA raw MIDI, else hidraw; macOS:
-CoreMIDI through python3); Windows through python's hidapi (pip install hidapi).
+CoreMIDI through python3); Windows over its HID (node-hid, which comes with 203cli).
 
 {P} board info --json                     name, version, code, build time, ELF SHA-256, CardenzaHAL commit, Launcher, chip, reset reason
 {P} board partitions                      the flash table: offsets and sizes, app images, NVS entries used, the running one, free flash

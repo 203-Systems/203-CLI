@@ -3,19 +3,22 @@
 // the website does over Web MIDI (site/firmware-usb.js), then takes the serial port that appears. What a firmware on
 // CardenzaHAL is on USB and the bytes it takes: launcher-usb.mjs, "A firmware running" (vendor 0x0203, a product named
 // Cardenza, the system command as SysEx F0 23 <command> F7 or HID report 0xCB; never sent to anything else: a Mystrix would go
-// to its own update mode). Node has no MIDI or HID API and 203cli no dependencies, so:
+// to its own update mode). Node has no MIDI or HID API, so:
 //   Linux  the USB device found in sysfs (/sys/bus/usb/devices: idVendor 0203, product with Cardenza); its MIDI as ALSA raw
 //          MIDI (/dev/snd/midiC<card>D<n>, the sound card under that USB device), written and read as a file; else its HID
 //          (/dev/hidrawN under it), report 0xCB. Raw MIDI is the seat user's (or the audio group's); hidraw is usually root's.
 //   macOS  the USB device found with ioreg (no permission needed); the command sent through CoreMIDI with Python's ctypes
 //          (python3 of the Command Line Tools or Homebrew: no package; as CardenzaSynth's tools/usb/cardenza_usb.py does).
 //          HID is not used there (macOS asks for Input Monitoring for a device that is also a keyboard).
-//   Windows  the device found with PowerShell's Get-PnpDevice (present, USB\VID_0203, a name with Cardenza); the command sent
-//          as HID report 0xCB through Python's hidapi package (pip install hidapi), as `203cli board` reaches it there.
+//   Windows  its HID through node-hid (hidapi; 203cli's optional dependency there, prebuilt, the user 2026-11-23: no Python):
+//          the HAL's system channel is the first vendor collection (usage page 0xFF00) of vendor 0203 named Cardenza, report
+//          0xCB, as `203cli board` reaches it there. Without node-hid the device is still found (PowerShell's Get-PnpDevice),
+//          so the error says what is missing.
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
+import {createRequire} from "node:module";
 import {HAL_COMMAND, HAL_VENDOR, halSysex, halReport, halAnswer, isCardenza} from "./launcher-usb.mjs";
 
 export {HAL_COMMAND};
@@ -41,6 +44,12 @@ export function windowsPnp() {
 export function findFirmware({platform = process.platform, sys = process.env.C203_SYS || "/sys", dev = process.env.C203_DEV || "/dev", ioreg = null,
   pnp = process.env.C203_PNP ?? null} = {}) {
   if (platform === "win32") {
+    // node-hid's list when it is there (no process to start); PowerShell's otherwise, so a missing node-hid is named.
+    const lib = pnp === null ? nodeHid() : null;
+    if (lib) {
+      const way = systemCollections(lib.devices())[0];
+      return way ? {name: String(way.product).trim(), usb: null, candidates: [{via: "hidapi"}]} : null;
+    }
     for (const line of String(pnp ?? windowsPnp()).split(/\r?\n/)) {
       const [id = "", name = ""] = line.split("|");
       if (/^USB\\VID_0203&/i.test(id) && isCardenza(name)) return {name: name.trim(), usb: null, candidates: [{via: "hidapi"}]};
@@ -114,66 +123,57 @@ async function exchange(file, bytes, done, ms) {
   }
 }
 
-// Python runs with -I (no current folder, no environment on the path), which also leaves out the user's own site-packages,
-// where `pip install hidapi` puts the package on a Windows whose Python is installed for everyone: that one is put back.
-export const PYTHON_USER_SITE = String.raw`
-import site as _site, sys as _sys
-try:
-    _user = _site.getusersitepackages()
-    if _user not in _sys.path:
-        _sys.path.append(_user)
-except Exception:
-    pass
-`;
+// ---- Windows: HID through node-hid ----------------------------------------------------------------------------------------
 
-// Windows: one HAL system command as HID report 0xCB through Python's hidapi (the vendor interface, usage page 0xFF00, of the
-// first device of vendor 0203 whose product has Cardenza), and its answer read for argv[2] seconds. Prints one JSON line:
-// {sent, answered} or {error}.
-export const HIDAPI_SEND = PYTHON_USER_SITE + String.raw`
-import json, sys, time
-def out(value):
-    print(json.dumps(value)); sys.stdout.flush(); sys.exit(0)
-try:
-    import hid
-except ImportError:
-    out({"error": "no_hidapi"})
-if not hasattr(hid, "device"):
-    out({"error": "no_hidapi"})
-report = bytes.fromhex(sys.argv[1])
-wait = float(sys.argv[2])
-found = [d for d in hid.enumerate(0x0203, 0) if "cardenza" in (d.get("product_string") or "").lower()]
-vendor = [d for d in found if d.get("usage_page") == 0xFF00] or found
-if not vendor:
-    out({"error": "not_found"})
-device = hid.device()
-try:
-    device.open_path(vendor[0]["path"])
-    device.write(report)
-except (IOError, OSError, ValueError) as error:
-    out({"error": "open: %s" % error})
-answered = False
-end = time.time() + wait
-while time.time() < end and not answered:
-    try:
-        data = device.read(64, 50)
-    except (IOError, OSError, ValueError):
-        break   # gone: it is restarting
-    if data and data[0] == report[0] and data[1] == (report[1] | 0x80):
-        answered = True
-try:
-    device.close()
-except Exception:
-    pass
-out({"sent": True, "answered": answered})
-`;
+const require = createRequire(import.meta.url);
+let hid;
 
-/** A python 3 on Windows: [command, …its arguments], or null. */
-export function windowsPython() {
-  for (const candidate of [["py", "-3"], ["python"], ["python3"]]) {
-    const run = spawnSync(candidate[0], [...candidate.slice(1), "-c", "import sys; print(sys.version_info[0])"], {encoding: "utf8", windowsHide: true});
-    if (run.status === 0 && String(run.stdout).trim() === "3") return candidate;
+/** node-hid, or null when it is not installed (C203_HID: a CommonJS module that stands in for it, for the tests). */
+export function nodeHid() {
+  if (hid === undefined) {
+    try { hid = require(process.env.C203_HID ? path.resolve(process.env.C203_HID) : "node-hid"); } catch { hid = null; }
   }
-  return null;
+  return hid;
+}
+
+/**
+ * The HAL's system channel of each Cardenza in node-hid's list: the vendor collections (usage page 0xFF00) of vendor 0203
+ * whose product has Cardenza, the system channel's first (the HAL's descriptor has it before the app channel, report 0xFF;
+ * Windows numbers the collections in that order, &ColNN in the path). Never a Mystrix.
+ */
+export function systemCollections(devices) {
+  const col = d => Number((/&col(\d+)/i.exec(String(d.path || "")) || [])[1] || 0);
+  return devices.filter(d => d.vendorId === HAL_VENDOR && isCardenza(d.product || "") && d.usagePage === 0xff00)
+    .sort((a, b) => col(a) - col(b));
+}
+
+/** One HAL system command as HID report 0xCB through node-hid, and its answer read for `ms`: {path, answered}. */
+async function hidCommand(command, ms) {
+  const lib = nodeHid();
+  if (!lib) throw Object.assign(new Error("node-hid is not installed: install 203cli again (npm install -g 203cli)"), {code: "no_hid"});
+  const ways = systemCollections(lib.devices());
+  if (!ways.length) throw Object.assign(new Error("no Cardenza on HID"), {code: "not_found"});
+  const report = halReport(command);
+  let last = null;
+  for (const way of ways) {
+    let device;
+    try { device = await lib.HIDAsync.open(way.path); } catch (error) { last = error; continue; }
+    try {
+      await device.write(Array.from(report));
+      let answered = false;
+      for (const end = Date.now() + ms; !answered && Date.now() < end;) {
+        let data;
+        try { data = await device.read(50); } catch { break; }   // gone: it is restarting
+        if (data && data.length) answered = !!halAnswer(Uint8Array.from(data), command);
+      }
+      return {path: way.path, answered};
+    } catch (error) {
+      last = error;   // a collection without report 0xCB refuses it: the next one
+    } finally {
+      try { await device.close(); } catch { /* gone */ }
+    }
+  }
+  throw Object.assign(new Error(String(last?.message || last || "cannot open its HID")), {code: "hid_failed"});
 }
 
 // CoreMIDI through Python's ctypes, the part every use shares: the first destination and source whose name has "Cardenza",
@@ -312,20 +312,11 @@ export async function restartFirmware(found, command = HAL_COMMAND.launcher, {ms
         continue;
       }
       if (way.via === "hidapi") {
-        const python = windowsPython();
-        if (!python) { tried.push({via: way.via, error: "no python (python.org), then pip install hidapi"}); continue; }
-        const [command0, ...pre] = python;
-        const run = spawnSync(command0, [...pre, "-I", "-c", HIDAPI_SEND, Buffer.from(halReport(command)).toString("hex"), String(ms / 1000)],
-          {encoding: "utf8", windowsHide: true, timeout: ms + 15000});
-        let said = null;
-        try { said = JSON.parse(String(run.stdout || "").trim().split("\n").at(-1)); } catch { said = null; }
-        if (said && said.sent) return {via: way.via, path: "hidapi", answered: !!said.answered};
-        const error = (said && said.error) || String(run.stderr || run.error?.message || run.status).trim().split("\n").at(-1);
-        tried.push({via: way.via, error: error === "no_hidapi" ? "no hidapi: pip install hidapi" : error});
-        continue;
+        const sent = await hidCommand(command, ms);
+        return {via: way.via, path: "node-hid", answered: sent.answered};
       }
     } catch (error) {
-      tried.push({via: way.via, path: way.path, error: error.code || error.message});
+      tried.push({via: way.via, path: way.path, error: way.via === "hidapi" ? error.message : error.code || error.message});
     }
   }
   throw Object.assign(new Error("the firmware cannot be reached"), {code: "unreachable", tried});

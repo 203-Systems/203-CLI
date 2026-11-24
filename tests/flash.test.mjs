@@ -432,8 +432,10 @@ test("log on Windows says what to use there", async () => {
 });
 
 // Windows: COM ports through @serialport/bindings-cpp, here its stand-in (tests/serial-standin.mjs: the demo Launcher on COM7,
-// an Arduino on COM3). These run everywhere; the whole command only on Windows, where flash takes that way.
+// an Arduino on COM3), and a running firmware's HID through node-hid, here its stand-in (tests/hid-standin.cjs: a Cardenza
+// and a Mystrix). These run everywhere; the whole command only on Windows, where flash takes that way.
 const STAND_IN = path.join(ROOT, "tests/serial-standin.mjs");
+const HID_STAND_IN = path.join(ROOT, "tests/hid-standin.cjs");
 
 test("Windows: only Espressif's USB serial is offered, in number order; the firmware found in PnP (never a Mystrix)", async () => {
   const {launcherPorts} = await import("../scripts/flash.mjs");
@@ -446,6 +448,29 @@ test("Windows: only Espressif's USB serial is offered, in number order; the firm
     String.raw`USB\VID_0203&PID_2040\6&3|203 Systems Cardenza`];
   assert.deepEqual(findFirmware({platform: "win32", pnp: lines.join("\r\n")}), {name: "203 Systems Cardenza", usb: null, candidates: [{via: "hidapi"}]});
   assert.equal(findFirmware({platform: "win32", pnp: lines.slice(0, 2).join("\r\n")}), null, "a Mystrix or the Launcher is no Cardenza firmware");
+});
+
+test("Windows: the restart over node-hid goes to the HAL's system channel only (never the app channel or a Mystrix), answered", async () => {
+  const {createRequire} = await import("node:module");
+  const standIn = createRequire(import.meta.url)(HID_STAND_IN);
+  const {systemCollections, findFirmware, restartFirmware, HAL_COMMAND} = await import("../scripts/restart.mjs");
+  assert.deepEqual(systemCollections(standIn.devices()).map(d => d.path), [standIn.SYSTEM, standIn.APP], "the system channel's collection first, then the app's; no Mystrix, no keys");
+  process.env.C203_HID = HID_STAND_IN;
+  try {
+    const found = findFirmware({platform: "win32"});
+    assert.deepEqual(found, {name: "203 Systems Cardenza", usb: null, candidates: [{via: "hidapi"}]}, "node-hid's list, no PowerShell");
+    const sent = await restartFirmware(found, HAL_COMMAND.launcher, {ms: 500});
+    assert.deepEqual(sent, {via: "hidapi", path: "node-hid", answered: true});
+    assert.deepEqual(standIn.seen.written, [{path: standIn.SYSTEM, bytes: [0xcb, 0x40, 0, 0]}], "report 0xCB, command 0x40, once");
+    assert.ok(!standIn.seen.opened.includes(standIn.MYSTRIX), "a Mystrix is never opened");
+    await new Promise(resolve => setTimeout(resolve, 60));
+    assert.equal(findFirmware({platform: "win32"}), null, "restarted: no firmware on HID any more");
+    await assert.rejects(restartFirmware(found, HAL_COMMAND.launcher, {ms: 200}), e => e.code === "unreachable" && /no Cardenza on HID/.test(e.tried[0].error));
+  } finally {
+    delete process.env.C203_HID;
+    standIn.device.running = true;
+    delete globalThis.c203StandIn;   // the serial stand-in's COM7 is there again for the tests after this one
+  }
 });
 
 test("Windows: a COM port through the binding, DTR and RTS left alone, talks to the Launcher as a tty does", async () => {
@@ -487,6 +512,14 @@ test("flash on Windows: over the COM port, the one there is or --port; log says 
   const missing = await cli(["flash", "--bin", "win.bin", "--json"], {...env, C203_SERIAL: path.join(dir, "no-such-binding.mjs")});
   assert.equal(missing.error.code, "serial_missing");
   assert.match(missing.error.hint, /npm install -g 203cli/);
+  // A Cardenza running a firmware: restarted over its HID (node-hid), then written on the Launcher's port that appears.
+  const hidRecord = path.join(dir, "hid-cli.json");
+  const running = await cli(["flash", "--bin", "win.bin", "--json"], {C203_SERIAL: STAND_IN, C203_SERIAL_STATE: record, C203_HID: HID_STAND_IN, C203_HID_STATE: hidRecord});
+  assert.equal(running.code, 0, running.stderr);
+  assert.deepEqual([running.json.status, running.json.port, running.json.restarted], ["installed", "COM7", "203 Systems Cardenza"]);
+  const heard = JSON.parse(fs.readFileSync(hidRecord, "utf8"));
+  assert.deepEqual(heard.written.map(w => w.bytes.slice(0, 2)), [[0xcb, 0x40]], "the Launcher command, once");
+  assert.equal(heard.running, false);
   const log = await cli(["log", "--json"]);
   assert.equal(log.error.code, "unsupported_platform");
   assert.match(log.error.hint, /cardenza_usb\.py console/);

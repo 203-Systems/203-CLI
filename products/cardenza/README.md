@@ -102,7 +102,7 @@ build and test, then commit the new pointer"), or not a clean copy of it. `203cl
 A firmware on CardenzaHAL answers a computer's questions about itself over USB, without a line of its own and at no
 cost until asked: the HAL's development channel
 ([`docs/usb-dev.md`](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/usb-dev.md)). `203cli board` is the
-computer's side, signed out like `flash` and `log` (macOS and Linux; Windows with `pip install hidapi`):
+computer's side, signed out like `flash` and `log` (macOS, Linux and Windows):
 
 ```sh
 203cli board info --json               # name, version, code, build, ELF SHA-256, HAL commit, Launcher, chip, reset reason

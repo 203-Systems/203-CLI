@@ -1,7 +1,7 @@
 // A stand-in for @serialport/bindings-cpp (203cli loads it instead when C203_SERIAL names this file): the COM ports of a
 // Windows computer with a 203 Launcher on COM7 (the demo Launcher of scripts/launcher-usb.mjs, the website's own file)
 // and an Arduino on COM3, which 203cli must never offer or open. C203_SERIAL_STATE: a JSON file where it writes, at each
-// close, how each port was opened and what the Launcher installed. Used by tests/flash.test.mjs.
+// close, how each port was opened and what the Launcher installed. Used by tests/flash.test.mjs and tests/board.test.mjs.
 import fs from "node:fs";
 import {demoPort} from "../scripts/launcher-usb.mjs";
 
@@ -16,7 +16,8 @@ export function standInBinding({mode = "home", pace = 40, ports = PORTS, record 
   const save = () => { if (record) fs.writeFileSync(record, JSON.stringify(seen)); };
   return {
     seen,
-    async list() { return ports.map(p => ({...p})); },
+    // With tests/hid-standin.cjs a Cardenza runs a firmware first: its Launcher's port is there once it restarted.
+    async list() { return ports.filter(p => p.path !== "COM7" || !globalThis.c203StandIn?.running).map(p => ({...p})); },
     async open(options) {
       seen.opened.push({...options});
       save();

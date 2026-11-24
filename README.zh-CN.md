@@ -30,7 +30,7 @@ npm install -g 203cli  # 203cli 命令
 有新版 203cli（或者固件项目里的 CardenzaHAL 落后于它的 `main`）时，203cli 会在做事的命令结束后往 stderr 打一行提示，
 每天最多查一次；`203cli updates` 立刻查，`NO_UPDATE_NOTIFIER=1` 关掉。
 
-`203cli` 没有安装脚本，只有一个可选依赖 `@serialport/bindings-cpp`（预编译好的），Windows 上 `flash` 用它走 COM 口。`skill install` 把 Skill 复制到 `~/.claude/skills/203-community`（`CLAUDE_SKILLS_DIR` 可改；装了 Codex 时也放进 `~/.codex/skills`；`--dir` 指定别的 AI 的目录）。USB 线在 macOS、Linux、Windows 上都能用：`flash` 三处都行（Windows 上正在运行固件的设备要先通过 python 的 hidapi 重启进启动器，先 `pip install hidapi`，或者自己让它回到启动器），`board` 三处都行（Windows 先 `pip install hidapi`），`log` 只在 macOS 和 Linux 上。
+`203cli` 没有安装脚本，只有两个可选依赖，都只在 Windows 上用：`@serialport/bindings-cpp` 和 `node-hid`（都是预编译好的，Node 在 Windows 上没有串口和 HID 的接口）。`skill install` 把 Skill 复制到 `~/.claude/skills/203-community`（`CLAUDE_SKILLS_DIR` 可改；装了 Codex 时也放进 `~/.codex/skills`；`--dir` 指定别的 AI 的目录）。USB 线在 macOS、Linux、Windows 上都能用：`flash` 和 `board` 三处都行，不用另装别的；`log` 只在 macOS 和 Linux 上。
 
 也可以从克隆安装（先看代码，或者试改 `203cli`）：`git clone https://github.com/203-Systems/203-CLI.git && npm install -g ./203-CLI && 203cli skill install`，或者直接 `node 203-CLI/scripts/203cli.mjs` 运行。
 

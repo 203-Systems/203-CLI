@@ -7,18 +7,19 @@
 //          answer  F0 24 45 id seq_lo seq_hi flags <payload, packed> F7 (payload at most 48 bytes)
 //   HID    report 0xCB, 63 bytes: request [0x45, id, op, length, args (length of them, at most 52, raw)]; answer [0xC5, id,
 //          seq_lo, seq_hi, flags, length, payload (at most 57)]. On hidraw (and hidapi) a report is 64 bytes, its ID first.
-// Where the bytes go (found as restart.mjs finds the firmware; Node has no MIDI or HID API and 203cli no dependencies):
+// Where the bytes go (found as restart.mjs finds the firmware; Node has no MIDI or HID API):
 //   Linux    ALSA raw MIDI (/dev/snd/midiC<card>D<n>, SysEx), else hidraw (/dev/hidrawN): a file descriptor kept open for
 //            the whole command and polled (Node has no readiness event for a character device).
 //   macOS    CoreMIDI through python3's ctypes (COREMIDI_PRELUDE), one bridge process for the whole command: SysEx bytes in on
 //            its stdin, what the device sends out on its stdout, both as hex lines; the protocol stays here.
-//   Windows  the same bridge idea over HID with python's hidapi package (pip install hidapi).
+//   Windows  its HID through node-hid (hidapi, 203cli's optional dependency there, prebuilt): the HAL's system channel, the
+//            first vendor collection of the device (restart.mjs systemCollections), read as node-hid's data events.
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import {spawn, spawnSync} from "node:child_process";
-import {findFirmware, macPython, windowsPython, COREMIDI_PRELUDE, PYTHON_USER_SITE} from "./restart.mjs";
+import {findFirmware, macPython, nodeHid, systemCollections, COREMIDI_PRELUDE} from "./restart.mjs";
 import {HAL_COMMAND, HAL_REPORT, halReport, halSysex, LauncherConsole} from "./launcher-usb.mjs";
-import {listPorts, openSerial} from "./flash.mjs";
+import {serialPorts, openPort} from "./flash.mjs";
 import {CliError, EXIT} from "./guide.mjs";
 
 export const DEV_COMMAND = 0x45;
@@ -463,50 +464,6 @@ for line in sys.stdin:
         say("!MIDISend failed")
 time.sleep(0.05)
 `;
-// hidapi (Windows; the pip package hidapi, as CardenzaHAL's tools/cardenza_usb.py uses it): the vendor collection (usage page
-// 0xFF00) of the first device of vendor 0x0203 named Cardenza; reports of 64 bytes, the report ID first, both ways. The user's
-// own site-packages are put back on the path (PYTHON_USER_SITE): pip installs hidapi there for a Python installed for everyone.
-export const HIDAPI_BRIDGE = BRIDGE_HEAD + PYTHON_USER_SITE + String.raw`
-import threading
-try:
-    import hid
-except ImportError:
-    fail("no_hidapi")
-if not hasattr(hid, "device"):
-    fail("no_hidapi")
-found = [d for d in hid.enumerate(0x0203, 0) if "cardenza" in (d.get("product_string") or "").lower()]
-vendor = [d for d in found if d.get("usage_page") == 0xFF00] or found
-if not vendor:
-    fail("not_found")
-device = hid.device()
-try:
-    device.open_path(vendor[0]["path"])
-except (IOError, OSError) as error:
-    fail("open: %s" % error)
-said = threading.Lock()
-def say(text):
-    with said:
-        sys.stdout.write(text + "\n"); sys.stdout.flush()
-say(json.dumps({"ready": True, "name": vendor[0].get("product_string") or "Cardenza"}))
-def pump():
-    while True:
-        try:
-            data = device.read(64, 50)
-        except (IOError, OSError, ValueError) as error:
-            say("!%s" % error); return
-        if data:
-            say(bytes(data).hex())
-threading.Thread(target=pump, daemon=True).start()
-for line in sys.stdin:
-    line = line.strip()
-    if not line:
-        continue
-    try:
-        device.write(bytes.fromhex(line))
-    except (IOError, OSError, ValueError) as error:
-        say("!%s" % error)
-`;
-
 /** A bridge process as a link: resolves once it holds the device; rejects with {code: its error} when it cannot. */
 export function bridgeLink([command, ...pre], script, {kind, via, ms = 15000}) {
   const child = spawn(command, [...pre, "-I", "-c", script], {stdio: ["pipe", "pipe", "pipe"], windowsHide: true});
@@ -561,8 +518,39 @@ export function bridgeLink([command, ...pre], script, {kind, via, ms = 15000}) {
   });
 }
 
-// A python 3 on Windows: restart.mjs (flash uses it there too).
-export {windowsPython};
+/**
+ * The HAL's system channel over node-hid (Windows): reports of 64 bytes, the report ID first, both ways. `hid`: node-hid
+ * (the tests give a stand-in). Rejects with {code: no_hid} when it is not installed, {code: not_found} when no Cardenza is
+ * on HID, {code: open_failed} when none of its collections opens (another program has it).
+ */
+export async function nodeHidLink({hid = nodeHid()} = {}) {
+  if (!hid) throw Object.assign(new Error("node-hid is not installed"), {code: "no_hid"});
+  const ways = systemCollections(hid.devices());
+  if (!ways.length) throw Object.assign(new Error("no Cardenza on HID"), {code: "not_found"});
+  let device = null, way = null, last = null;
+  for (const candidate of ways) {
+    try { device = await hid.HIDAsync.open(candidate.path); way = candidate; break; } catch (error) { last = error; }
+  }
+  if (!device) throw Object.assign(new Error(`its HID cannot be opened (${last?.message || last})`), {code: "open_failed"});
+  let open = true;
+  const name = String(way.product || "Cardenza").trim();
+  return {
+    kind: "hid", via: "hidapi", where: name, name,
+    start(onBytes, onError) {
+      device.on("data", data => onBytes(Uint8Array.from(data)));
+      device.on("error", error => { if (!open) return; open = false; onError(error); });
+    },
+    async send(bytes) {
+      if (!open) throw new BoardError("gone", "the device went away");
+      await device.write(Array.from(bytes));
+    },
+    async close() {
+      if (!open) return;
+      open = false;
+      try { await device.close(); } catch { /* gone */ }
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------------------------
 // Finding the board and opening the channel
@@ -593,14 +581,7 @@ export function boardLinks({platform = process.platform} = {}) {
     }
     return found.candidates.map(way => ({via: way.via, where: way.path, name: found.name, open: () => fileLink(way.path, way.via === "hidraw" ? "hid" : "sysex")}));
   }
-  if (platform === "win32") {
-    return [{via: "hidapi", where: "hidapi", name: "Cardenza", open: () => {
-      const python = windowsPython();
-      if (!python) throw new CliError("hidapi_missing", "203cli board reaches a firmware on Windows through Python's hidapi, and there is no python here", {exit: EXIT.refused,
-        hint: "Install Python 3 (python.org), then pip install hidapi; or use macOS or Linux"});
-      return bridgeLink(python, HIDAPI_BRIDGE, {kind: "hid", via: "hidapi"});
-    }}];
-  }
+  if (platform === "win32") return [{via: "hidapi", where: "HID", name: "Cardenza", open: () => nodeHidLink()}];
   throw new CliError("unsupported_platform", `203cli board reaches a device over USB on macOS, Linux and Windows, not ${platform}`, {exit: EXIT.refused});
 }
 
@@ -620,14 +601,12 @@ export async function openBoard({links = null, platform = process.platform, time
     let link;
     try { link = await way.open(); } catch (error) {
       if (error instanceof CliError) throw error;
-      if (error.code === "no_hidapi") {
-        throw new CliError("hidapi_missing", "203cli board reaches a firmware on Windows through Python's hidapi package, which is not installed", {exit: EXIT.refused,
-          hint: "pip install hidapi, then run this again"});
+      if (error.code === "no_hid") {
+        throw new CliError("hidapi_missing", "203cli board reaches a firmware on Windows over its HID through node-hid (hidapi), which comes with 203cli and is not installed", {exit: EXIT.refused,
+          hint: "Install 203cli again (npm install -g 203cli: node-hid comes prebuilt), then run this again"});
       }
-      if (error.code === "not_found") {
-        throw new CliError("board_not_found", "No Cardenza running a firmware with USB on this computer (hidapi found none)", {exit: EXIT.refused,
-          hint: "Plug it in with a data cable and start the firmware; a firmware on CardenzaHAL answers once it calls USB::Init"});
-      }
+      // No Cardenza on HID: what is there instead (its Launcher's serial port, a firmware without USB), as on the others.
+      if (error.code === "not_found") throw await withoutChannel(platform);
       tried.push(`${way.where ?? way.via}: ${error.code || error.message}`);
       continue;
     }
@@ -686,7 +665,9 @@ export async function openBoard({links = null, platform = process.platform, time
  * no development channel. Answers the CliError that says which.
  */
 export async function withoutChannel(platform = process.platform, {ms = 1200} = {}) {
-  const ports = listPorts(platform);
+  // Windows: Espressif's COM ports, without the serial binding none (flash says what it lacks).
+  let ports = [];
+  try { ports = await serialPorts(platform); } catch { ports = []; }
   if (!ports.length) {
     return new CliError("board_not_found", "No Cardenza on USB: no firmware with CardenzaHAL's USB device and no serial port", {exit: EXIT.refused,
       hint: "Plug it in with a data cable (not a charging-only one), turn it on and start the firmware"});
@@ -694,7 +675,7 @@ export async function withoutChannel(platform = process.platform, {ms = 1200} = 
   const unasked = [];
   for (const port of ports.slice(0, 3)) {
     let version = null;
-    try { version = await launcherVersion(port, ms); } catch (error) { unasked.push(`${port}: ${error.code === "port_unavailable" ? error.message : error.code || error.message}`); continue; }
+    try { version = await launcherVersion(port, ms, platform); } catch (error) { unasked.push(`${port}: ${error.code === "port_unavailable" ? error.message : error.code || error.message}`); continue; }
     if (version !== null) {
       return new CliError("board_in_launcher", `The Cardenza on ${port} is in its 203 Launcher (${version}), not running a firmware: the development channel is a firmware's`, {exit: EXIT.refused,
         hint: "Start the firmware from the Launcher (or install a build: 203cli flash --bin build/<project>.bin), then run this again", data: {port, launcher: version}});
@@ -707,8 +688,8 @@ export async function withoutChannel(platform = process.platform, {ms = 1200} = 
 }
 
 /** The 203 Launcher's version on a serial port (it answers `version` with "Launcher …"), or null when nothing says so in `ms`. */
-async function launcherVersion(port, ms) {
-  const launcher = new LauncherConsole(openSerial(port));
+async function launcherVersion(port, ms, platform = process.platform) {
+  const launcher = new LauncherConsole(await openPort(port, platform));
   try {
     for (let i = 0; i < 2; i++) {
       await launcher.send("version");

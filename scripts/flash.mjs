@@ -12,7 +12,7 @@
 // READY, 2 KB chunks each acknowledged, OK flashed (it restarts into the firmware).
 // The port: --port, else the one USB serial port there is (/dev/ttyACM* on Linux, /dev/cu.usbmodem* on macOS, Espressif's
 // COM port on Windows). A device running a firmware on CardenzaHAL has none: it is restarted into its Launcher first
-// (restart.mjs: its MIDI or HID; Windows: its HID through python's hidapi; the user, 2026-11-18) and the port it comes
+// (restart.mjs: its MIDI or HID; Windows: its HID through node-hid; the user, 2026-11-18) and the port it comes
 // back on is taken, held against the countdown of a HAL that restarts plainly (hold()); lost to that countdown, it is
 // restarted once more. Node has no serial port API: on macOS and Linux the tty is put
 // in raw mode with stty and read and written as a file; on Windows (the user, 2026-11-23: "可以有依赖") a COM port is opened
@@ -237,7 +237,7 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
     const denied = (error.tried || []).some(w => /EACCES|EPERM/.test(String(w.error)));
     throw new CliError("firmware_unreachable", `${found.name} is running a firmware and cannot be asked to restart (${tried || "no way to reach it"})`, {exit: EXIT.refused,
       hint: process.platform === "darwin" ? `203cli needs python3 for CoreMIDI (xcode-select --install); or put it in its Launcher yourself: ${BY_HAND}`
-        : process.platform === "win32" ? `203cli reaches it on Windows through Python's hidapi: install Python 3 (python.org), then pip install hidapi; or put it in its Launcher yourself: ${BY_HAND}`
+        : process.platform === "win32" ? `203cli reaches it on Windows over its HID through node-hid, which comes with 203cli: install it again (npm install -g 203cli) and close programs that hold the device; or put it in its Launcher yourself: ${BY_HAND}`
         : denied ? `No permission for its MIDI or HID: add yourself to the audio group (sudo usermod -aG audio $USER, then log in again); or put it in its Launcher yourself: ${BY_HAND}`
           : `Close programs that hold its MIDI (a DAW); or put it in its Launcher yourself: ${BY_HAND}`,
       data: {tried: error.tried || []}});

@@ -600,7 +600,7 @@ cmd("devices update-launcher DEVICE", "Upgrade the device's 203 Launcher to the 
   examples: ["devices update-launcher 3 --json", "devices update-launcher 3 --no-wait --json"]});
 
 // The development channel of a running firmware on CardenzaHAL (its docs/usb-dev.md), over the USB cable: no sign-in (`anyone`),
-// like flash and log. macOS and Linux over its MIDI (Linux: else its HID); Windows through python's hidapi.
+// like flash and log. macOS and Linux over its MIDI (Linux: else its HID); Windows over its HID through node-hid.
 const BOARD = {group: "Board (a running firmware over USB)", anyone: true, topic: "board", notices: true};
 cmd("board info", "What the firmware on the cable is: name, version, community code, build, ELF SHA-256, CardenzaHAL commit, Launcher, chip, uptime and reset reason", {...BOARD,
   run: boardInfo, examples: ["board info", "board info --json"]});

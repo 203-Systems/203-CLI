@@ -119,7 +119,7 @@ all of them) as JSON.
 | `board_in_launcher` | 1 | board: the device is in its 203 Launcher, not running a firmware | start the firmware from the Launcher (or `flash --bin` a build), run it again |
 | `hal_too_old` | 1 | board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23) | rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again |
 | `dev_channel_off` | 1 | board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works) | turn it on in its sdkconfig, build and install it again |
-| `hidapi_missing` | 1 | board on Windows: python's hidapi package (or python) is missing (flash there restarts a running firmware through it too, and says firmware_unreachable) | `pip install hidapi` |
+| `hidapi_missing` | 1 | board on Windows: node-hid (hidapi; 203cli's optional dependency for a running firmware's HID, prebuilt) is not installed (flash there restarts a running firmware through it too, and says firmware_unreachable) | install 203cli again (`npm install -g 203cli`) |
 | `board_refused` | 1 | board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …) | read `error` and `hint` |
 | `board_busy` | 3 | board: the firmware's development channel has 8 requests queued | wait a moment, run it again |
 | `board_timeout` | 3 | board: the device stopped answering, or part of an answer was lost more than once | run it again; if it keeps happening, read its log (`log`) |

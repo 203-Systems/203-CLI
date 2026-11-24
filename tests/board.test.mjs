@@ -8,13 +8,14 @@ import {test, before, after} from "node:test";
 import assert from "node:assert/strict";
 import {spawn, spawnSync} from "node:child_process";
 import fs from "node:fs";
+import {EventEmitter} from "node:events";
 import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import {ROOT, NO_UPDATES} from "./fixtures.mjs";
 import {FakeBoard, INFO, SETTING_SPECS, fakePixel, packFake, unpackFake} from "./board-fake.mjs";
 import {pack7, unpack7, sysexRequest, hidRequest, sysexAnswer, hidAnswer, SysexReader, HidReader, Board, BoardError, OP, FLAG, openBoard,
-  bridgeLink, lostPart, COREMIDI_BRIDGE, HIDAPI_BRIDGE} from "../scripts/board-usb.mjs";
+  bridgeLink, lostPart, nodeHidLink, withoutChannel, COREMIDI_BRIDGE} from "../scripts/board-usb.mjs";
 import {keyNumber, keyName, parseCombo, pressSteps, parseSteps, keyRequests, decodeScreen, rgbOf, encodePng, crc32, cardPath, size,
   boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardPress, boardKeys, boardCoredump,
   filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, partitionsText, memoryText,
@@ -574,8 +575,8 @@ test("settings: answered by a firmware built without the development channel; a 
   assert.deepEqual(untouched.requests, []);
 });
 
-test("the bridges' python compiles; a bridge process carries the bytes both ways (hex lines)", {skip: spawnSync("python3", ["-c", "1"]).status !== 0 && "no python3"}, async () => {
-  for (const script of [COREMIDI_BRIDGE, HIDAPI_BRIDGE]) {
+test("the bridge's python compiles; a bridge process carries the bytes both ways (hex lines)", {skip: spawnSync("python3", ["-c", "1"]).status !== 0 && "no python3"}, async () => {
+  for (const script of [COREMIDI_BRIDGE]) {
     const compiled = spawnSync("python3", ["-I", "-c", "import sys; compile(sys.stdin.read(), 'bridge', 'exec')"], {input: script, encoding: "utf8"});
     assert.equal(compiled.status, 0, compiled.stderr);
   }
@@ -603,7 +604,61 @@ for line in sys.stdin:
   assert.deepEqual(board.helloed, {protocol: 2, max_args: 52});
   assert.equal(board.where, "Stand-in Cardenza");
   await board.close();
-  await assert.rejects(bridgeLink(["python3"], 'import json; print(json.dumps({"error": "no_hidapi"}))', {kind: "hid", via: "hidapi"}), e => e.code === "no_hidapi");
+  await assert.rejects(bridgeLink(["python3"], 'import json; print(json.dumps({"error": "no MIDI source named Cardenza"}))', {kind: "sysex", via: "coremidi"}),
+    e => e.code === "no MIDI source named Cardenza");
+});
+
+// Windows: node-hid (a stand-in here around the stand-in firmware): the system channel's collection, reports of 64 bytes.
+function fakeNodeHid(fake, {cardenza = true} = {}) {
+  const at = col => String.raw`\\?\HID#VID_0203&PID_2040&MI_05&Col0` + col + "#8&1&0&0000#{4d1e55b2}";
+  const opened = [];
+  const list = [
+    ...(cardenza ? [{vendorId: 0x0203, path: at(3), product: "203 Systems Cardenza", usagePage: 0xff00}, {vendorId: 0x0203, path: at(1), product: "203 Systems Cardenza", usagePage: 0x0c},
+      {vendorId: 0x0203, path: at(2), product: "203 Systems Cardenza", usagePage: 0xff00}] : []),
+    {vendorId: 0x0203, path: String.raw`\\?\HID#VID_0203&PID_1080&MI_02#7&9#{4d1e55b2}`, product: "203 Systems Mystrix 2", usagePage: 0xff00}];
+  return {opened, system: at(2), devices: () => list.map(d => ({...d})), HIDAsync: {async open(path) {
+    opened.push(path);
+    const device = new EventEmitter();
+    device.on("newListener", event => { if (event === "data") fake.sink = bytes => device.emit("data", Buffer.from(bytes)); });
+    device.write = async data => { assert.equal(data.length, 64, "a report of 64 bytes, its ID first"); fake.receive(Uint8Array.from(data)); return data.length; };
+    device.close = async () => { fake.sink = null; fake.closed = true; };
+    return device;
+  }}};
+}
+
+test("Windows: board over node-hid, the system channel's collection; missing or no Cardenza says what to do", async () => {
+  const fake = new FakeBoard({kind: "hid", protocol: 3});
+  const hid = fakeNodeHid(fake);
+  const board = await openBoard({links: [{via: "hidapi", where: "HID", open: () => nodeHidLink({hid})}], need: "settings"});
+  assert.equal(board.via, "hidapi");
+  assert.equal(board.where, "203 Systems Cardenza");
+  assert.equal(board.identity.protocol, 3);
+  assert.deepEqual(hid.opened, [hid.system], "only the system channel's collection: not the app's, never the Mystrix");
+  await board.close();
+  assert.equal(fake.closed, true);
+  await assert.rejects(openBoard({links: [{via: "hidapi", open: () => nodeHidLink({hid: null})}]}),
+    e => e.code === "hidapi_missing" && /npm install -g 203cli/.test(e.hint));
+  const empty = fs.mkdtempSync(path.join(dir, "no-dev-"));
+  const before = process.env.C203_DEV;
+  process.env.C203_DEV = empty;
+  try {
+    await assert.rejects(openBoard({links: [{via: "hidapi", open: () => nodeHidLink({hid: fakeNodeHid(fake, {cardenza: false})})}], platform: "linux"}),
+      e => e.code === "board_not_found");
+  } finally {
+    if (before === undefined) delete process.env.C203_DEV; else process.env.C203_DEV = before;
+  }
+});
+
+test("Windows: no firmware on HID but the Launcher on its COM port says board_in_launcher (the serial binding's stand-in)", async () => {
+  process.env.C203_SERIAL = path.join(ROOT, "tests/serial-standin.mjs");
+  try {
+    const said = await withoutChannel("win32");
+    assert.equal(said.code, "board_in_launcher", said.message);
+    assert.equal(said.data.port, "COM7", "the Launcher's port, not the Arduino's");
+    assert.match(said.data.launcher, /0\.3\.0-cardenza/);
+  } finally {
+    delete process.env.C203_SERIAL;
+  }
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -786,7 +841,8 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
 });
 
 test("203cli board settings: a wrong key or value, or a misspelt action, is a usage error before any device is looked for", async () => {
-  const nowhere = {C203_SYS: path.join(dir, "no-sys"), C203_DEV: path.join(dir, "no-dev")};
+  // No device anywhere: no sysfs or /dev (Linux), no node-hid (Windows: the one there would reach a real Cardenza).
+  const nowhere = {C203_SYS: path.join(dir, "no-sys"), C203_DEV: path.join(dir, "no-dev"), C203_HID: path.join(dir, "no-node-hid.cjs")};
   const key = await cli(["board", "settings", "set", "volum", "50", "--json"], nowhere);
   assert.equal(key.code, 2, key.stderr);
   assert.equal(key.error.code, "usage");

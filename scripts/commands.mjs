@@ -2,6 +2,7 @@
 // operation of lib.mjs, or a function of publish.mjs). The parser, --help, unknown-flag suggestions and
 // reference/cli.md all come from this table. Part of the Agent Skill skill/203-community.
 import {doctor, publish, createFirmware, editFirmware, setCover, checklist, dryRunUpload, init, forkFirmware, cloneFirmware, editMe,
+  setModelCover, listModelPictures, addModelPictures, editModelPicture, removeModelPictures, orderModelPictures,
   simBuild, simUpload, simCheck, basedOn, sourceUpload, sourceCheck, listPictures, addPictures, editPicture, removePictures, orderPictures, prunePictures} from "./publish.mjs";
 import {CHANNELS, ENGINES, LICENSES} from "./checks.mjs";
 import {recoverDevice} from "./recover.mjs";
@@ -419,10 +420,30 @@ cmd("models upload FILE...", "Share a 3D model (.stl .step .3mf .obj)", {group: 
   flags: {title: V("TEXT", "1-80 characters"), license: V(LICENSES.join("|"), "The licence", {choices: LICENSES}), description: V("TEXT", "Markdown"),
     "description-file": V("PATH", "Markdown file"), tags: V("a,b", "Tags", {type: "list"}), target: V("DEVICE", "The device it is for"),
     firmware: V("CODE", "A firmware it goes with"), "remix-of": V("ID", "The model it remixes"), preview: V("MESH", ".stl or .glb (needed for STEP/3MF/OBJ)"),
-    thumbnail: V("PNG", "A picture (needed for STEP/3MF/OBJ)"), material: V("TEXT", "e.g. PLA"), "layer-height": V("MM", "e.g. 0.2", {type: "number"}),
+    thumbnail: V("PNG", "The card's 3D picture, your own (needed for STEP/3MF/OBJ; else drawn from the STL, 1280x720)"),
+    cover: V("IMAGE", "A cover (PNG/JPEG/WebP, 16:9, ≤ 2 MB): the card and the page show it first; none: the 3D render"),
+    image: V("PATH", "A picture shown above the description (repeat, at most 9: photos of the print, renders; PNG/JPEG/WebP ≤ 2 MB)", {repeat: true}),
+    material: V("TEXT", "e.g. PLA"), "layer-height": V("MM", "e.g. 0.2", {type: "number"}),
     infill: V("PERCENT", "0-100", {type: "number"}), supports: B("Needs supports"), "print-notes": V("TEXT", "Print notes"), ...DRY},
   need: ["title", "license"], write: true, topic: "models", run: ctx => dryRunUpload(ctx, "model", {then: !ctx.flags.dry_run}),
-  examples: ['models upload stand.stl --title "Desk stand" --license CC-BY-4.0 --target cardenza --dry-run --json']});
+  examples: ['models upload stand.stl --title "Desk stand" --license CC-BY-4.0 --target cardenza --dry-run --json',
+    'models upload case.stl --title "Case" --license CC-BY-4.0 --cover cover.png --image printed.jpg --image on-desk.jpg --json']});
+// Its cover and pictures (COMMUNITY.md "Models": covers and pictures): as a firmware's; no cover, the 3D render shows.
+cmd("models cover ID [IMAGE]", "Set a model's cover (PNG/JPEG/WebP, 16:9, ≤ 2 MB): its card and page show it first; --remove takes it away (the 3D render again)", {group: "Sharing",
+  flags: {file: V("IMAGE", "The picture (the same as IMAGE)"), remove: B("Remove the cover (the card and the page show the 3D render)"), ...DRY, ...YES}, run: setModelCover, write: true, topic: "models",
+  examples: ["models cover ab12cd34 cover.png --json", "models cover ab12cd34 --file cover.png --dry-run --json", "models cover ab12cd34 --remove --yes --json"]});
+cmd("models images list ID", "A model's cover and pictures (shown above its description, at most 9, in order), each with its id, caption and size", {group: "Sharing",
+  run: listModelPictures, topic: "models", examples: ["models images list ab12cd34 --json"]});
+cmd("models images add ID IMAGE...", "Add pictures to a model (PNG/JPEG/WebP, ≤ 2 MB each; photos of the print, renders); a picture it has already is skipped", {group: "Sharing",
+  flags: {caption: V("TEXT", "One line under the picture (≤ 60 characters; one picture only)"), ...DRY}, run: addModelPictures, write: true, topic: "models",
+  examples: ['models images add ab12cd34 printed.jpg --caption "Printed in PETG" --json', "models images add ab12cd34 a.jpg b.jpg --dry-run --json"]});
+cmd("models images edit ID PICTURE", "A model picture's caption (\"\": none)", {group: "Sharing",
+  flags: {caption: V("TEXT", "One line under the picture (≤ 60 characters; \"\" removes it)"), ...DRY}, run: editModelPicture, write: true, topic: "models",
+  examples: ['models images edit ab12cd34 7ces8nvr --caption "On the desk" --json']});
+cmd("models images remove ID PICTURE...", "Remove pictures of a model", {group: "Sharing", flags: {...DRY, ...YES}, run: removeModelPictures, write: true, topic: "models",
+  examples: ["models images remove ab12cd34 7ces8nvr --dry-run --json", "models images remove ab12cd34 7ces8nvr --yes --json"]});
+cmd("models images order ID PICTURE...", "A model's pictures in a new order: these ids first, the others after them as they were", {group: "Sharing",
+  flags: {...DRY}, run: orderModelPictures, write: true, topic: "models", examples: ["models images order ab12cd34 q4hzuufx 7ces8nvr --json"]});
 cmd("models list", "Models", {group: "Sharing", flags: {q: V("WORDS", "Search words"), tag: V("TAG", "Tag"), target: V("DEVICE", "Device"), firmware: V("CODE", "Firmware"),
   ...SORT(["new", "hot", "downloads"]), ...SECTION}, op: "models_list", args: ctx => ({q: ctx.flags.q, tag: ctx.flags.tag, target: ctx.flags.target,
   firmware: ctx.flags.firmware, sort: ctx.flags.sort, page: ctx.flags.page, cursor: ctx.flags.cursor, limit: ctx.flags.limit}), examples: ["models list --target cardenza --json"]});

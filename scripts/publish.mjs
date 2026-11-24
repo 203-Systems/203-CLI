@@ -10,7 +10,7 @@ import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {ApiError, BLOCKED_CODES, CLI_VERSION, COMMUNITY_HOSTS, DEFAULT_API, rememberedApi, agentSandbox, failed, isDnsFailure, offline, probeHost, uploadCover, uploadPicture, uploadSource,
-  tokenFile} from "./lib.mjs";
+  tokenFile, uploadModelCover, uploadModelPicture} from "./lib.mjs";
 import {PROJECT_FILE, LEGACY_FILE, NAME_RULE, nameOk, checkProject, cloneUrlOf, cmakeProjectName, findProjectFile, gitTagVersion, licenseOf, manifestOf, remotePage,
   versionTxt, writeProject} from "./project.mjs";
 import {MAX_ARCHIVE, makeArchive} from "./source.mjs";
@@ -950,6 +950,197 @@ export async function prunePictures(ctx) {
   for (const x of unused) updated = await ctx.op("firmware_image_delete", {code, id: x.id});
   return {json: {status: "removed", removed: unused.map(x => x.id), description_images: (updated.description_images ?? []).map(x => x.id)},
     text: `Removed ${unused.map(x => x.id).join(", ")}: the description did not use them.`};
+}
+
+// ---------------------------------------------------------------------------------------------
+// A model's cover and pictures (COMMUNITY.md "Models": covers and pictures; the user, 2026-11-24: "让当前模型页支持用户自己添加
+// 封面和图片。如果没有添加，就默认使用当前这种3D布局"): as a firmware's. The cover shows on its card and first on its page (none:
+// the 3D render); the pictures (at most 9, a caption of 60 each, in their order) above its description. Photos of the print
+// or renders: no rule on how many (a firmware's 3-5 screenshots are a firmware's).
+
+const MODEL_ID = /^[2-9a-hjkmnp-z]{8}$/i;
+const modelUrl = (ctx, id) => `${siteOf(ctx.api)}/model/${String(id).toLowerCase()}`;
+
+/** The model, for its author or an admin; else a problem (not found, not signed in, not yours). */
+async function modelFor(ctx, r, id) {
+  if (!MODEL_ID.test(String(id ?? ""))) {
+    r.problem("usage", `${id} is not a model's id (8 characters, as in /model/<id>)`, {field: "ID", exit: EXIT.usage, next: [ctx.run(["mine", "models"])]});
+    return null;
+  }
+  try {
+    const m = await ctx.client.get("/models/" + enc(String(id).toLowerCase()));
+    if (!m.can?.edit) {
+      if (!ctx.client.token) r.problem("signin_required", "Not signed in", {exit: EXIT.signin, hint: "Sign in first: login", next: [ctx.run(["login"])]});
+      else r.problem("not_yours", `${m.title} (${m.id}) belongs to ${m.author?.name ?? "someone else"}, not to you`, {exit: EXIT.refused,
+        hint: "Remix it instead (models upload … --remix-of " + m.id + "), or use one of your own", next: [ctx.run(["mine", "models"])]});
+    }
+    return m;
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "not_found") {
+      r.problem("not_found", `No model ${id}`, {exit: EXIT.refused, hint: "Your models: mine models", next: [ctx.run(["mine", "models"])]});
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function setModelCover(ctx) {
+  const r = newReport(ctx);
+  const id = String(ctx.args.ID ?? "").toLowerCase();
+  const m = await modelFor(ctx, r, id);
+  if (ctx.flags.remove) {
+    if (m && !m.cover) r.step(`${m.title} has no cover: nothing to remove`);
+    else if (m) r.step(`remove the cover of ${m.title} (${id}): its card and page show the 3D render again`);
+    if (ctx.flags.dry_run) return dryOut(ctx, r);
+    if (r.problems.length) failWith(ctx, r);
+    if (!m.cover) return {json: {...m, status: "unchanged"}, text: `${m.title} (${id}) has no cover.`};
+    if (!ctx.flags.yes && !(ctx.interactive && await ctx.confirm(`Remove the cover of ${m.title}?`))) {
+      throw new CliError("needs_confirmation", `This removes the cover of ${m.title} (${id})`, {exit: EXIT.confirm, hint: "Add --yes if the user wants it removed",
+        next: [ctx.cmd({add: {yes: true}})]});
+    }
+    const updated = await ctx.op("model_cover_delete", {id});
+    return {json: updated, text: `The cover of ${updated.title} (${id}) is removed: its card and page show the 3D render.\nPage: ${modelUrl(ctx, id)}`};
+  }
+  const image = ctx.args.IMAGE ?? ctx.flags.file;
+  if (ctx.args.IMAGE && ctx.flags.file && ctx.args.IMAGE !== ctx.flags.file) throw ctx.usage("Two pictures: give IMAGE or --file, not both");
+  if (!image) throw ctx.usage("Give the picture: models cover ID IMAGE (or --file IMAGE; --remove takes the cover away)", {hint: "A 16:9 PNG, JPEG or WebP up to 2 MB, e.g. 1280x720"});
+  const cover = await planCover(ctx, r, image, m, {flag: ctx.args.IMAGE ? "IMAGE" : "file"});
+  if (cover) r.step(`set the cover of ${m?.title ?? id} to ${cover.describe}`);
+  if (r.problems.length) return ctx.flags.dry_run ? dryOut(ctx, r) : failWith(ctx, r);
+  if (ctx.flags.dry_run) return dryOut(ctx, r);
+  if (!cover) return {json: m, text: `${m.title} (${id}) already has this cover: ${m.cover.url}`};
+  ctx.say(`Uploading the cover (${size(cover.bytes.length)})…`);
+  const updated = await uploadModelCover(ctx.client, id, cover.bytes, cover.mime);
+  return {json: updated, text: `The cover of ${updated.title} (${id}) is set: ${updated.cover?.url}\nPage: ${modelUrl(ctx, id)}`};
+}
+
+const modelPictureRow = x => ({id: x.id, caption: x.caption ?? "", width: x.width ?? null, height: x.height ?? null, sha256: x.sha256 ?? null, url: x.url});
+
+export async function listModelPictures(ctx) {
+  const id = String(ctx.args.ID ?? "").toLowerCase();
+  if (!MODEL_ID.test(id)) throw ctx.usage(`${ctx.args.ID} is not a model's id (8 characters)`);
+  const m = await ctx.client.get("/models/" + enc(id));
+  const rows = (m.images ?? []).map(modelPictureRow);
+  const line = x => `  ${x.id}  ${String(x.width ?? "?")}x${String(x.height ?? "?")}  ${x.caption || "(no caption)"}`;
+  return {json: {model: {id: m.id, title: m.title, url: modelUrl(ctx, m.id)}, cover: m.cover ? {url: m.cover.url, sha256: m.cover.sha256 ?? null} : null,
+    pictures: rows, room: GALLERY_MAX - rows.length},
+  text: [`${m.title} (${m.id}) — ${modelUrl(ctx, m.id)}`, `Cover: ${m.cover ? m.cover.url : "none (the card and the page show the 3D render)"}`,
+    `Pictures, above the description (${rows.length} / ${GALLERY_MAX}):`, ...(rows.length ? rows.map(line) : ["  none"])].join("\n")};
+}
+
+export async function addModelPictures(ctx) {
+  const r = newReport(ctx);
+  const id = String(ctx.args.ID ?? "").toLowerCase(), o = ctx.flags;
+  const files = [].concat(ctx.args.IMAGE ?? []).filter(Boolean);
+  if (!files.length) throw ctx.usage("Give the pictures: models images add ID IMAGE… (PNG, JPEG or WebP up to 2 MB each)");
+  if (o.caption !== undefined && files.length > 1) {
+    throw ctx.usage("One --caption is for one picture: add pictures with captions one at a time", {next: files.slice(0, 2).map(f => ctx.run(["models", "images", "add", id, f, "--caption", "<one line>"]))});
+  }
+  const caption = captionOf(r, o.caption);
+  const m = await modelFor(ctx, r, id);
+  const have = m?.images ?? [];
+  const plans = [], skipped = [];
+  for (const file of files) {
+    const plan = planPicture(ctx, r, file);
+    if (!plan) continue;
+    const there = have.find(x => x.sha256 === plan.sha) ?? plans.find(x => x.sha === plan.sha);
+    if (there) { skipped.push({file: plan.rel, id: there.id ?? null, why: "already there"}); continue; }
+    plans.push(plan);
+  }
+  if (m && have.length + plans.length > GALLERY_MAX) {
+    r.problem("conflict", `${m.title} has ${have.length} pictures: ${plans.length} more would be over ${GALLERY_MAX}`, {field: "images",
+      hint: "Remove some first (models images list shows them)", next: [ctx.run(["models", "images", "list", id])]});
+  }
+  for (const plan of plans) r.step(`add ${plan.describe} to the pictures of ${m?.title ?? id}${caption ? ` with the caption "${caption}"` : ""}`);
+  for (const x of skipped) ctx.note(`${x.file} is already there (${x.id})`);
+  if (o.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  const added = [];
+  let updated = m;
+  for (const plan of plans) {
+    ctx.say(`Uploading ${plan.rel} (${size(plan.bytes.length)})…`);
+    const done = await uploadModelPicture(ctx.client, id, plan.bytes, plan.mime, {caption: caption ?? ""});
+    updated = done.model;
+    added.push({file: plan.rel, id: done.id});
+  }
+  return {json: {status: added.length ? "added" : "already_there", model: {id, title: updated.title, url: modelUrl(ctx, id)}, added, skipped,
+    pictures: (updated.images ?? []).map(x => x.id)},
+  text: [added.length ? `Added ${added.length} picture${added.length > 1 ? "s" : ""} to ${updated.title} (${id}): ${modelUrl(ctx, id)}` : `Nothing new: ${skipped.length > 1 ? "they are" : "it is"} there already.`,
+    ...added.map(x => `  ${x.id}  ${x.file}`), ...skipped.map(x => `  ${x.id ?? "-"}  ${x.file} (already there)`)].join("\n")};
+}
+
+/** A picture of this model by its id (any case), or a not_found problem naming the list. */
+function modelPictureFor(ctx, r, m, pic, id) {
+  const x = m ? (m.images ?? []).find(y => y.id === String(pic).toLowerCase()) : null;
+  if (m && !x) r.problem("not_found", `${m.title} (${id}) has no picture ${pic}`, {field: "PICTURE", hint: "Its pictures: models images list " + id, next: [ctx.run(["models", "images", "list", id])]});
+  return x;
+}
+
+export async function editModelPicture(ctx) {
+  const r = newReport(ctx);
+  const id = String(ctx.args.ID ?? "").toLowerCase();
+  const caption = captionOf(r, ctx.flags.caption);
+  if (caption === undefined) throw ctx.usage("Nothing to change: give --caption TEXT (\"\": none)");
+  const m = await modelFor(ctx, r, id);
+  const x = modelPictureFor(ctx, r, m, ctx.args.PICTURE, id);
+  const changed = x && caption !== (x.caption ?? "");
+  if (x) r.step(changed ? `set the caption of ${x.id} to "${caption}"` : `nothing differs on ${x.id}`);
+  if (ctx.flags.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  const updated = changed ? await ctx.op("model_image_edit", {id, image: x.id, caption}) : m;
+  const now = (updated.images ?? []).find(y => y.id === x.id);
+  return {json: {status: changed ? "changed" : "unchanged", picture: modelPictureRow(now), model: {id, title: updated.title}},
+    text: `${x.id}: ${now.caption ? `"${now.caption}"` : "no caption"}`};
+}
+
+export async function removeModelPictures(ctx) {
+  const r = newReport(ctx);
+  const id = String(ctx.args.ID ?? "").toLowerCase();
+  const pics = [].concat(ctx.args.PICTURE ?? []).map(x => String(x).toLowerCase());
+  const m = await modelFor(ctx, r, id);
+  const have = m?.images ?? [];
+  const doomed = [], gone = [];
+  for (const pic of pics) {
+    if (!PICTURE_ID.test(pic)) { r.problem("usage", `${pic} is not a picture's id (8 characters)`, {field: "PICTURE", exit: EXIT.usage, next: [ctx.run(["models", "images", "list", id])]}); continue; }
+    const x = have.find(y => y.id === pic);
+    if (x) { if (!doomed.includes(x)) doomed.push(x); } else gone.push(pic);
+  }
+  for (const x of doomed) r.step(`remove ${x.id}${x.caption ? ` ("${x.caption}")` : ""}`);
+  if (ctx.flags.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  if (!doomed.length) return {json: {status: "already_deleted", ids: gone}, text: `Already gone: ${gone.join(", ")}`};
+  if (!ctx.flags.yes && !(ctx.interactive && await ctx.confirm(`Remove ${doomed.length} picture${doomed.length > 1 ? "s" : ""} of ${m.title}?`))) {
+    throw new CliError("needs_confirmation", `This removes ${doomed.map(x => x.id).join(", ")} from ${m.title} (${id})`, {exit: EXIT.confirm,
+      hint: "Add --yes if the user wants them removed", next: [ctx.cmd({add: {yes: true}})]});
+  }
+  let updated = m;
+  for (const x of doomed) {
+    try { updated = await ctx.op("model_image_delete", {id, image: x.id}); } catch (error) {
+      if (!(error instanceof ApiError && error.code === "not_found")) throw error;
+      gone.push(x.id);
+    }
+  }
+  return {json: {status: "removed", removed: doomed.map(x => x.id), already_gone: gone, model: {id, title: updated.title}, pictures: (updated.images ?? []).map(x => x.id)},
+    text: `Removed ${doomed.map(x => x.id).join(", ")} from ${updated.title} (${id}).`};
+}
+
+export async function orderModelPictures(ctx) {
+  const r = newReport(ctx);
+  const id = String(ctx.args.ID ?? "").toLowerCase();
+  const pics = [].concat(ctx.args.PICTURE ?? []).map(x => String(x).toLowerCase());
+  const m = await modelFor(ctx, r, id);
+  const now = (m?.images ?? []).map(x => x.id);
+  for (const pic of pics) if (m && !now.includes(pic)) r.problem("not_found", `${m.title} has no picture ${pic}`, {field: "PICTURE", next: [ctx.run(["models", "images", "list", id])]});
+  if (new Set(pics).size !== pics.length) r.problem("usage", "An id is given twice", {field: "PICTURE", exit: EXIT.usage});
+  // The ones given first, in that order; the others after them, as they were.
+  const order = [...pics, ...now.filter(x => !pics.includes(x))];
+  const same = order.join() === now.join();
+  r.step(same ? "the pictures are in this order already" : `order the pictures: ${order.join(", ")}`);
+  if (ctx.flags.dry_run) return dryOut(ctx, r);
+  if (r.problems.length) failWith(ctx, r);
+  const updated = same ? m : await ctx.op("model_images_order", {id, ids: order});
+  return {json: {status: same ? "unchanged" : "ordered", pictures: (updated.images ?? []).map(x => x.id), model: {id, title: updated.title}},
+    text: `${updated.title}'s pictures: ${(updated.images ?? []).map(x => x.id).join(", ") || "none"}`};
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2323,7 +2514,7 @@ export async function dryRunUpload(ctx, kind, {then = false} = {}) {
   if (typeof title === "string" && (title.trim().length < 1 || title.length > 80)) {
     r.problem("invalid", `The title is ${title.length} characters: 1-80`, {field: "title", exit: EXIT.usage, ...(title.length > 80 ? {next: [ctx.cmd({set: {title: shorten(title, 80)}})]} : {})});
   }
-  let args = null, describe = "";
+  let args = null, describe = "", media = null;
   if (kind === "work") {
     const local = readLocal(ctx, r, files[0], {what: "The work", flag: "FILE"});
     const report = local ? inspectWork(local.bytes, local.rel) : null;
@@ -2405,6 +2596,18 @@ export async function dryRunUpload(ctx, kind, {then = false} = {}) {
     }
     describe = entries.map(e => `${path.basename(e.file)} (${e.format}, ${size(e.local.bytes.length)})`).join(", ");
     r.step(`share the model "${title}": ${describe}, licence ${licence}`);
+    // Its cover and pictures (COMMUNITY.md "Models": covers and pictures), sent once the model is up.
+    const cover = o.cover ? await planCover(ctx, r, o.cover, null, {flag: "cover"}) : null;
+    const pictures = [];
+    for (const file of [].concat(o.image ?? []).filter(Boolean)) {
+      const plan = planPicture(ctx, r, file, {flag: "image"});
+      if (plan && !pictures.some(x => x.sha === plan.sha)) pictures.push(plan);
+    }
+    if (pictures.length > GALLERY_MAX) r.problem("invalid", `${pictures.length} pictures: a model has at most ${GALLERY_MAX}`, {field: "image", exit: EXIT.usage});
+    if (cover) r.step(`its cover: ${cover.describe}`);
+    else r.step("no cover: its card and page show the 3D render");
+    for (const plan of pictures) r.step(`a picture: ${plan.describe}`);
+    media = {cover, pictures};
     const print = {};
     if (o.material) print.material = o.material;
     if (o.layer_height !== undefined) print.layer_height_mm = o.layer_height;
@@ -2419,7 +2622,18 @@ export async function dryRunUpload(ctx, kind, {then = false} = {}) {
   if (r.problems.length) failWith(ctx, r);
   const op = {work: "work_upload", sound: "sound_upload", project: "project_upload", model: "model_upload"}[kind];
   ctx.say(`Uploading ${describe || "…"}`);
-  const answer = await ctx.op(op, args);
+  let answer = await ctx.op(op, args);
+  if (media && answer?.id) {
+    // The model is up: its cover, then its pictures (one that fails is said; the model stays).
+    try {
+      if (media.cover) { ctx.say("Uploading the cover…"); answer = await uploadModelCover(ctx.client, answer.id, media.cover.bytes, media.cover.mime); }
+      for (const plan of media.pictures) { ctx.say(`Uploading ${plan.rel}…`); answer = (await uploadModelPicture(ctx.client, answer.id, plan.bytes, plan.mime)).model; }
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      r.warn("media_failed", `The model is up, but its cover or a picture did not go up: ${error.message}`, {hint: "Add them again",
+        next: [media.cover ? ctx.run(["models", "cover", answer.id, media.cover.rel]) : null, media.pictures.length ? ctx.run(["models", "images", "add", answer.id, ...media.pictures.map(p => p.rel)]) : null]});
+    }
+  }
   const url = {work: "/w/", sound: "/sound/", project: "/project/", model: "/model/"}[kind];
   return {json: withAdvice(answer, r), text: (url && answer.id ? `Shared "${answer.title}": ${siteOf(ctx.api)}${url}${answer.id} (id ${answer.id})\n` : JSON.stringify(answer, null, 2) + "\n") + adviceText(r).trimEnd()};
 }

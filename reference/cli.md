@@ -1100,7 +1100,9 @@ Share a 3D model (.stl .step .3mf .obj) (sign-in with write)
 - `--firmware CODE` A firmware it goes with
 - `--remix-of ID` The model it remixes
 - `--preview MESH` .stl or .glb (needed for STEP/3MF/OBJ)
-- `--thumbnail PNG` A picture (needed for STEP/3MF/OBJ)
+- `--thumbnail PNG` The card's 3D picture, your own (needed for STEP/3MF/OBJ; else drawn from the STL, 1280x720)
+- `--cover IMAGE` A cover (PNG/JPEG/WebP, 16:9, ≤ 2 MB): the card and the page show it first; none: the 3D render
+- `--image PATH` A picture shown above the description (repeat, at most 9: photos of the print, renders; PNG/JPEG/WebP ≤ 2 MB) (repeatable)
 - `--material TEXT` e.g. PLA
 - `--layer-height MM` e.g. 0.2
 - `--infill PERCENT` 0-100
@@ -1109,6 +1111,63 @@ Share a 3D model (.stl .step .3mf .obj) (sign-in with write)
 - `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
 
     203cli models upload stand.stl --title "Desk stand" --license CC-BY-4.0 --target cardenza --dry-run --json
+    203cli models upload case.stl --title "Case" --license CC-BY-4.0 --cover cover.png --image printed.jpg --image on-desk.jpg --json
+
+### `203cli models cover ID [IMAGE]`
+
+Set a model's cover (PNG/JPEG/WebP, 16:9, ≤ 2 MB): its card and page show it first; --remove takes it away (the 3D render again) (sign-in with write)
+
+- `--file IMAGE` The picture (the same as IMAGE)
+- `--remove` Remove the cover (the card and the page show the 3D render)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+- `--yes` Yes, do it (it cannot be undone)
+
+    203cli models cover ab12cd34 cover.png --json
+    203cli models cover ab12cd34 --file cover.png --dry-run --json
+    203cli models cover ab12cd34 --remove --yes --json
+
+### `203cli models images list ID`
+
+A model's cover and pictures (shown above its description, at most 9, in order), each with its id, caption and size
+
+    203cli models images list ab12cd34 --json
+
+### `203cli models images add ID IMAGE...`
+
+Add pictures to a model (PNG/JPEG/WebP, ≤ 2 MB each; photos of the print, renders); a picture it has already is skipped (sign-in with write)
+
+- `--caption TEXT` One line under the picture (≤ 60 characters; one picture only)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203cli models images add ab12cd34 printed.jpg --caption "Printed in PETG" --json
+    203cli models images add ab12cd34 a.jpg b.jpg --dry-run --json
+
+### `203cli models images edit ID PICTURE`
+
+A model picture's caption ("": none) (sign-in with write)
+
+- `--caption TEXT` One line under the picture (≤ 60 characters; "" removes it)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203cli models images edit ab12cd34 7ces8nvr --caption "On the desk" --json
+
+### `203cli models images remove ID PICTURE...`
+
+Remove pictures of a model (sign-in with write)
+
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+- `--yes` Yes, do it (it cannot be undone)
+
+    203cli models images remove ab12cd34 7ces8nvr --dry-run --json
+    203cli models images remove ab12cd34 7ces8nvr --yes --json
+
+### `203cli models images order ID PICTURE...`
+
+A model's pictures in a new order: these ids first, the others after them as they were (sign-in with write)
+
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203cli models images order ab12cd34 q4hzuufx 7ces8nvr --json
 
 ### `203cli models list`
 

@@ -241,6 +241,16 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `POST /models/{id}/like` | Like or unlike — body: on | write | Reaction |
 | `POST /models/{id}/favorite` | Favourite or not — body: on | write | Reaction |
 | `POST /models/{id}/download` | A file's download link (counted once a day per viewer) — body: file? |  | Download |
+| `POST /models/{id}/cover` | A signed upload for a new cover (PNG, JPEG or WebP, up to 2 MB; author, admin); none: the 3D render — body: mime, size | write | CoverUpload |
+| `POST /models/{id}/cover/done` | The cover is uploaded: check it, it replaces the one shown | write | Model |
+| `POST /models/{id}/cover/delete` | Remove the cover (the card and the page show the 3D render again) | write | Model |
+| `POST /models/{id}/images` | A signed upload for a new picture (PNG, JPEG or WebP, up to 2 MB; at most 9; author, admin) — body: mime, size, caption? | write | ImageUpload |
+| `POST /models/{id}/images/order` | The pictures in a new order (every picture's id once) — body: ids | write | Model |
+| `POST /models/{id}/images/{image}/done` | The picture is uploaded: check it, it is shown after the others | write | Model |
+| `POST /models/{id}/images/{image}/edit` | A picture's caption (up to 60 characters; empty: none) — body: caption? | write | Model |
+| `POST /models/{id}/images/{image}/delete` | Remove a picture (also one still being uploaded) | write | Model |
+| `POST /models/{id}/thumbnail` | A signed upload for the card's 3D render drawn again (a PNG up to 1 MB; author, admin) — body: size, renderer? | write | CoverUpload |
+| `POST /models/{id}/thumbnail/done` | The render is uploaded: check it, it replaces the card's picture | write | Model |
 | `GET /models/{id}/remixes` | Remixes of a model |  | List&lt;ModelSummary&gt; |
 
 ## Sound packs

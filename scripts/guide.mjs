@@ -473,7 +473,14 @@ Audio (.wav .mp3 .ogg .flac .m4a, ≤ 50 MB) or video (.mp4 .webm, ≤ 300 MB) m
   models: {title: "3D models", text: `
 {P} models upload case.stl --title "Desk stand" --license CC-BY-4.0 --target cardenza --dry-run --json
 Licences: CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, CC-BY-NC-SA-4.0, CC0-1.0, all-rights-reserved.
-An STL is its own preview (203cli draws the thumbnail); STEP/3MF/OBJ need --preview mesh.stl --thumbnail pic.png.`},
+An STL is its own preview (203cli draws the card's 3D picture, 1280x720 with a transparent background; the site draws it
+again in its studio when you open the model's page); STEP/3MF/OBJ need --preview mesh.stl --thumbnail pic.png.
+A cover and pictures (optional): the card and the page show the cover first, the pictures above the description; without
+a cover they show the 3D render. --cover cover.png and --image a.jpg --image b.jpg on upload, or later:
+  {P} models cover ID cover.png --json           a 16:9 PNG/JPEG/WebP (1280x720), ≤ 2 MB; --remove --yes takes it away
+  {P} models images add ID printed.jpg --caption "Printed in PETG" --json     at most 9, ≤ 2 MB each
+  {P} models images list ID --json   ·   models images edit ID PICTURE --caption "…"   ·   models images order ID PICTURE…
+  {P} models images remove ID PICTURE… --yes --json`},
 
   errors: {title: "Errors and exit codes", text: `
 With --json an error is one JSON line on stderr:

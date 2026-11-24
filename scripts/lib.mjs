@@ -561,10 +561,12 @@ export async function uploadModel(client, args) {
   } else if (preview.format === "stl") {
     thumbnail = renderThumbnail(parseStl(preview.bytes));
   } else {
-    throw new ApiError(0, "usage", "The CLI draws thumbnails only from an STL preview: give --thumbnail <image.png> (640x480)");
+    throw new ApiError(0, "usage", "The CLI draws thumbnails only from an STL preview: give --thumbnail <image.png> (1280x720)");
   }
+  // What drew the card's picture (COMMUNITY.md "Models"): 0 a picture of the uploader's own (never drawn again by
+  // itself), 1 the CLI's render (the site draws it again in its studio when the author opens the model's page).
   const body = {title: args.title, license: args.license, files: entries.map(e => ({name: e.name, format: e.format, size: e.bytes.length})),
-    preview: {format: preview.format, size: preview.bytes.length}, thumbnail: {size: thumbnail.length}};
+    preview: {format: preview.format, size: preview.bytes.length}, thumbnail: {size: thumbnail.length, renderer: args.thumbnail ? 0 : 1}};
   for (const key of ["description", "tags", "target", "firmware", "remix_of", "print"]) if (args[key] !== undefined) body[key] = args[key];
   const made = await client.post("/models", body);
   for (const upload of made.uploads) {
@@ -633,6 +635,24 @@ export async function uploadPicture(client, code, bytes, mime, {caption = "", pl
   } catch (error) {
     // A picture that did not go up gives its place back.
     await client.post(`/firmware/${enc(code)}/images/${enc(made.image.id)}/delete`).catch(() => {});
+    throw error;
+  }
+}
+
+// A model's cover and pictures (COMMUNITY.md "Models": covers and pictures): as a firmware's, at /models/<id>/cover and
+// /models/<id>/images (at most 9, its gallery only). uploadModelPicture answers {id, model}.
+export async function uploadModelCover(client, id, bytes, mime) {
+  const made = await client.post(`/models/${enc(id)}/cover`, {mime, size: bytes.length});
+  await put(client, made.upload, bytes);
+  return await client.post(`/models/${enc(id)}/cover/done`);
+}
+export async function uploadModelPicture(client, id, bytes, mime, {caption = ""} = {}) {
+  const made = await client.post(`/models/${enc(id)}/images`, {mime, size: bytes.length, ...(caption ? {caption} : {})});
+  try {
+    await put(client, made.upload, bytes);
+    return {id: made.image.id, model: await client.post(`/models/${enc(id)}/images/${enc(made.image.id)}/done`)};
+  } catch (error) {
+    await client.post(`/models/${enc(id)}/images/${enc(made.image.id)}/delete`).catch(() => {});
     throw error;
   }
 }
@@ -994,6 +1014,22 @@ op("model_download", "A model file's download link (with out: saves it)", {id: s
   return link;
 });
 op("model_remixes", "Remixes of a model", {id: s("Model id"), page}, ["id"], (c, x) => c.get(`/models/${enc(x.id)}/remixes`, {page: x.page}));
+// Its cover and pictures (COMMUNITY.md "Models": covers and pictures): no cover, the card and the page show its 3D render.
+const imageMime = bytes => (bytes[0] === 0x89 ? "image/png" : bytes[0] === 0xff ? "image/jpeg" : "image/webp");
+op("model_cover", "Set a model's cover from a local picture (PNG, JPEG or WebP, up to 2 MB; shown 16:9 on its card and first on its page)",
+  {id: s("Model id"), file: s("Local path of the picture")}, ["id", "file"], (c, x) => { const bytes = readFile(x.file); return uploadModelCover(c, x.id, bytes, imageMime(bytes)); }, {write: true});
+op("model_cover_delete", "Remove a model's cover (its card and page show the 3D render again)", {id: s("Model id")}, ["id"],
+  (c, x) => c.post(`/models/${enc(x.id)}/cover/delete`), {write: true});
+const modelPictureId = s("A picture's id (8 characters; model_show lists images)");
+op("model_image_add", "Add a picture from a local file (PNG, JPEG or WebP, up to 2 MB) to a model's pictures, shown above its description (at most 9; author, admin)",
+  {id: s("Model id"), file: s("Local path of the picture"), caption: s("Up to 60 characters")}, ["id", "file"],
+  async (c, x) => { const bytes = readFile(x.file); return (await uploadModelPicture(c, x.id, bytes, imageMime(bytes), {caption: x.caption ?? ""})).model; }, {write: true});
+op("model_image_edit", "A model picture's caption (\"\": none)", {id: s("Model id"), image: modelPictureId, caption: s("Up to 60 characters; empty: none")}, ["id", "image", "caption"],
+  (c, x) => c.post(`/models/${enc(x.id)}/images/${enc(x.image)}/edit`, {caption: x.caption}), {write: true});
+op("model_image_delete", "Remove a model's picture", {id: s("Model id"), image: modelPictureId}, ["id", "image"],
+  (c, x) => c.post(`/models/${enc(x.id)}/images/${enc(x.image)}/delete`), {write: true});
+op("model_images_order", "A model's pictures in a new order: every picture's id once", {id: s("Model id"), ids: a("Picture ids")}, ["id", "ids"],
+  (c, x) => c.post(`/models/${enc(x.id)}/images/order`, {ids: x.ids}), {write: true});
 
 // Sound packs and projects (official firmware only)
 for (const [kind, plural, what] of [["sound", "sounds", "sound pack"], ["project", "projects", "project"]]) {

@@ -45,12 +45,16 @@ test("probePort: a HAL firmware's serial port, the Launcher (with info, with acc
   const fw = chipOf({hal: {protocol: 4, classes: ["serial", "midi"]}});
   let p = await probePort(fw.serialPort(), {ms: 800});
   assert.deepEqual([p.kind, p.usb, p.name, p.version, p.mac, p.protocol], ["firmware", "hal", "CardenzaSynth", "0.3.0", MAC, 4]);
+  // `more`: what a page shows of it (free flash, the SD card).
+  p = await probePort(fw.serialPort(), {ms: 800, more: true});
+  assert.deepEqual([p.partitions.free_bytes, p.storage.card, p.storage.card_free], [4194304, true, 12 * 2 ** 30]);
   fw.stop();
 
   // The Launcher that answers `info`.
   const l1 = chipOf({state: "launcher", launcher: {version: "0.3.4-cardenza", info: true}});
-  p = await probePort(l1.serialPort(), {ms: 800});
+  p = await probePort(l1.serialPort(), {ms: 800, more: true});
   assert.deepEqual([p.kind, p.usb, p.version, p.mac], ["launcher", "usj", "0.3.4-cardenza", MAC]);
+  assert.deepEqual([p.storage.card, p.partitions.free_bytes], [true, 4194304], "`fs info`: the card and the free flash");
   l1.stop();
   // One without `info`: its `account`'s device_id is the chip's MAC.
   const l2 = chipOf({state: "launcher", launcher: {version: "0.3.3-cardenza"}});

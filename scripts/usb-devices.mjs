@@ -289,9 +289,11 @@ export function jsonLine(line) {
  *   {kind: 'rom', mac}                                        the ROM's download mode (SYNC answered; the MAC from its eFuses)
  *   {kind: 'silent'}                                          nothing answered: on 303A:1001, a firmware without USB
  *   {kind: 'unavailable', error}                              it would not open (another tab or program has it)
- * with `port` and `usb` (portKind). `ms`: how long for `version`; ROM's SYNC is tried `tries` times, `syncMs` each.
+ * with `port` and `usb` (portKind). `ms`: how long for `version`; ROM's SYNC is tried `tries` times, `syncMs` each. `more`:
+ * also what a page shows of it: a firmware's `partitions` and `storage` (partitionFacts, storageFacts), the Launcher's `fs info`
+ * (the SD card, its free flash), as `partitions` and `storage`.
  */
-export async function probePort(port, {ms = 1500, syncMs = 400, tries = 3, log = () => {}, opened = false, keep = false, rom = true} = {}) {
+export async function probePort(port, {ms = 1500, syncMs = 400, tries = 3, log = () => {}, opened = false, keep = false, rom = true, more = false} = {}) {
   const usb = portKind(port);
   if (!opened) {
     try { await port.open({baudRate: 115200}); } catch (e) { return {kind: 'unavailable', port, usb, error: String((e && e.message) || e)}; }
@@ -322,6 +324,17 @@ export async function probePort(port, {ms = 1500, syncMs = 400, tries = 3, log =
         if (account) { out.account = account; out.mac = account.device_id; await reader.line(/^(OK|ERR)\b/, 300); }
         else if (line && !/unknown command/i.test(line)) out.busy = true;
       }
+      if (more && !out.busy) {
+        // `fs info`: "FS sd <1|0> <total> <free>", "FS flash <size> <unallocated>", OK (Launchers from 2026-11-20).
+        await say('fs info');
+        for (;;) {
+          const line = await reader.line(/^(FS |OK\b|ERR\b)/, ms);
+          if (!line || !line.startsWith('FS ')) break;
+          const w = line.split(/\s+/);
+          if (w[1] === 'sd') out.storage = {card: w[2] === '1', card_total: Number(w[3]) || 0, card_free: Number(w[4]) || 0};
+          if (w[1] === 'flash') out.partitions = {flash_bytes: Number(w[2]) || null, free_bytes: Number(w[3]) || 0};
+        }
+      }
     } else if (first && FIRMWARE_LINE.test(first)) {
       const m = FIRMWARE_LINE.exec(first);
       out = {kind: 'firmware', name: m[1], version: m[2] || null};
@@ -331,6 +344,14 @@ export async function probePort(port, {ms = 1500, syncMs = 400, tries = 3, log =
         out.info = info;
         out.mac = macKey(info.chip && info.chip.mac);
         out.protocol = info.protocol ?? null;
+      }
+      if (more) {
+        // Its partitions (free flash) and its SD card, one JSON line each (`ERR off` without the development channel).
+        for (const [cmd, facts] of [['partitions', partitionFacts], ['storage', storageFacts]]) {
+          await say(cmd);
+          const json = jsonLine(await reader.line(/^(\{|ERR\b)/, ms));
+          if (json) out[cmd] = facts(json);
+        }
       }
     } else if (rom && usb !== 'hal' && usb !== 'drive') {
       reader.drop();
@@ -533,12 +554,11 @@ export function partitionFacts(p) {
   return {free_bytes: p.free_bytes ?? null, flash_bytes: p.flash_bytes ?? null,
     apps: p.partitions.filter((x) => x.type === 'app').map((x) => ({label: x.label, size: x.size, image: x.image ?? null, running: !!x.running}))};
 }
-/** STORAGE's answer: {card: true|false, free_bytes, total_bytes} (docs/usb-dev.md: mounted, free, total). */
+/** STORAGE's answer (docs/usb-dev.md: {"mounted", "path", "card_bytes", "total", "free"}): {card, card_free, card_total}. */
 export function storageFacts(s) {
   if (!s || typeof s !== 'object') return {};
-  const card = s.card && typeof s.card === 'object' ? s.card : s;
-  const mounted = card.mounted ?? card.present ?? null;
-  return {card: mounted === null ? null : !!mounted, card_free: card.free_bytes ?? card.free ?? null, card_total: card.total_bytes ?? card.total ?? null};
+  const mounted = s.mounted ?? null;
+  return {card: mounted === null ? null : !!mounted, card_free: s.free ?? null, card_total: s.total ?? s.card_bytes ?? null};
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -696,7 +716,7 @@ export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'Card
     ...(v4() ? {usb: {vid: HAL_VID, pid: 0x10c0, serial_number: macText(chip.mac), classes: chip.hal.classes}} : {})});
   chip.partitions = () => ({flash_bytes: 16777216, running: 'ota_0', free_bytes: 4194304,
     partitions: [{label: 'ota_0', type: 'app', subtype: 'ota_0', offset: 0x170000, size: 0x690000, image: 1834208, running: true}]});
-  chip.storage = () => ({mounted: true, free_bytes: 12 * 2 ** 30, total_bytes: 15 * 2 ** 30});
+  chip.storage = () => ({mounted: true, path: '/sdcard', card_bytes: 16 * 10 ** 9, total: 15 * 2 ** 30, free: 12 * 2 ** 30});
   const devJson = (op) => (op === DEV_OP.INFO ? chip.info() : op === DEV_OP.PARTITIONS ? chip.partitions() : op === DEV_OP.STORAGE ? chip.storage()
     : op === DEV_OP.HELLO ? {protocol: chip.hal.protocol, max_args: 52, dev: true, settings: true, serial: chip.hal.classes.includes('serial')} : null);
   /** A development-channel request's answer: [{id, seq, flags, payload}] (protocol 1 has no development channel: nothing). */

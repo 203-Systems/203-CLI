@@ -362,6 +362,13 @@ export function demoPort({mode = 'home', id = '', pace = 4000, slow = 0, onLine 
     if (cmd === 'nav') { say('OK nav ' + (words[1] || '')); return; }
     // slow: the first `version` answered late (a Launcher still drawing its home), so the page asks again.
     if (cmd === 'version') { say('Launcher ' + s.version, slow && !answered++ ? slow : 15); return; }
+    // fs info (Launchers from 2026-11-20): the SD card and the free flash.
+    if (cmd === 'fs' && (words[1] || '') === 'info' && info) {
+      say(`FS sd 1 ${15 * 2 ** 30} ${12 * 2 ** 30}`);
+      say('FS flash 16777216 4194304');
+      say('OK');
+      return;
+    }
     // info: a Launcher after 0.3.3 (usb-devices.js): what it is and its chip's MAC, one JSON line.
     if (cmd === 'info' && info) {
       say(JSON.stringify({kind: 'launcher', name: '203 Launcher', version: s.version, board: 'Cardenza',

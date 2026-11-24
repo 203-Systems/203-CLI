@@ -283,9 +283,10 @@ export function jsonLine(line) {
  * What is on `port` (Web Serial's, or 203cli's stand-in; not open, or `opened`): opened, asked, closed again (unless `keep`).
  * Answers one of
  *   {kind: 'firmware', name, version, info, mac, protocol}   a CardenzaHAL firmware's serial port (`version`, `info`)
- *   {kind: 'launcher', version, mac, info?, account?, busy?} the 203 Launcher's console (`info`, else `account`: its device_id
+ *   {kind: 'launcher', version, mac, info?, account?, busy?, drive?} the 203 Launcher's console (`info`, else `account`: its device_id
  *                                                             is the chip's MAC; away from its home screen, or counting down
- *                                                             to its last app: busy, `version` answered ERR)
+ *                                                             to its last app: busy, `version` answered ERR; in its USB drive
+ *                                                             mode: drive, `usb stop` leaves it)
  *   {kind: 'rom', mac}                                        the ROM's download mode (SYNC answered; the MAC from its eFuses)
  *   {kind: 'silent'}                                          nothing answered: on 303A:1001, a firmware without USB
  *   {kind: 'unavailable', error}                              it would not open (another tab or program has it)
@@ -316,7 +317,13 @@ export async function probePort(port, {ms = 1500, syncMs = 400, tries = 3, log =
       await say('info');
       const said = await reader.line(/^(\{|ERR\b)/, ms);
       const info = jsonLine(said);
-      if (info) { out.info = info; out.mac = macKey(info.chip && info.chip.mac); }
+      if (info) {
+        out.info = info;
+        out.mac = macKey(info.chip && info.chip.mac);
+        // Its USB drive mode (0203:10CF; Launchers after 0.3.3): `usb stop` first, nothing else is taken there.
+        if (info.state === 'usb_drive' || usb === 'drive') out.drive = true;
+        if (info.state === 'busy') out.busy = true;
+      } else if (usb === 'drive') out.drive = true;
       if (!out.mac) {
         await say('account');
         const line = await reader.line(/^(ACCOUNT |ERR\b)/, ms);
@@ -502,6 +509,40 @@ export function commandAnswer(bytes, command) {
   return b[0] === HAL.report && b[1] === (command | 0x80) ? b.slice(2) : null;
 }
 
+// WebUSB (CardenzaHAL from 2026-11-24, by default beside MIDI, audio and HID: a vendor interface with no endpoints; its
+// landing page is the community): a system report in HID form is a vendor control request to that interface, OUT bRequest
+// 0x10 with [report ID, bytes…], and each answer is read with IN bRequest 0x11 (64 bytes: [report ID, 63 bytes], or none).
+export const WEBUSB_REQUEST = Object.freeze({send: 0x10, receive: 0x11});
+/** The HAL's vendor interface on a WebUSB device (class 0xFF), or null. */
+export function webusbInterface(device) {
+  const config = device && (device.configuration || (device.configurations || [])[0]);
+  for (const itf of (config && config.interfaces) || []) {
+    for (const alt of itf.alternates || [itf.alternate].filter(Boolean)) if (alt && alt.interfaceClass === 0xff) return itf.interfaceNumber;
+  }
+  return null;
+}
+/** A WebUSB device of the HAL opened and its vendor interface claimed: its number. */
+export async function webusbOpen(device) {
+  if (!device.opened) await device.open();
+  if (!device.configuration && device.selectConfiguration) await device.selectConfiguration(1);
+  const itf = webusbInterface(device);
+  if (itf === null) throw new Error('no vendor interface');
+  try { await device.claimInterface(itf); } catch { /* claimed already */ }
+  return itf;
+}
+/** A system report (64 bytes, 0xCB first) to the HAL over WebUSB. */
+export async function webusbSend(device, itf, report) {
+  await device.controlTransferOut({requestType: 'vendor', recipient: 'interface', request: WEBUSB_REQUEST.send, value: 0, index: itf}, bytesOf(report));
+}
+/** The HAL's next report over WebUSB (64 bytes, its report ID first), or null when none is waiting. */
+export async function webusbReceive(device, itf) {
+  const r = await device.controlTransferIn({requestType: 'vendor', recipient: 'interface', request: WEBUSB_REQUEST.receive, value: 0, index: itf}, REPORT);
+  if (!r || r.status !== 'ok' || !r.data || !r.data.byteLength) return null;
+  const out = new Uint8Array(REPORT);
+  out.set(new Uint8Array(r.data.buffer, r.data.byteOffset, Math.min(REPORT, r.data.byteLength)));
+  return out;
+}
+
 /**
  * One development-channel answer put back together from its messages (each {id, seq, flags, payload}, in order): push()
  * answers null while more are to come, then {ok: true, bytes, json()} or {ok: false, reason}; a gap in seq is a failure.
@@ -659,13 +700,13 @@ export function summary(entry) {
 
 // ---------------------------------------------------------------------------------------------
 // The demo chip (the tests; the pages' ?usb=demo-chip…): one ESP32-S3 that is, as things happen to it, a HAL firmware (on its
-// MIDI, HID and/or serial port), the 203 Launcher on USB-Serial-JTAG (the console: `launcherPort`, launcher-usb's demoPort,
+// MIDI, HID, WebUSB and/or serial port), the 203 Launcher on USB-Serial-JTAG or in its USB drive mode (the console: `launcherPort`, launcher-usb's demoPort,
 // handed in: no import here), the ROM's download mode, or a firmware without USB. Times are scaled by `speed`.
 //   hal.protocol   4 (serial port, INFO everywhere), 3, 2 (INFO over the development channel), 1 (identify only)
-//   hal.classes    of midi, hid, serial
+//   hal.classes    of midi, hid, serial, webusb
 //   hal.restart    'ticket' (the Launcher's home), 'plain' (the Launcher counts down to the firmware: Esc holds it)
 //   launcher       null: no Launcher on the chip (a reset runs the firmware again); else {version, info (it answers `info`)}
-//   state          firmware, launcher, rom, bare (a firmware without USB)
+//   state          firmware, launcher, drive (the Launcher's USB drive mode), rom, bare (a firmware without USB)
 
 export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'CardenzaSynth', version = '0.3.0',
   hal = {}, launcher = {version: '0.3.3-cardenza', info: false, resume: true}, launcherPort = null, speed = 1} = {}) {
@@ -781,6 +822,13 @@ export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'Card
   const hidOut = (r) => setTimeout(() => {
     for (const l of hidListeners) l({reportId: r[0], data: new DataView(Uint8Array.from(r.subarray(1)).buffer)});
   }, ms(5));
+  /** A system report's bytes after its ID (`d`), answered through `out(report)` as the HAL does on HID and WebUSB. */
+  const systemReport = (d, out) => {
+    const command = d[0];
+    if (command === HAL.identify) { out(report([HAL.report, 0xc4, chip.hal.protocol, ...enc.encode(product())])); return; }
+    if (command === HAL.dev) { for (const r of devReports(d[1], d[2])) out(r); return; }
+    if (restartCommand(command)) { out(report([HAL.report, command | 0x80])); setTimeout(() => chip.command(command), ms(20)); }
+  };
   chip.hidDevice = {vendorId: HAL_VID, productId: 0x10c0, collections: [{usagePage: 0xff00, usage: 1}], opened: false,
     get productName() { return product(); },
     async open() { this.opened = true; }, async close() { this.opened = false; },
@@ -788,13 +836,32 @@ export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'Card
     removeEventListener(type, fn) { if (type === 'inputreport') hidListeners.delete(fn); },
     async sendReport(id, data) {
       if (!has('hid')) throw new DOMException('The device has been lost.', 'NotFoundError');
-      const d = Uint8Array.from(data);
-      if (id !== HAL.report) return;
-      const command = d[0];
-      if (command === HAL.identify) { hidOut(report([HAL.report, 0xc4, chip.hal.protocol, ...enc.encode(product())])); return; }
-      if (command === HAL.dev) { for (const r of devReports(d[1], d[2])) hidOut(r); return; }
-      if (restartCommand(command)) { hidOut(report([HAL.report, command | 0x80])); setTimeout(() => chip.command(command), ms(20)); }
+      if (id === HAL.report) systemReport(Uint8Array.from(data), hidOut);
     }};
+  // WebUSB (its vendor interface, number 6 here): control requests 0x10 out, 0x11 in.
+  const usbQueue = [];
+  chip.usbDevice = {vendorId: HAL_VID, productId: 0x10c0, opened: false, configuration: null,
+    configurations: [{configurationValue: 1, interfaces: [{interfaceNumber: 6, alternates: [{interfaceClass: 0xff, interfaceSubclass: 0, interfaceProtocol: 0}]}]}],
+    get productName() { return product(); },
+    get serialNumber() { return v4() ? macText(chip.mac) : chip.mac.toUpperCase(); },
+    async open() { if (!has('webusb')) throw new DOMException('The device was disconnected.', 'NotFoundError'); this.opened = true; },
+    async close() { this.opened = false; },
+    async selectConfiguration() { this.configuration = this.configurations[0]; },
+    async claimInterface() {},
+    async controlTransferOut(setup, data) {
+      if (!has('webusb')) throw new DOMException('The device was disconnected.', 'NetworkError');
+      const d = Uint8Array.from(data);
+      if (setup.request === WEBUSB_REQUEST.send && d[0] === HAL.report) systemReport(d.subarray(1), (r) => usbQueue.push(Uint8Array.from(r)));
+      return {status: 'ok', bytesWritten: d.length};
+    },
+    async controlTransferIn(setup) {
+      if (!has('webusb')) throw new DOMException('The device was disconnected.', 'NetworkError');
+      await new Promise((resolve) => setTimeout(resolve, ms(5)));
+      const r = setup.request === WEBUSB_REQUEST.receive ? usbQueue.shift() : null;
+      return {status: 'ok', data: r ? new DataView(r.buffer) : new DataView(new ArrayBuffer(0))};
+    }};
+  /** WebUSB's devices as the chip has them now. */
+  chip.usbDevices = () => (has('webusb') ? [chip.usbDevice] : []);
   /** WebHID's devices as the chip has them now. */
   chip.hidDevices = () => (has('hid') ? [chip.hidDevice] : []);
 
@@ -925,11 +992,25 @@ export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'Card
     ports.add(port);
     return port;
   };
+  // The Launcher's USB drive mode (Launchers after 0.3.3): 0203:10CF, its console on a serial port that takes `version`,
+  // `info`, `help` and `usb stop` (which leaves the mode: the Launcher's home on USB-Serial-JTAG), nothing else.
+  const drivePort = () => {
+    const port = serialPort({...LAUNCHER_DRIVE}, (line) => {
+      const cmd = line.trim().toLowerCase();
+      if (cmd === 'version') port.say('Launcher ' + chip.launcher.version);
+      else if (cmd === 'info') port.say(JSON.stringify({kind: 'launcher', name: '203 Launcher', version: chip.launcher.version, board: 'Cardenza', state: 'usb_drive', chip: {mac: macText(chip.mac)}, flash_bytes: 16777216}));
+      else if (cmd === 'usb stop') { port.say('OK usb stop'); setTimeout(() => boot(true), ms(30)); }
+      else if (cmd === 'help') { port.say('  version'); port.say('  info'); port.say('  usb stop'); port.say('OK'); }
+      else port.say("ERR busy usb drive: send 'usb stop' first");
+    });
+    return port;
+  };
   /** The serial port the chip shows now (the same object while it stays), or null. */
   chip.serialPort = () => {
     if (chip.port && !chip.port.lost) return chip.port;
     let p = null;
-    if (chip.state === 'firmware' && chip.hal.classes.includes('serial')) p = halSerial();
+    if (chip.state === 'drive') p = drivePort();
+    else if (chip.state === 'firmware' && chip.hal.classes.includes('serial')) p = halSerial();
     else if (chip.state === 'launcher') p = launcherSerial();
     else if (chip.state === 'rom') p = romPort();
     else if (chip.state === 'bare') p = barePort();

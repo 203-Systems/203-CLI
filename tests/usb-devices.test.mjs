@@ -222,3 +222,33 @@ test("the demo chip: a HAL that restarts plainly lets the Launcher count down to
   assert.equal(chip.home, true, "held on its home screen");
   chip.stop();
 });
+
+test("WebUSB: the HAL's vendor interface carries the same reports (identify, INFO); the Launcher's USB drive mode is told and left", async () => {
+  const {webusbOpen, webusbSend, webusbReceive, hidRequest: req} = await import("../scripts/usb-devices.mjs");
+  const chip = chipOf({hal: {protocol: 4, classes: ["webusb"]}});
+  const dev = chip.usbDevices()[0];
+  const itf = await webusbOpen(dev);
+  assert.equal(itf, 6);
+  await webusbSend(dev, itf, Uint8Array.of(HAL.report, HAL.identify));
+  let identity = null;
+  for (let i = 0; i < 20 && !identity; i++) { const r = await webusbReceive(dev, itf); if (r) identity = identifyAnswer(r); }
+  assert.deepEqual(identity, {protocol: 4, product: "Cardenza"});
+  await webusbSend(dev, itf, req(3, DEV_OP.INFO));
+  const answer = new DevAnswer(3);
+  let done = null;
+  for (let i = 0; i < 50 && !done; i++) { const r = await webusbReceive(dev, itf); if (r) done = answer.push(hidAnswer(r)); }
+  assert.equal(infoFacts(done.json()).mac, MAC);
+  assert.equal(macKey(dev.serialNumber), MAC, "its serial number is the MAC too");
+  chip.stop();
+
+  // The drive mode: `info` says so; `usb stop` leaves it for the Launcher's home on USB-Serial-JTAG.
+  const drive = chipOf({state: "drive", launcher: {version: "0.3.4-cardenza", info: true}});
+  const p = await probePort(drive.serialPort(), {ms: 600});
+  assert.deepEqual([p.kind, p.usb, p.drive, p.mac], ["launcher", "drive", true, MAC]);
+  const port = drive.serialPort();
+  await port.open({baudRate: 115200});
+  const w = port.writable.getWriter();
+  await w.write(new TextEncoder().encode("usb stop\n"));
+  assert.ok(await until(() => drive.state === "launcher" && drive.home));
+  drive.stop();
+});

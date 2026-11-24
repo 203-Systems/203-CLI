@@ -682,3 +682,17 @@ test("flash --port: a chip without a Launcher says to recover; nothing is writte
     assert.match(r.error.hint, /devices recover/);
   } finally { unsignal(); stop(); }
 });
+
+test("flash: the Launcher in its USB drive mode (0203:10CF) leaves it with `usb stop`, then is written on its own port", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  const {demoChip} = await import("../scripts/usb-devices.mjs");
+  const chip = demoChip({state: "drive", launcher: {version: "0.3.4-cardenza", info: true}, launcherPort: o => demoPort({...o, pace: 40})});
+  const devDir = fs.mkdtempSync(path.join(dir, "drive-dev-"));
+  const link = path.join(devDir, "ttyACM0");
+  const stop = follow(chip, link);
+  try {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const r = await cli(["flash", "ABC234", "--json"], {C203_SYS: path.join(dir, "no-sys"), C203_DEV: devDir});
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual([r.json.status, r.json.restarted], ["installed", "the Launcher's USB drive mode"]);
+  } finally { stop(); }
+});

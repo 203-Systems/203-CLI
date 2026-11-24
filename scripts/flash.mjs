@@ -304,6 +304,18 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
  */
 async function startLauncher(ctx, port, lines) {
   const seen = await probePort(await openPort(port), {ms: 1500, log: line => lines.push(line)});
+  if (seen.kind === "launcher" && seen.drive) {
+    // Its USB drive mode (Launchers after 0.3.3: 0203:10CF): `usb stop` leaves it, the console comes back on USB-Serial-JTAG.
+    ctx.say(`The Launcher on ${port} is in its USB drive mode: leaving it…`);
+    const before = await serialPorts();
+    const handle = await openPort(port);
+    const dev = new LauncherConsole(handle, line => lines.push(line));
+    try { await dev.send("usb stop"); await dev.answer(/^(OK usb stop|ERR\b)/, 3000); } catch { /* gone: it leaves */ } finally { await dev.close(); }
+    const back = await waitForPort(before, () => serialPorts(), {mac: seen.mac, macOf: p => portMac(p)});
+    if (!back) throw new CliError("no_launcher_port", "The Launcher left its USB drive mode and no serial port came up", {exit: EXIT.later, next: [ctx.cmd()],
+      hint: "Unplug the cable and plug it in again, then run it again"});
+    return {port: back, name: "the Launcher's USB drive mode", via: "usb stop", mac: seen.mac || null};
+  }
   if (seen.kind === "launcher") return null;
   if (seen.kind === "unavailable") throw new CliError("port_unavailable", `The port ${port} cannot be opened: ${seen.error}`, {exit: EXIT.refused, field: "port"});
   if (seen.kind === "firmware") {

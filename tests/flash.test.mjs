@@ -542,7 +542,8 @@ test("flash on Windows: over the COM port, the one there is or --port; log says 
     assert.equal(r.json.status, "installed");
     assert.equal(r.json.port, "COM7", "the Launcher's port, not the Arduino's");
     const seen = JSON.parse(fs.readFileSync(record, "utf8"));
-    assert.deepEqual(seen.opened.map(o => [o.path, o.hupcl, o.rtscts]), [["COM7", false, false]], "nothing else opened");
+    // Asked what it is first (usb-devices.mjs probePort: never taken for the Launcher by its ids), then written.
+    assert.deepEqual(seen.opened.map(o => [o.path, o.hupcl, o.rtscts]), [["COM7", false, false], ["COM7", false, false]], "nothing else opened");
     assert.equal(seen.apps.at(-1).size, app.length);
   }
   const missing = await cli(["flash", "--bin", "win.bin", "--json"], {...env, C203_SERIAL: path.join(dir, "no-such-binding.mjs")});

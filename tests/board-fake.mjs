@@ -92,10 +92,11 @@ export const SETTING_SPECS = [
   {key: "volume_limit", min: 10, max: 100, step: 2, default: 100, unit: ""},
   {key: "screen_brightness", min: 10, max: 100, step: 5, default: 100, unit: "%"},
   {key: "key_brightness", min: 0, max: 15, step: 1, default: 15, unit: ""},
-  {key: "mic_gain", min: -12, max: 36, step: 1, default: 0, unit: "dB"},
   {key: "language", default: 0, choices: [{value: 0, name: "en"}, {value: 1, name: "zh-Hans"}, {value: 3, name: "ja"}, {value: 4, name: "id"}, {value: 5, name: "vi"}]},
   {key: "screenshot_upload", min: 0, max: 1, step: 1, default: 1, unit: ""},
 ];
+// A HAL from the first hours of the settings (2026-11-23, before 8746b6f): the microphone's gain was one of them.
+export const OLDER_SETTING_SPECS = [...SETTING_SPECS.slice(0, 4), {key: "mic_gain", min: -12, max: 36, step: 1, default: 0, unit: "dB"}, ...SETTING_SPECS.slice(4)];
 
 export class FakeBoard {
   constructor(options = {}) {
@@ -118,8 +119,9 @@ export class FakeBoard {
     this.upload = null;
     this.dropOnce = null;     // {op, seq}: that message of that answer is not sent (a gap)
     this.coredump = options.coredump === undefined ? Uint8Array.from({length: 3000}, (_, i) => (i * 31) & 255) : options.coredump;
-    // settings: values the board has (the rest at their defaults, not stored); `keys`: the settings this HAL has.
-    this.specs = SETTING_SPECS.filter(s => !options.keys || options.keys.includes(s.key));
+    // settings: values the board has (the rest at their defaults, not stored); `keys`: the settings this HAL has; `older`: a HAL
+    // that still has mic_gain (OLDER_SETTING_SPECS).
+    this.specs = (options.older ? OLDER_SETTING_SPECS : SETTING_SPECS).filter(s => !options.keys || options.keys.includes(s.key));
     this.values = Object.fromEntries(this.specs.map(s => [s.key, options.settings?.[s.key] ?? s.default]));
     this.stored = new Set(Object.keys(options.settings ?? {}));
     this.saved = options.saved ?? true;

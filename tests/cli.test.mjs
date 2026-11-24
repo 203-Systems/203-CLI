@@ -133,6 +133,24 @@ test("signed out, or with a token that does not work: exit 4 with the way to sig
   assert.match(env.hint, /COMMUNITY_TOKEN/);
 });
 
+test("ctx.json is whether --json was given: text mode says on stderr what JSON mode keeps quiet; a JSON flag is still parsed", async () => {
+  // ctx.json was also the parser of JSON flags (a function, always true): every "if (!ctx.json)" line was lost in text mode.
+  const config = fs.mkdtempSync(path.join(os.tmpdir(), "203cli-login-"));
+  try {
+    const text = await cli(["login", "--token", TOKEN], {env: {XDG_CONFIG_HOME: config}});
+    assert.equal(text.code, 0, text.stderr);
+    assert.match(text.stdout, /^Signed in as Tester \(u1\)/);
+    assert.match(text.stderr, /^Signed in as Tester; the token is in \S+/m, "the token's file, on stderr");
+    assert.ok(!text.stdout.includes(TOKEN) && !text.stderr.includes(TOKEN), "the token itself");
+    const json = await cli(["login", "--token", TOKEN, "--json"], {env: {XDG_CONFIG_HOME: config}});
+    assert.equal(json.code, 0, json.stderr);
+    assert.equal(json.json.status, "signed_in");
+    assert.doesNotMatch(json.stderr, /Signed in as/, "nothing but JSON with --json");
+  } finally { fs.rmSync(config, {recursive: true, force: true}); }
+  const body = refused(await cli(["api", "POST", "/things", "--body", "{not json", "--json"], {token: TOKEN}), 2, "usage");
+  assert.match(body.error, /--body is JSON/);
+});
+
 test("doctor: the API, who you are, today's limits; the token is never printed", async () => {
   const out = ok(await cli(["doctor", "--json"], {token: TOKEN}));
   assert.equal(out.signed_in, true);

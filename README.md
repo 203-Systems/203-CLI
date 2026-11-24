@@ -63,7 +63,7 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool 
 203cli board screenshot          # the device's own screenshot: also on its SD card and uploaded to your account
 203cli screenshots list          # the screenshots your devices uploaded; download (--scale 4), public, rename, delete
 203cli board info                # what runs on it; board memory, press, coredump, files, screen: 203cli help board
-203cli board settings           # the board's volume, brightness, key lights, mic gain, language; set KEY VALUE, reset
+203cli board settings           # the board's volume, brightness, key lights, language; set KEY VALUE, reset
 203cli publish --dry-run        # checks everything the community will check
 203cli publish
 203cli tutorial new             # how to use it: a tutorial (lessons, keys, screenshots); tutorial check, tutorial publish

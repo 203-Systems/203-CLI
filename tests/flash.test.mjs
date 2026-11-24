@@ -399,6 +399,21 @@ test("log: a firmware's console over raw MIDI until a line, other MIDI skipped, 
   midi.close();
 });
 
+test("log in text mode prints the lines as they come (stdout), the colours taken out", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  let answered = false;
+  const midi = await fakeFirmware(got => {
+    if (answered || !ends(got, [0xf0, 0x23, 0x43, 1, 0xf7])) return null;
+    answered = true;
+    return [...sysexText("I (812) CardenzaHAL: init ok\n"), ...sysexText("\x1b[0;32mI (900) app: ready\x1b[0m\n")];
+  });
+  try {
+    const system = fakeSystem({midi: midi.slave});
+    const r = await cli(["log", "--until", "app: ready", "--seconds", "5"], {C203_SYS: system.sys, C203_DEV: system.dev});
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stdout, "I (812) CardenzaHAL: init ok\nI (900) app: ready\nMatched: I (900) app: ready\n");
+  } finally { midi.close(); }
+});
+
 test("log: a crash ends a test with device_crashed and the backtrace; a line that never comes is log_timeout", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
   let answered = false;
   const midi = await fakeFirmware(got => {

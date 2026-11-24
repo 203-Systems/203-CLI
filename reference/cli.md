@@ -1863,25 +1863,25 @@ Rename or move a file or folder on the SD card
 
 ### `203cli board settings`
 
-Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload (value, range or choices, default, stored). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload (value, range or choices, default, stored). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
 
     203cli board settings
     203cli board settings --json
 
 ### `203cli board settings get KEY`
 
-One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload): its value, range or choices, default, whether it is stored
+One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload): its value, range or choices, default, whether it is stored
 
     203cli board settings get volume
     203cli board settings get language --json
 
 ### `203cli board settings set KEY VALUE`
 
-Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code; screenshot_upload: on or off (whether the device uploads its screenshots to its account). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+Change one of the board's settings: VALUE a whole number (80, or 80% where the unit is %), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code; screenshot_upload: on or off (whether the device uploads its screenshots to its account). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
 
     203cli board settings set volume 50
     203cli board settings set language zh --json
-    203cli board settings set mic_gain -6 --json
+    203cli board settings set key_brightness 8 --json
     203cli board settings set volume_limit 60 --json
     203cli board settings set screenshot_upload off --json
 

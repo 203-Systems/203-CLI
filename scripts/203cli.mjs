@@ -928,7 +928,9 @@ async function main(argv) {
     if (!exists && !fs.existsSync(path.dirname(file))) throw new CliError("file_not_found", `The folder of --${dashed(key)} ${flags[key]} does not exist (${path.dirname(file)})`, {field: dashed(key)});
     return file;
   };
-  ctx.json = key => {
+  // A flag's value as JSON. Not ctx.json, which is whether --json was given (a function there was always true, so text mode
+  // lost every line that tests !ctx.json: the board's progress and notes, the log's lines, sign-in's messages).
+  ctx.jsonFlag = key => {
     try { return JSON.parse(flags[key]); } catch { throw ctx.usage(`--${dashed(key)} is JSON`, {field: dashed(key), hint: "Quote it for the shell: --" + dashed(key) + " '[{\"tag\":\"case\"}]'"}); }
   };
   ctx.op = async (name, args) => {

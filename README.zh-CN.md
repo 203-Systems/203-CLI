@@ -49,7 +49,7 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # HAL 的编译工具�
 203cli board screenshot          # 设备自己的截图：同时存在它的 SD 卡上，并上传到你的账号
 203cli screenshots list          # 你的设备上传的截图；download（--scale 4 放大）、public、rename、delete
 203cli board info                # 它运行的是什么；board memory、press、coredump、files、screen：203cli help board
-203cli board settings           # 板子的音量、亮度、键灯、麦克风增益、语言；set KEY VALUE 修改，reset 恢复默认
+203cli board settings           # 板子的音量、亮度、键灯、语言；set KEY VALUE 修改，reset 恢复默认
 203cli publish --dry-run        # 先按社区的检查全部检查一遍
 203cli publish
 203cli tutorial new             # 怎么用：写成教程（一课课、按键、截图）；tutorial check、tutorial publish

@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import {ROOT, NO_UPDATES} from "./fixtures.mjs";
-import {FakeBoard, INFO, SETTING_SPECS, fakePixel, fakePng, widen, packFake, unpackFake} from "./board-fake.mjs";
+import {FakeBoard, INFO, SETTING_SPECS, OLDER_SETTING_SPECS, fakePixel, fakePng, widen, packFake, unpackFake} from "./board-fake.mjs";
 import {pack7, unpack7, sysexRequest, hidRequest, sysexAnswer, hidAnswer, SysexReader, HidReader, Board, BoardError, OP, FLAG, openBoard,
   bridgeLink, lostPart, nodeHidLink, withoutChannel, COREMIDI_BRIDGE} from "../scripts/board-usb.mjs";
 import {keyNumber, keyName, parseCombo, pressSteps, parseSteps, keyRequests, decodeScreen, rgbOf, encodePng, crc32, cardPath, size,
@@ -572,7 +572,12 @@ test("settings: keys and values as typed (aliases, units, languages by tag or na
   assert.equal(settingKey("Volume-Limit", usage), "volume_limit");
   assert.equal(settingKey("lang", usage), "language");
   assert.equal(settingKey("key_lights", usage), "key_brightness");
-  assert.throws(() => settingKey("loudness", usage), e => e.code === "usage" && e.field === "KEY" && /volume, volume_limit, screen_brightness, key_brightness, mic_gain, language/.test(e.message));
+  assert.throws(() => settingKey("loudness", usage), e => e.code === "usage" && e.field === "KEY" && /volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload$/.test(e.message) &&
+    !/mic/.test(e.message + e.hint));
+  // mic_gain: a HAL's from the first hours of the settings, gone in CardenzaHAL 8746b6f (the firmware's own now): never listed,
+  // still taken, so a board on such a HAL answers it.
+  assert.ok(!SETTING_KEYS.includes("mic_gain"));
+  assert.equal(settingKey("mic_gain", usage), "mic_gain");
   assert.throws(() => settingKey("volum", usage, {fix: guess => `203cli board settings get ${guess}`}), e => /Did you mean volume\?/.test(e.hint) && e.next[0] === "203cli board settings get volume");
   assert.equal(settingValue("volume", "50", usage), 50);
   assert.equal(settingValue("mic_gain", "-6", usage), -6);
@@ -593,7 +598,7 @@ test("settings: keys and values as typed (aliases, units, languages by tag or na
 
 test("settings: every one, one, set (the device's clamp said, the limit lowering the volume, a language by name), reset (asked first, the language stays), over SysEx and HID", async () => {
   for (const kind of ["sysex", "hid"]) {
-    const fake = new FakeBoard({kind, protocol: 3, settings: {volume: 64, volume_limit: 90, screen_brightness: 80, mic_gain: 6, language: 1}});
+    const fake = new FakeBoard({kind, protocol: 3, settings: {volume: 64, volume_limit: 90, screen_brightness: 80, language: 1}});
     const all = await boardSettings(ctxFor(fake));
     assert.deepEqual(all.json, {settings: SETTING_SPECS.map(s => fake.setting(s)), saved: true}, "the device's JSON");
     const rows = all.text.split("\n");
@@ -601,7 +606,7 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.match(all.text, /\nvolume +64 +0-90 \(at most volume_limit\) +70 +yes\n/);
     assert.match(all.text, /\nscreen_brightness +80 % +10-100 % +100 % +yes\n/);
     assert.match(all.text, /\nkey_brightness +15 +0-15 +15 +no\n/);
-    assert.match(all.text, /\nmic_gain +\+6 dB +-12 to \+36 dB +0 dB +yes\n/);
+    assert.doesNotMatch(all.text, /mic_gain/);
     assert.match(all.text, /\nlanguage +简体中文 \(zh-Hans\) +en zh-Hans ja id vi +English \(en\) +yes\n/);
     assert.match(all.text, /\nscreenshot_upload +on +off on +on +no\n/);
     const column = line => textWidth(line.slice(0, line.search(/ (0-90|en zh-Hans)/) + 1));
@@ -610,7 +615,7 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.doesNotMatch(all.text, /Not in the board's flash yet/, "saved");
 
     const language = await boardSettingsGet(ctxFor(fake, {args: {KEY: "lang"}}));
-    assert.deepEqual(language.json, {setting: fake.setting(SETTING_SPECS[5]), saved: true});
+    assert.deepEqual(language.json, {setting: fake.setting(SETTING_SPECS.find(s => s.key === "language")), saved: true});
     assert.match(language.text, /^language  简体中文 \(zh-Hans\)\n  choices  English \(en, 0\), 简体中文 \(zh-Hans, 1\), 日本語 \(ja, 3\), Bahasa Indonesia \(id, 4\), Tiếng Việt \(vi, 5\)\n  default  English \(en\)/);
     assert.match((await boardSettingsGet(ctxFor(fake, {args: {KEY: "volume"}}))).text, /^volume  64\n  range    0-90 \(at most volume_limit\); the HOME menu steps by 2\n  default  70\n  stored   yes/);
     assert.equal(fake.requests.at(-1).op, OP.SETTING_GET);
@@ -633,10 +638,7 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.equal(limit.json.clamped, false);
     assert.match(limit.text, /^volume_limit 90 → 60\.\nAlso changed: volume 90 → 60 \(the volume stays under its limit\)\./);
     assert.equal(fake.values.volume, 60);
-    // Negative, signed; a language by name; one the board does not have; the same again.
-    const gain = await boardSettingsSet(ctxFor(fake, {args: {KEY: "mic_gain", VALUE: "-6"}}));
-    assert.deepEqual(fake.requests.at(-1).args.slice(0, 4), [0xfa, 0xff, 0xff, 0xff]);
-    assert.match(gain.text, /^mic_gain \+6 dB → -6 dB\./);
+    // A language by name; one the board does not have; the same again.
     const ja = await boardSettingsSet(ctxFor(fake, {args: {KEY: "language", VALUE: "日本語"}}));
     assert.deepEqual(fake.requests.at(-1).args, [3, 0, 0, 0, ...Buffer.from("language")]);
     assert.equal(ja.json.setting.value, 3);
@@ -664,12 +666,12 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     let asked = null;
     const no = {...ctxFor(fake), interactive: true, confirm: async question => { asked = question; return false; }};
     await assert.rejects(boardSettingsReset(no), e => e.code === "needs_confirmation");
-    assert.match(asked, /^Put the board's settings back to their defaults: volume 60 → 70, volume_limit 60 → 100, screen_brightness 10 % → 100 %, mic_gain -6 dB → 0 dB \(the language stays 日本語 \(ja\)\)\?$/);
+    assert.match(asked, /^Put the board's settings back to their defaults: volume 60 → 70, volume_limit 60 → 100, screen_brightness 10 % → 100 % \(the language stays 日本語 \(ja\)\)\?$/);
     assert.equal(resets(), 0);
     const reset = await boardSettingsReset({...ctxFor(fake), interactive: true, confirm: async () => true});
     assert.equal(resets(), 1);
     assert.equal(reset.json.reset, true);
-    assert.deepEqual(reset.json.changes.map(c => c.key), ["volume", "volume_limit", "screen_brightness", "mic_gain"]);
+    assert.deepEqual(reset.json.changes.map(c => c.key), ["volume", "volume_limit", "screen_brightness"]);
     assert.deepEqual(reset.json.settings, SETTING_SPECS.map(s => fake.setting(s)));
     assert.equal(fake.values.language, 3, "the language stays");
     assert.match(reset.text, /^Back to their defaults \(the language stays 日本語 \(ja\)\):\n  volume +60 +→ +70\n  volume_limit +60 +→ +100\n/);
@@ -687,7 +689,7 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
 test("settings: answered by a firmware built without the development channel; a HAL from before them, a setting it lacks, said plainly", async () => {
   // Protocol 3, the development channel off: the settings answer, the rest is dev_channel_off (HELLO says dev: false).
   const off = new FakeBoard({protocol: 3, off: true});
-  assert.equal((await boardSettings(ctxFor(off))).json.settings.length, 7);
+  assert.equal((await boardSettings(ctxFor(off))).json.settings.length, 6);
   assert.equal((await boardSettingsSet(ctxFor(off, {args: {KEY: "volume", VALUE: "40"}}))).json.setting.value, 40);
   await assert.rejects(boardInfo(ctxFor(off)), e => e.code === "dev_channel_off" && /board settings works without it/.test(e.hint));
   assert.ok(!off.requests.some(q => q.op === OP.INFO), "HELLO said so: INFO not asked");
@@ -706,12 +708,30 @@ test("settings: answered by a firmware built without the development channel; a 
   await assert.rejects(boardSettings(ctxFor(odd)), e => e.code === "hal_too_old" && /2026-11-23/.test(e.hint));
   await assert.rejects(boardSettingsGet(ctxFor(odd, {args: {KEY: "volume"}})), e => e.code === "board_refused" && e.data.reason === "off");
   const fewer = new FakeBoard({protocol: 3, keys: ["volume", "volume_limit", "language"]});
-  await assert.rejects(boardSettingsGet(ctxFor(fewer, {args: {KEY: "mic_gain"}})), e => e.code === "board_refused" && e.data.reason === "unknown setting" && /does not have that setting/.test(e.hint));
+  await assert.rejects(boardSettingsGet(ctxFor(fewer, {args: {KEY: "screen_brightness"}})), e => e.code === "board_refused" && e.data.reason === "unknown setting" &&
+    /does not have that setting: 203cli board settings lists/.test(e.hint));
+  // mic_gain on a current HAL: refused by the board, and why.
+  await assert.rejects(boardSettingsGet(ctxFor(new FakeBoard({protocol: 3}), {args: {KEY: "mic_gain"}})), e => e.code === "board_refused" && e.data.reason === "unknown setting" &&
+    /does not have that setting \(since 8746b6f, 2026-11-23, the microphone's gain is a firmware's own setting, not the board's\)/.test(e.hint));
   // A wrong key or value: before the device is opened.
   const untouched = new FakeBoard({protocol: 3});
   await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "loudness", VALUE: "3"}})), e => e.code === "usage");
   await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "volume", VALUE: "loud"}})), e => e.code === "usage");
   assert.deepEqual(untouched.requests, []);
+});
+
+test("settings: a HAL that still has mic_gain (before 8746b6f) shows it, answers it and resets it, as the board reports it", async () => {
+  const older = new FakeBoard({protocol: 3, older: true, settings: {volume: 64, mic_gain: 6}});
+  const all = await boardSettings(ctxFor(older));
+  assert.deepEqual(all.json.settings, OLDER_SETTING_SPECS.map(s => older.setting(s)), "the device's list, as it is");
+  assert.match(all.text, /\nmic_gain +\+6 dB +-12 to \+36 dB +0 dB +yes\n/);
+  assert.match((await boardSettingsGet(ctxFor(older, {args: {KEY: "mic_gain"}}))).text, /^mic_gain  \+6 dB\n  range    -12 to \+36 dB\n  default  0 dB/);
+  const gain = await boardSettingsSet(ctxFor(older, {args: {KEY: "mic_gain", VALUE: "-6dB"}}));
+  assert.deepEqual(older.requests.at(-1).args, [0xfa, 0xff, 0xff, 0xff, ...Buffer.from("mic_gain")], "negative, i32 little-endian");
+  assert.match(gain.text, /^mic_gain \+6 dB → -6 dB\./);
+  const reset = await boardSettingsReset(ctxFor(older, {flags: {yes: true}}));
+  assert.deepEqual(reset.json.changes, [{key: "volume", from: 64, to: 70}, {key: "mic_gain", from: -6, to: 0}]);
+  assert.deepEqual(older.violations, []);
 });
 
 test("the bridge's python compiles; a bridge process carries the bytes both ways (hex lines)", {skip: spawnSync("python3", ["-c", "1"]).status !== 0 && "no python3"}, async () => {
@@ -947,6 +967,22 @@ test("203cli board screenshot over raw MIDI: an agent's one command, the card's 
   } finally { pty2.close(); }
 });
 
+test("203cli board in text mode says what it saw on stderr, and nothing there with --json (ctx.json is a yes or no)", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
+  const fake = new FakeBoard();
+  const pty = await ptyFor(fake);
+  try {
+    const env = standInSystem({midi: pty.slave});
+    const text = await cli(["board", "screen", "--out", "said.png"], env);
+    assert.equal(text.code, 0, text.stderr);
+    assert.equal(text.stdout.trim(), path.join(dir, "said.png"));
+    assert.match(text.stderr, /^240 × 135, (a frame the firmware presented after the request|the firmware's last frame)/m);
+    const json = await cli(["board", "screen", "--out", "quiet.png", "--json"], env);
+    assert.equal(json.code, 0, json.stderr);
+    assert.equal(json.json.width, 240);
+    assert.doesNotMatch(json.stderr, /240 × 135/);
+  } finally { pty.close(); }
+});
+
 test("203cli board over hidraw when raw MIDI cannot be opened; a HAL too old says so", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
   const fake = new FakeBoard({kind: "hid", rle: false});
   const pty = await ptyFor(fake);
@@ -979,7 +1015,7 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
     const env = standInSystem({midi: pty.slave});
     const all = await cli(["board", "settings", "--json"], env);
     assert.equal(all.code, 0, all.stderr);
-    assert.deepEqual(all.json.settings.map(s => [s.key, s.value]), [["volume", 64], ["volume_limit", 90], ["screen_brightness", 100], ["key_brightness", 15], ["mic_gain", 0], ["language", 1],
+    assert.deepEqual(all.json.settings.map(s => [s.key, s.value]), [["volume", 64], ["volume_limit", 90], ["screen_brightness", 100], ["key_brightness", 15], ["language", 1],
       ["screenshot_upload", 1]]);
     const text = await cli(["board", "settings"], env);
     assert.equal(text.code, 0, text.stderr);
@@ -987,9 +1023,9 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
     const set = await cli(["board", "settings", "set", "volume_limit", "50", "--json"], env);
     assert.equal(set.code, 0, set.stderr);
     assert.deepEqual(set.json.changed, ["volume", "volume_limit"]);
-    const gain = await cli(["board", "settings", "set", "mic_gain", "-3"], env);
-    assert.equal(gain.code, 0, gain.stderr);
-    assert.match(gain.stdout, /^mic_gain 0 dB → -3 dB\./);
+    const keys = await cli(["board", "settings", "set", "key_brightness", "8"], env);
+    assert.equal(keys.code, 0, keys.stderr);
+    assert.match(keys.stdout, /^key_brightness 15 → 8\./);
     const ja = await cli(["board", "settings", "set", "language", "ja", "--json"], env);
     assert.equal(ja.json.setting.value, 3);
     const unasked = await cli(["board", "settings", "reset", "--json"], env);
@@ -999,7 +1035,7 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
     assert.equal(fake.values.volume_limit, 50, "not reset");
     const reset = await cli(["board", "settings", "reset", "--yes", "--json"], env);
     assert.equal(reset.code, 0, reset.stderr);
-    assert.deepEqual(reset.json.settings.map(s => s.value), [70, 100, 100, 15, 0, 3, 1]);
+    assert.deepEqual(reset.json.settings.map(s => s.value), [70, 100, 100, 15, 3, 1]);
     const help = JSON.parse((await cli(["board", "settings", "reset", "--help", "--json"])).stdout);
     assert.equal(help.signin, false);
     assert.deepEqual(help.flags.map(f => f.name), ["--yes"]);

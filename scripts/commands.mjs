@@ -664,12 +664,12 @@ cmd("board files mv FROM TO", "Rename or move a file or folder on the SD card", 
 // The board's settings (CardenzaHAL docs/SETTINGS.md): the HAL's, in every firmware that starts USB on a HAL from 2026-11-23 on,
 // also one built without the development channel. The user may say "device settings": the cable's commands are board's.
 const SETTINGS_ABOUT = "The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one";
-cmd("board settings", `Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload (value, range or choices, default, stored). ${SETTINGS_ABOUT}`, {...BOARD,
+cmd("board settings", `Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload (value, range or choices, default, stored). ${SETTINGS_ABOUT}`, {...BOARD,
   run: boardSettings, examples: ["board settings", "board settings --json"]});
-cmd("board settings get KEY", "One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload): its value, range or choices, default, whether it is stored", {...BOARD,
+cmd("board settings get KEY", "One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload): its value, range or choices, default, whether it is stored", {...BOARD,
   run: boardSettingsGet, examples: ["board settings get volume", "board settings get language --json"]});
-cmd("board settings set KEY VALUE", `Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code; screenshot_upload: on or off (whether the device uploads its screenshots to its account). ${SETTINGS_ABOUT}`, {...BOARD,
-  run: boardSettingsSet, examples: ["board settings set volume 50", "board settings set language zh --json", "board settings set mic_gain -6 --json", "board settings set volume_limit 60 --json", "board settings set screenshot_upload off --json"]});
+cmd("board settings set KEY VALUE", `Change one of the board's settings: VALUE a whole number (80, or 80% where the unit is %), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code; screenshot_upload: on or off (whether the device uploads its screenshots to its account). ${SETTINGS_ABOUT}`, {...BOARD,
+  run: boardSettingsSet, examples: ["board settings set volume 50", "board settings set language zh --json", "board settings set key_brightness 8 --json", "board settings set volume_limit 60 --json", "board settings set screenshot_upload off --json"]});
 cmd("board settings reset", "Every one of the board's settings but the language back to its default (as the Launcher's reset): what the user chose goes, so it asks on a terminal and a program needs --yes; nothing to reset changes nothing", {...BOARD,
   flags: {yes: B("Yes, put them back (only when the user asked for it)")}, run: boardSettingsReset, examples: ["board settings reset", "board settings reset --yes --json"]});
 
@@ -747,7 +747,7 @@ cmd("admin section-set ID", "Admin: replace a section's categories and / or open
   op: "admin_section_set", write: true, args: ctx => {
     if (ctx.flags.categories === undefined && !ctx.flags.open && !ctx.flags.closed) throw ctx.usage("Give --categories JSON, --open or --closed");
     if (ctx.flags.open && ctx.flags.closed) throw ctx.usage("--open or --closed, not both");
-    return {id: ctx.args.ID, ...(ctx.flags.categories !== undefined ? {categories: ctx.json("categories")} : {}),
+    return {id: ctx.args.ID, ...(ctx.flags.categories !== undefined ? {categories: ctx.jsonFlag("categories")} : {}),
       ...(ctx.flags.open ? {open: true} : ctx.flags.closed ? {open: false} : {})};
   }, examples: [`admin section-set models --categories '[{"tag":"case","label_zh":"外壳","label_en":"Cases"}]' --json`, "admin section-set sounds --open --json"]});
 cmd("admin reports", "Admin: reports", {...ADMIN, flags: {status: V("open|resolved", "Which"), ...PAGE}, op: "admin_reports", args: ctx => ({status: ctx.flags.status, page: ctx.flags.page}),
@@ -885,7 +885,7 @@ cmd("admin bots rotate ID", "Admin: a new token for a bot (ID: its id or name); 
 
 cmd("api METHOD PATH", "Call any endpoint (reference/api.md): GET or POST, a path below the API", {group: "Other", flags: {body: V("JSON", "A JSON body for POST")},
   choices: {METHOD: ["GET", "POST", "get", "post"]}, op: "api_request",
-  args: ctx => ({method: ctx.args.METHOD.toUpperCase(), path: ctx.args.PATH, ...(ctx.flags.body ? {body: ctx.json("body")} : {})}),
+  args: ctx => ({method: ctx.args.METHOD.toUpperCase(), path: ctx.args.PATH, ...(ctx.flags.body ? {body: ctx.jsonFlag("body")} : {})}),
   examples: ["api GET /firmware/K7M2QX/versions --json"]});
 cmd("ops", "Every API operation with its JSON schema (for programs)", {group: "Other", offline: true, custom: "ops", examples: ["ops"]});
 

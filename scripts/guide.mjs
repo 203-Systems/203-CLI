@@ -614,8 +614,8 @@ CoreMIDI through python3); Windows over its HID (node-hid, which comes with 203c
 {P} board files ls CardenzaSynth          the SD card: ls, get PATH [LOCAL], put LOCAL [PATH], rm, mkdir, mv FROM TO
                                           (paths from the card's root; a progress line on a terminal)
 {P} board settings                        the board's settings: volume, volume_limit, screen_brightness, key_brightness,
-                                          mic_gain, language, screenshot_upload (on: the device uploads its screenshots to
-                                          its account) (value, range or choices, default, stored); get KEY, set KEY VALUE
+                                          language, screenshot_upload (on: the device uploads its screenshots to its
+                                          account) (value, range or choices, default, stored); get KEY, set KEY VALUE
                                           (the device keeps it in range and says so; language: en zh ja id vi), reset (all but
                                           the language; asks, --yes from a program). The HAL's, the same in every firmware and
                                           in HOME > Settings; the device writes a change to its flash a second after the last

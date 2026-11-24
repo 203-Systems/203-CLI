@@ -268,8 +268,9 @@ export function boardCliError(error, ctx, {need = "dev", product = "the device"}
       if (need === "settings") {
         if (reason === "unknown request") return settingsTooOld(product);
         if (reason === "unknown setting") {
+          const gone = FORMER_SETTINGS[formerSettingKey(ctx.args?.KEY)];
           return new CliError("board_refused", `The firmware refused: ${reason}`, {exit: EXIT.refused, data: {reason},
-            hint: "This firmware's CardenzaHAL does not have that setting: 203cli board settings lists the ones it has"});
+            hint: `This firmware's CardenzaHAL does not have that setting${gone ? ` (${gone})` : ""}: 203cli board settings lists the ones it has`});
         }
         return new CliError("board_refused", `The firmware refused: ${reason}`, {exit: EXIT.refused, hint: "Read the reason; 203cli board settings lists what the device has", data: {reason}});
       }
@@ -977,7 +978,7 @@ export async function filesMv(ctx) {
 
 // ---------------------------------------------------------------------------------------------
 // settings: the board's settings (CardenzaHAL docs/SETTINGS.md): the volume and its limit, the screen's and the key lights'
-// brightness, the microphone's gain and the language. They are the HAL's, the same in every firmware on it and in its system
+// brightness and the language. They are the HAL's, the same in every firmware on it and in its system
 // menu (HOME > Settings), kept in the board's flash. SETTINGS, SETTING_GET (the key), SETTING_SET (an i32, then the key) and
 // SETTINGS_RESET are answered by every firmware that starts USB on a HAL from 2026-11-23 on (protocol 3), also one built
 // without the development channel. The device keeps a value in its range and writes a change to its flash itself, a second
@@ -985,12 +986,17 @@ export async function filesMv(ctx) {
 
 /** The keys, in the device's order. */
 // screenshot_upload (CardenzaHAL 2026-11-24): whether a device bound to an account uploads its screenshots there (0 off, 1 on).
-export const SETTING_KEYS = Object.freeze(["volume", "volume_limit", "screen_brightness", "key_brightness", "mic_gain", "language", "screenshot_upload"]);
+export const SETTING_KEYS = Object.freeze(["volume", "volume_limit", "screen_brightness", "key_brightness", "language", "screenshot_upload"]);
+// Keys a HAL had and no longer has, taken (never shown) so a board on such a HAL still answers them, and why a current one
+// refuses them. mic_gain was a board setting for a few hours of 2026-11-23 (CardenzaHAL 8746b6f made the microphone's gain the
+// firmware's own). A board that still reports it shows it in `board settings` like any other, since that list is the device's.
+const FORMER_SETTINGS = Object.freeze({mic_gain: "since 8746b6f, 2026-11-23, the microphone's gain is a firmware's own setting, not the board's"});
+const FORMER_SETTING_KEYS = Object.freeze(Object.keys(FORMER_SETTINGS));
 // Other words taken for keys (never shown): the flash's names and short ones.
 const SETTING_ALIASES = Object.freeze({lang: "language", limit: "volume_limit", volume_max: "volume_limit", max_volume: "volume_limit",
   brightness: "screen_brightness", backlight: "screen_brightness", key_light: "key_brightness", key_lights: "key_brightness", mic: "mic_gain",
   auto_upload: "screenshot_upload", screenshots_upload: "screenshot_upload", upload: "screenshot_upload"});
-// The unit a VALUE may carry (80%, +6dB).
+// The unit a VALUE may carry (80%, +6dB: mic_gain, a former key).
 const SETTING_UNITS = Object.freeze({volume: "%", volume_limit: "%", screen_brightness: "%", mic_gain: "db"});
 const SETTING_EXAMPLES = Object.freeze({volume: "50", volume_limit: "80", screen_brightness: "60", key_brightness: "8", mic_gain: "-6", language: "zh", screenshot_upload: "off"});
 // A switch's words (screenshot_upload): on 1, off 0.
@@ -1008,19 +1014,26 @@ const LANGUAGE_LIST = LANGUAGES.map(l => `${l.tag} (${l.name})`).join(", ");
 /** A language's own name from its tag (the device's choices name them by tag); an unknown tag as it is. */
 export const languageName = tag => LANGUAGES.find(l => l.tag.toLowerCase() === String(tag).toLowerCase())?.name ?? String(tag);
 
+/** The former key (FORMER_SETTINGS) that was typed, or null. */
+function formerSettingKey(text) {
+  const typed = String(text ?? "").trim().toLowerCase().replace(/-/g, "_");
+  const key = FORMER_SETTING_KEYS.includes(typed) ? typed : SETTING_ALIASES[typed];
+  return FORMER_SETTING_KEYS.includes(key) ? key : null;
+}
+
 /** A setting's key from what was typed (any case, - for _, a few other words), or a usage error that lists them. */
 export function settingKey(text, usage, {fix = null} = {}) {
   const typed = String(text ?? "").trim().toLowerCase().replace(/-/g, "_");
-  const key = SETTING_KEYS.includes(typed) ? typed : SETTING_ALIASES[typed];
+  const key = SETTING_KEYS.includes(typed) || FORMER_SETTING_KEYS.includes(typed) ? typed : SETTING_ALIASES[typed];
   if (key) return key;
   const guess = nearest(typed, SETTING_KEYS);
   throw usage(`"${text}" is not one of the board's settings: ${SETTING_KEYS.join(", ")}`, {field: "KEY",
-    hint: `${guess ? `Did you mean ${guess}? ` : ""}The keys: volume (0-100), volume_limit (10-100), screen_brightness (10-100 %), key_brightness (0-15), mic_gain (-12 to +36 dB), language, screenshot_upload (on or off)`,
+    hint: `${guess ? `Did you mean ${guess}? ` : ""}The keys: volume (0-100), volume_limit (10-100), screen_brightness (10-100 %), key_brightness (0-15), language, screenshot_upload (on or off)`,
     ...(guess && fix ? {next: [fix(guess)]} : {})});
 }
 
 /**
- * VALUE for a key: a whole number (80, -6, +6; 80% or 6dB in the setting's unit); the language also by its tag or name (en, zh,
+ * VALUE for a key: a whole number (80, -6, +6; 80%, or 6dB for a former mic_gain, in the setting's unit); the language also by its tag or name (en, zh,
  * zh-Hans, ja, id, vi, English, 日本語 …), as the Launcher's code. A number out of range is the device's to clamp (it says so).
  */
 export function settingValue(key, text, usage) {

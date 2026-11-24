@@ -216,6 +216,18 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `POST /works/{id}/favorite` | Favourite or not — body: on | write | Reaction |
 | `POST /works/{id}/play` | Count a play (once a day per viewer) |  | Plays |
 
+## Screenshots
+
+| | | auth | answer |
+|---|---|---|---|
+| `GET /me/screenshots?device` | Own screenshots, newest first (endless: cursor), with the quota (1000, 200 MB) | read | ScreenshotList |
+| `POST /me/screenshots` | Upload a screenshot (the PNG as the body, at most 256 KB; private): from a device's card over USB (X-Device-Id) or a computer; the same answers as the device's; 60 a minute — body:  | write | 201 NewScreenshot |
+| `GET /users/{id}/screenshots` | A person's public screenshots, newest first (endless: cursor) |  | ScreenshotList |
+| `GET /screenshots/{id}` | A screenshot: its owner's, or anyone's when public (else 404) |  | Screenshot |
+| `GET /screenshots/{id}/png?download` | A screenshot's PNG as uploaded, to the same people (a private one: Cache-Control private, no-store) |  | Png |
+| `POST /screenshots/{id}/edit` | Make a screenshot public or private, or give it a title (its owner) — body: public?, title? | write | Screenshot |
+| `POST /screenshots/{id}/delete` | Delete a screenshot (its owner; an admin a public one): its device will not send it again | write | Deleted |
+
 ## Models
 
 | | | auth | answer |
@@ -337,3 +349,4 @@ Lists answer `{total, page, page_size, items}` (24 a page, `?page=`); the sectio
 | `POST /launcher/installed` | Count a download (once per device and version); with the device token also that firmware's installed build on the device (verified with its signed statement) — body: app_id, code, signed? | device token optional | 204 none |
 | `POST /device/works` | A device's work (audio/wav); the firmware is found from what it runs — body: title, description?, tags?, kind, mime, size, duration_ms?, version_label?, firmware_match | device token | 201 NewWork |
 | `POST /device/works/{id}/done` | The device's file is uploaded | device token | DeviceWorkDone |
+| `POST /device/screenshots` | A screenshot from the device's card (the PNG as the body, at most 256 KB; private): 201 stored, 200 had it already (or deleted: true, its owner deleted it, never send it again); 409 quota_full; 30 a minute; now: the community's clock — body:  | device token | 201 NewScreenshot |

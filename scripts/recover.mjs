@@ -6,8 +6,9 @@
 //   --port PORT    written over USB with Espressif's esptool (Python: `python3 -m esptool`; Node has no serial
 //                  port): erase the whole flash, write each image (esptool verifies each one's MD5), hard reset.
 //                  It erases everything in the device's internal flash: --yes. A port that is not there while a
-//                  firmware on CardenzaHAL runs (it has none): that firmware is restarted into the ROM's download mode
-//                  first (restart.mjs, the HAL's command 0x42, as the website's /recover does over Web MIDI).
+//                  firmware on CardenzaHAL runs (it has none), or that firmware's own serial port: it is restarted into
+//                  the ROM's download mode first (restart.mjs, the HAL's command 0x42, as the website's /recover does over
+//                  Web MIDI) and the port it comes back on is taken.
 //   --dry-run      the plan only.
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
@@ -15,8 +16,9 @@ import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {recoveryPlan, sha256Hex, describePlan, RecoveryError} from "./recover-plan.mjs";
 import {CliError, EXIT} from "./guide.mjs";
-import {restartToPort} from "./flash.mjs";
+import {restartToPort, openPort} from "./flash.mjs";
 import {HAL_COMMAND} from "./restart.mjs";
+import {probePort} from "./usb-devices.mjs";
 
 const hexAddr = n => "0x" + n.toString(16);
 
@@ -122,6 +124,16 @@ export async function recoverDevice(ctx) {
     const back = await restartToPort(ctx, {want: port, command: HAL_COMMAND.download});
     if (back && back.port !== port) ctx.say(`The device came back on ${back.port}`);
     if (back) port = back.port;
+  } else {
+    // A HAL firmware's own serial port (CardenzaHAL protocol 4): esptool's reset there would put it in the download mode on
+    // another port (the chip's USB-Serial-JTAG), so it is asked with `download` and the new port is followed.
+    let look = null;
+    try { look = await probePort(await openPort(port), {ms: 1200, rom: false}); } catch { look = null; }
+    if (look && look.kind === "firmware") {
+      const back = await restartToPort(ctx, {command: HAL_COMMAND.download,
+        found: {name: look.name, usb: null, mac: look.mac, candidates: [{via: "serial", path: port}]}});
+      if (back) { ctx.say(`The device came back on ${back.port}`); port = back.port; }
+    }
   }
   const tmp = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR || "/tmp"), "203cli-recover-"));
   try {

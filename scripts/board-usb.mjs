@@ -675,6 +675,8 @@ export async function openBoard({links = null, platform = process.platform, time
       continue;
     }
     board.identity = identity;
+    // SEEN (0x46): a tool reached the board, its WebUSB landing page notice stops; an older HAL ignores it.
+    try { await board.send(board.kind === "hid" ? halReport(0x46) : Uint8Array.from(halSysex(0x46))); } catch { /* not needed */ }
     if (need === "settings" && identity.protocol < SETTINGS_PROTOCOL) {
       await board.close();
       throw settingsTooOld(identity.product || board.name, identity.protocol);

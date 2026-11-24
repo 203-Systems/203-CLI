@@ -45,6 +45,7 @@ test("probePort: a HAL firmware's serial port, the Launcher (with info, with acc
   const fw = chipOf({hal: {protocol: 4, classes: ["serial", "midi"]}});
   let p = await probePort(fw.serialPort(), {ms: 800});
   assert.deepEqual([p.kind, p.usb, p.name, p.version, p.mac, p.protocol], ["firmware", "hal", "CardenzaSynth", "0.3.0", MAC, 4]);
+  assert.equal(fw.seen, 1, "SEEN sent: its WebUSB landing page notice stops");
   // `more`: what a page shows of it (free flash, the SD card).
   p = await probePort(fw.serialPort(), {ms: 800, more: true});
   assert.deepEqual([p.partitions.free_bytes, p.storage.card, p.storage.card_free], [4194304, true, 12 * 2 ** 30]);

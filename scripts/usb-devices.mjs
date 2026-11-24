@@ -352,6 +352,8 @@ export async function probePort(port, {ms = 1500, syncMs = 400, tries = 3, log =
         out.mac = macKey(info.chip && info.chip.mac);
         out.protocol = info.protocol ?? null;
       }
+      // A tool reached it (SEEN): its WebUSB landing page notice stops.
+      await say('seen');
       if (more) {
         // Its partitions (free flash) and its SD card, one JSON line each (`ERR off` without the development channel).
         for (const [cmd, facts] of [['partitions', partitionFacts], ['storage', storageFacts]]) {
@@ -400,7 +402,10 @@ export async function probePort(port, {ms = 1500, syncMs = 400, tries = 3, log =
 // ---------------------------------------------------------------------------------------------
 // The HAL's system channel as bytes (CardenzaHAL usb/usb.h, docs/usb-dev.md): SysEx, HID report 0xCB, serial `sys` lines
 
-export const HAL = Object.freeze({report: 0xcb, launcher: 0x40, reboot: 0x41, download: 0x42, console: 0x43, identify: 0x44, dev: 0x45});
+// 0x46 SEEN (CardenzaHAL from 2026-11-24): a computer's tool reached the board; the HAL stops showing its WebUSB landing page
+// notice (the board's setting webusb_landing: first time, always, never). Sent on every way a host connects; an older HAL
+// ignores it. Answer 0xC6 (serial: "OK seen").
+export const HAL = Object.freeze({report: 0xcb, launcher: 0x40, reboot: 0x41, download: 0x42, console: 0x43, identify: 0x44, dev: 0x45, seen: 0x46});
 export const DEV_OP = Object.freeze({HELLO: 0x00, INFO: 0x01, PARTITIONS: 0x02, STORAGE: 0x04, STATUS: 0x05});
 export const DEV_FLAG = Object.freeze({LAST: 1, ERROR: 2});
 const REPORT = 64;   // a HID report with its ID first: 0xCB, then the HAL's 63 bytes
@@ -783,6 +788,7 @@ export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'Card
     if (!has('midi') || b[0] !== 0xf0 || b[1] !== 0x23) return;
     const command = b[2];
     if (command === HAL.identify) { sysexOut([0xf0, 0x24, 0x44, chip.hal.protocol, ...enc.encode(product()), 0xf7]); return; }
+    if (command === HAL.seen) { chip.seen = (chip.seen || 0) + 1; if (v4()) sysexOut([0xf0, 0x24, 0x46, 0xf7]); return; }
     if (command === HAL.dev) {
       for (const m of devMessages(b[3], b[4], 48)) sysexOut([0xf0, 0x24, HAL.dev, m.id, m.seq & 0x7f, (m.seq >> 7) & 0x7f, m.flags, ...pack7(m.payload), 0xf7]);
       return;
@@ -826,6 +832,7 @@ export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'Card
   const systemReport = (d, out) => {
     const command = d[0];
     if (command === HAL.identify) { out(report([HAL.report, 0xc4, chip.hal.protocol, ...enc.encode(product())])); return; }
+    if (command === HAL.seen) { chip.seen = (chip.seen || 0) + 1; if (v4()) out(report([HAL.report, 0xc6])); return; }
     if (command === HAL.dev) { for (const r of devReports(d[1], d[2])) out(r); return; }
     if (restartCommand(command)) { out(report([HAL.report, command | 0x80])); setTimeout(() => chip.command(command), ms(20)); }
   };
@@ -917,6 +924,7 @@ export function demoChip({mac = '70af09bceb30', state = 'firmware', name = 'Card
     const port = serialPort({usbVendorId: HAL_VID, usbProductId: 0x10c0}, (line) => {
       const cmd = line.split(/\s+/)[0].toLowerCase();
       if (cmd === 'version') { port.say(`Firmware ${name} ${version}`); return; }
+      if (cmd === 'seen') { chip.seen = (chip.seen || 0) + 1; port.say('OK seen'); return; }
       const op = {info: DEV_OP.INFO, partitions: DEV_OP.PARTITIONS, storage: DEV_OP.STORAGE, hello: DEV_OP.HELLO}[cmd];
       if (op !== undefined) { port.say(JSON.stringify(devJson(op))); return; }
       if (cmd === 'launcher' || cmd === 'download' || cmd === 'reboot') {

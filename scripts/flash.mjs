@@ -25,6 +25,7 @@ import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {spawnSync} from "node:child_process";
 import {LauncherConsole, LauncherError} from "./launcher-usb.mjs";
+import {probePort, hardReset, romReset, macKey, HAL_VID, LAUNCHER_DRIVE} from "./usb-devices.mjs";
 import {findFirmware, restartFirmware, waitForPort, HAL_COMMAND} from "./restart.mjs";
 import {inspectBin, DEFAULT_TARGET} from "./checks.mjs";
 import {CliError, EXIT} from "./guide.mjs";
@@ -41,13 +42,55 @@ export const installName = (name, fallback = "firmware") =>
 /** The device's target from a Launcher version such as 0.2.0-cardenza, or null. */
 export const targetOfVersion = version => (/-(cardenza|nullperator|controller)$/i.exec(String(version || "")) || [])[1]?.toLowerCase() ?? null;
 
-/** USB serial ports a 203 device shows up as (its native USB): /dev/ttyACM* on Linux, /dev/cu.usbmodem* on macOS. (C203_DEV:
- *  another /dev, for the tests.) */
+/** The USB device a Linux tty is on, from sysfs: {vendor, product, serial} (hex ids as numbers), or null. (C203_SYS: another
+ *  /sys, for the tests.) */
+export function ttyUsb(file, sys = process.env.C203_SYS || "/sys") {
+  let dir;
+  try { dir = fs.realpathSync(path.join(sys, "class/tty", path.basename(file), "device")); } catch { return null; }
+  for (let i = 0; i < 6 && dir && dir !== path.dirname(dir); i++, dir = path.dirname(dir)) {
+    const read = name => { try { return fs.readFileSync(path.join(dir, name), "utf8").trim(); } catch { return null; } };
+    const vendor = read("idVendor");
+    if (vendor) return {vendor: parseInt(vendor, 16), product: parseInt(read("idProduct") || "0", 16), serial: read("serial")};
+  }
+  return null;
+}
+/** A Linux tty's chip (its USB serial number: the MAC, as USB-Serial-JTAG and CardenzaHAL give it), or null. */
+export const portMac = (file, platform = process.platform) => (platform === "linux" ? macKey(ttyUsb(file)?.serial) : null);
+
+/** USB serial ports a 203 device's Launcher or ROM can be on (its native USB): /dev/ttyACM* on Linux, /dev/cu.usbmodem* on macOS.
+ *  On Linux a HAL firmware's own serial port (vendor 0203, not the Launcher's drive mode) is left out: it is no Launcher
+ *  (restart.mjs reaches it). (C203_DEV: another /dev, for the tests.) */
 export function listPorts(platform = process.platform, dev = process.env.C203_DEV || "/dev") {
   const pick = (dir, re) => { try { return fs.readdirSync(dir).filter(n => re.test(n)).sort().map(n => path.join(dir, n)); } catch { return []; } };
   if (platform === "darwin") return pick(dev, /^cu\.usbmodem/);
-  if (platform === "linux") return pick(dev, /^ttyACM\d+$/);
+  if (platform === "linux") {
+    return pick(dev, /^ttyACM\d+$/).filter(p => {
+      const usb = ttyUsb(p);
+      return !usb || usb.vendor !== HAL_VID || usb.product === LAUNCHER_DRIVE.usbProductId;
+    });
+  }
   return [];
+}
+
+/**
+ * DTR and RTS on a tty (Web Serial's setSignals for 203cli's ports): python3 sets the modem lines (termios TIOCMBIS / TIOCMBIC;
+ * Node has no ioctl). C203_SIGNALS: a file that gets a line "<dtr> <rts>" instead, for the tests' stand-in chip.
+ */
+export function ttySignals(file) {
+  return async ({dataTerminalReady, requestToSend} = {}) => {
+    const dtr = dataTerminalReady ? 1 : 0, rts = requestToSend ? 1 : 0;
+    if (process.env.C203_SIGNALS) { fs.appendFileSync(process.env.C203_SIGNALS, `${dtr} ${rts}\n`); return; }
+    const script = "import fcntl, os, struct, sys, termios\n" +
+      "fd = os.open(sys.argv[1], os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)\n" +
+      "for bit, on in ((termios.TIOCM_DTR, int(sys.argv[2])), (termios.TIOCM_RTS, int(sys.argv[3]))):\n" +
+      "    fcntl.ioctl(fd, termios.TIOCMBIS if on else termios.TIOCMBIC, struct.pack('I', bit))\n" +
+      "os.close(fd)\n";
+    const run = spawnSync("python3", ["-I", "-c", script, file, String(dtr), String(rts)], {encoding: "utf8"});
+    if (run.status !== 0) {
+      throw new CliError("signals_failed", `The serial port's DTR and RTS cannot be set (${String(run.stderr || run.error?.message || run.status).trim().split("\n").at(-1)})`, {exit: EXIT.refused,
+        hint: "203cli sets them with python3 (macOS: xcode-select --install); or put the device in its Launcher yourself: unplug it, then plug it in again"});
+    }
+  };
 }
 
 /**
@@ -90,7 +133,7 @@ export function openSerial(file) {
     },
   });
   return {
-    readable, writable, path: file,
+    readable, writable, path: file, setSignals: ttySignals(file),
     async open() {},
     async close() { closed = true; input.destroy(); try { fs.closeSync(out); } catch { /* closed */ } },
   };
@@ -120,7 +163,8 @@ export async function windowsBinding() {
 /** The COM ports a 203 device's Launcher (or the ROM's download mode) can be on, in number order: Espressif's USB serial. */
 export function launcherPorts(list) {
   const number = p => Number((/(\d+)$/.exec(p) || [])[1] || 0);
-  return list.filter(p => String(p.vendorId || "").toLowerCase() === ESPRESSIF || /\bVID_303A&/i.test(String(p.pnpId || "")))
+  const drive = p => String(p.vendorId || "").toLowerCase() === "0203" && String(p.productId || "").toLowerCase() === "10cf";
+  return list.filter(p => String(p.vendorId || "").toLowerCase() === ESPRESSIF || /\bVID_303A&/i.test(String(p.pnpId || "")) || drive(p))
     .map(p => p.path).sort((a, b) => number(a) - number(b) || a.localeCompare(b));
 }
 
@@ -173,6 +217,7 @@ export async function openWindowsSerial(file) {
   });
   return {
     readable, writable, path: file,
+    async setSignals({dataTerminalReady, requestToSend} = {}) { await port.set({dtr: !!dataTerminalReady, rts: !!requestToSend}); },
     async open() {},
     async close() { closed = true; try { await port.close(); } catch { /* closed */ } },
   };
@@ -243,12 +288,32 @@ export async function restartToPort(ctx, {want = null, command = HAL_COMMAND.lau
       data: {tried: error.tried || []}});
   }
   if (sent.via !== "coremidi") ctx.say(`Sent over ${sent.via} (${sent.path})${sent.answered ? ": it is restarting" : ""}`);
-  const port = await waitForPort(before, () => serialPorts(), {want});
+  const port = await waitForPort(before, () => serialPorts(), {want, mac: found.mac, macOf: p => portMac(p)});
   if (!port) {
     throw new CliError("no_launcher_port", `${found.name} was asked to restart, and no serial port came up`, {exit: EXIT.later, next: [ctx.cmd()],
       hint: sent.answered ? "Unplug the cable and plug it in again, then run it again" : `This firmware may not take the command: put the device in its Launcher yourself (${BY_HAND}), then run it again`});
   }
-  return {port, name: found.name, via: sent.via};
+  return {port, name: found.name, via: sent.via, mac: found.mac || null};
+}
+
+/**
+ * What is on `port` before the Launcher is looked for there (usb-devices.mjs probePort: a 303A:1001 port is never taken for the
+ * Launcher by its ids): the Launcher (null: go on), a HAL firmware's serial port (restarted into its Launcher over it), the
+ * ROM's download mode or a firmware without USB on the chip's USB-Serial-JTAG (a hard reset over DTR/RTS: the chip starts as
+ * from power-on, the Launcher holds against its countdown). Answers {port, name, via, mac} as restartToPort does, or null.
+ */
+async function startLauncher(ctx, port, lines) {
+  const seen = await probePort(await openPort(port), {ms: 1500, log: line => lines.push(line)});
+  if (seen.kind === "launcher") return null;
+  if (seen.kind === "unavailable") throw new CliError("port_unavailable", `The port ${port} cannot be opened: ${seen.error}`, {exit: EXIT.refused, field: "port"});
+  if (seen.kind === "firmware") {
+    return restartToPort(ctx, {found: {name: seen.name, usb: null, mac: seen.mac, candidates: [{via: "serial", path: port}]}});
+  }
+  ctx.say(seen.kind === "rom" ? `The device on ${port} is in the ROM's download mode: starting it…`
+    : `The device on ${port} runs a firmware without USB (nothing answered): restarting it into its Launcher…`);
+  const handle = await openPort(port);
+  try { await hardReset(handle); } finally { await handle.close(); }
+  return {port, name: seen.kind === "rom" ? "the ROM's download mode" : "a firmware without USB", via: "reset", mac: seen.mac || null, reset: seen.kind};
 }
 
 /** Opens the port a restarted device came back on: the system may need a moment to give it its permissions. */
@@ -352,6 +417,10 @@ export async function flashDevice(ctx) {
   const close = async () => { if (dev) { const d = dev; dev = null; await d.close(); } };
   try {
     if (!o.dry_run) {
+      if (!restarted) {
+        const started = await startLauncher(ctx, port, lines);
+        if (started) { restarted = started; port = started.port; }
+      }
       ctx.say(`Looking for the 203 Launcher on ${port}…`);
       for (let attempt = 0; ; attempt++) {
         try {
@@ -364,6 +433,10 @@ export async function flashDevice(ctx) {
           await close();
           const lost = error instanceof LauncherError ? ["timeout", "nolauncher"].includes(error.code) : /EIO|ENXIO|ENODEV|ENOENT/.test(String(error.code || error.message));
           if (!restarted || !lost) throw error;
+          if (restarted.via === "reset" && error instanceof LauncherError && error.code === "nolauncher") {
+            throw new CliError("no_launcher", `The device on ${port} was restarted and no 203 Launcher answered: it has none`, {exit: EXIT.refused,
+              hint: "Put the 203 Launcher on it first: 203cli devices recover --port " + port + " (or the website's /recover)", next: [ctx.run(["devices", "recover", "--port", port, "--dry-run"])]});
+          }
           // Lost to the countdown: once more when the firmware is back, then the person (HOME's menu, or FN held).
           let again = null;
           for (const end = Date.now() + 12000; !again && Date.now() < end;) { again = findFirmware(); if (!again) await sleep(200); }

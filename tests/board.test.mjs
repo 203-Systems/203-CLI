@@ -885,6 +885,53 @@ test("only a serial port: the 203 Launcher is told apart from a firmware that do
   }
 });
 
+test("203cli board over a HAL firmware's serial port (protocol 4): each report a `sys` line, its console between passed over", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
+  const {sysLine, sysReport} = await import("../scripts/usb-devices.mjs");
+  const fake = new FakeBoard({kind: "hid", protocol: 4});
+  // The serial port's side: lines in, the fake's HID reports out as lines, a log line now and then between them.
+  let text = "", sent = 0;
+  const port = {receive(bytes) {
+    text += Buffer.from(bytes).toString("latin1");
+    let at;
+    while ((at = text.indexOf("\n")) >= 0) {
+      const report = sysReport(text.slice(0, at).trim());
+      text = text.slice(at + 1);
+      if (report) fake.receive([...report]);
+    }
+  }};
+  const pty = await ptyFor(port);
+  fake.sink = bytes => {
+    for (let at = 0; at + 64 <= bytes.length; at += 64) {
+      const line = (sent++ % 3 === 0 ? "I (5000) app: tick\r\n" : "") + sysLine(Uint8Array.from(bytes.slice(at, at + 64))) + "\r\n";
+      port.sink([...Buffer.from(line, "latin1")]);
+    }
+  };
+  try {
+    const root = fs.mkdtempSync(path.join(dir, "serial-hal-"));
+    const sys = path.join(root, "sys"), dev = path.join(root, "dev");
+    const usb = path.join(sys, "devices/usb1/1-2");
+    fs.mkdirSync(path.join(usb, "1-2:1.6/tty/ttyACM0"), {recursive: true});
+    fs.writeFileSync(path.join(usb, "idVendor"), "0203\n");
+    fs.writeFileSync(path.join(usb, "idProduct"), "10c0\n");
+    fs.writeFileSync(path.join(usb, "product"), "Cardenza\n");
+    fs.mkdirSync(path.join(sys, "bus/usb/devices"), {recursive: true});
+    fs.symlinkSync(usb, path.join(sys, "bus/usb/devices/1-2"));
+    fs.mkdirSync(path.join(sys, "class/tty/ttyACM0"), {recursive: true});
+    fs.symlinkSync(path.join(usb, "1-2:1.6"), path.join(sys, "class/tty/ttyACM0/device"));
+    fs.mkdirSync(dev);
+    fs.symlinkSync(pty.slave, path.join(dev, "ttyACM0"));
+    const env = {C203_SYS: sys, C203_DEV: dev};
+    const info = await cli(["board", "info", "--json"], env);
+    assert.equal(info.code, 0, info.stderr);
+    assert.deepEqual(info.json, INFO);
+    const textInfo = await cli(["board", "info"], env);
+    assert.match(textInfo.stdout, /USB +serial port \(.*ttyACM0\)/);
+    const ls = await cli(["board", "files", "ls", "--json"], env);
+    assert.equal(ls.code, 0, ls.stderr);
+    assert.deepEqual(fake.violations, []);
+  } finally { pty.close(); }
+});
+
 test("Ctrl-C: the firmware is told to stop (CANCEL; an upload PUT_ABORT), nothing half-written is left here, exit 130", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
   const big = Buffer.from(Array.from({length: 60000}, (_, i) => (i * 3) & 255));
   const fake = new FakeBoard({files: {"big.bin": big}, pace: 20});

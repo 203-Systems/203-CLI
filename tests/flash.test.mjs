@@ -235,14 +235,24 @@ async function fakeFirmware(answer) {
 }
 
 /** A stand-in sysfs and /dev with a Cardenza running a firmware on USB (its sound card and hidraw under it). */
-function fakeSystem({product = "203 Systems Cardenza", vendor = "0203", midi = null, hid = null} = {}) {
+function fakeSystem({product = "203 Systems Cardenza", vendor = "0203", productId = "2040", midi = null, hid = null, tty = null, serial = null} = {}) {
   const root = fs.mkdtempSync(path.join(dir, "sys-"));
   const sys = path.join(root, "sys"), dev = path.join(root, "dev");
   const usb = path.join(sys, "devices/usb1/1-2");
   fs.mkdirSync(path.join(usb, "1-2:1.0"), {recursive: true});
   fs.mkdirSync(path.join(usb, "1-2:1.5/0003:0203:2040.0001"), {recursive: true});
   fs.writeFileSync(path.join(usb, "idVendor"), vendor + "\n");
+  fs.writeFileSync(path.join(usb, "idProduct"), productId + "\n");
   fs.writeFileSync(path.join(usb, "product"), product + "\n");
+  if (serial) fs.writeFileSync(path.join(usb, "serial"), serial + "\n");
+  // Its serial port (CardenzaHAL protocol 4): ttyACM0 under the USB device; `tty`: the pty behind it, or true for none.
+  if (tty) {
+    fs.mkdirSync(path.join(usb, "1-2:1.6/tty/ttyACM0"), {recursive: true});
+    fs.mkdirSync(path.join(sys, "class/tty/ttyACM0"), {recursive: true});
+    fs.symlinkSync(path.join(usb, "1-2:1.6"), path.join(sys, "class/tty/ttyACM0/device"));
+    fs.mkdirSync(dev, {recursive: true});
+    if (typeof tty === "string") fs.symlinkSync(tty, path.join(dev, "ttyACM0"));
+  }
   fs.mkdirSync(path.join(sys, "bus/usb/devices"), {recursive: true});
   fs.symlinkSync(usb, path.join(sys, "bus/usb/devices/1-2"));
   fs.mkdirSync(path.join(sys, "class/sound/card1"), {recursive: true});
@@ -273,8 +283,29 @@ test("restart.mjs: the firmware found in sysfs (never a Mystrix), and in macOS's
     "    +-o USB JTAG/serial debug unit@01200000  <class IOUSBHostDevice, id 0x100000a12>",
     '          "idVendor" = 12346', '          "USB Product Name" = "USB JTAG/serial debug unit"',
   ].join("\n");
-  assert.deepEqual(findFirmware({platform: "darwin", ioreg}), {name: "203 Systems Cardenza", usb: null, candidates: [{via: "coremidi"}]});
+  assert.deepEqual(findFirmware({platform: "darwin", ioreg}), {name: "203 Systems Cardenza", usb: null, mac: null, candidates: [{via: "coremidi"}]});
   assert.equal(findFirmware({platform: "darwin", ioreg: ioreg.replace("203 Systems Cardenza\"", "203 Systems Mystrix\"")}), null);
+  // CardenzaHAL protocol 4: its serial port under it (first: no python3 needed), its MAC from the USB serial number; the
+  // Launcher's USB drive mode (0203:10CF, also "Cardenza") is no firmware.
+  const v4 = [
+    "+-o Cardenza@01100000  <class IOUSBHostDevice, id 0x100000a11>",
+    "  {", '    "idProduct" = 4288', '    "USB Product Name" = "Cardenza"', '    "USB Serial Number" = "70:AF:09:BC:EB:30"', '    "idVendor" = 515', "  }",
+    "  +-o IOUSBHostInterface@0  <class IOUSBHostInterface, id 0x100000a12>",
+    "  | +-o AppleUSBACMData  <class AppleUSBACMData, id 0x100000a13>",
+    "  |   +-o IOSerialBSDClient  <class IOSerialBSDClient, id 0x100000a14>",
+    '  |       "IOCalloutDevice" = "/dev/cu.usbmodem11101"', '  |       "IODialinDevice" = "/dev/tty.usbmodem11101"',
+    "+-o Cardenza@01200000  <class IOUSBHostDevice, id 0x100000b11>",
+    "  {", '    "idProduct" = 4303', '    "USB Product Name" = "Cardenza"', '    "idVendor" = 515', "  }",
+  ].join("\n");
+  assert.deepEqual(findFirmware({platform: "darwin", ioreg: v4}), {name: "Cardenza", usb: null, mac: "70af09bceb30",
+    candidates: [{via: "serial", path: "/dev/cu.usbmodem11101"}, {via: "coremidi"}]});
+  assert.equal(findFirmware({platform: "darwin", ioreg: v4.split("\n").slice(11).join("\n")}), null, "the Launcher's drive mode");
+  // Linux: its tty under the USB device, first; the serial number; the drive mode left out.
+  const t = fakeSystem({product: "Cardenza", midi: "/dev/null", tty: true, serial: "70:AF:09:BC:EB:30"});
+  const withTty = findFirmware({platform: "linux", sys: t.sys, dev: t.dev});
+  assert.deepEqual([withTty.mac, withTty.candidates[0]], ["70af09bceb30", {via: "serial", path: path.join(t.dev, "ttyACM0")}]);
+  const drive = fakeSystem({product: "Cardenza", productId: "10cf", tty: true});
+  assert.equal(findFirmware({platform: "linux", sys: drive.sys, dev: drive.dev}), null);
 });
 
 test("restart.mjs: the command over raw MIDI and over HID, the answer read; CoreMIDI's script compiles", {skip: !PTY && "no python3 pty"}, async () => {
@@ -446,7 +477,12 @@ test("Windows: only Espressif's USB serial is offered, in number order; the firm
   const {findFirmware} = await import("../scripts/restart.mjs");
   const lines = [String.raw`USB\VID_0203&PID_1080\5&1|203 Systems Mystrix 2`, String.raw`USB\VID_303A&PID_1001\7&2|USB JTAG/serial debug unit`,
     String.raw`USB\VID_0203&PID_2040\6&3|203 Systems Cardenza`];
-  assert.deepEqual(findFirmware({platform: "win32", pnp: lines.join("\r\n")}), {name: "203 Systems Cardenza", usb: null, candidates: [{via: "hidapi"}]});
+  assert.deepEqual(findFirmware({platform: "win32", pnp: lines.join("\r\n")}), {name: "203 Systems Cardenza", usb: null, mac: null, candidates: [{via: "serial"}, {via: "hidapi"}]});
+  const v4 = [String.raw`USB\VID_0203&PID_10C0\70:AF:09:BC:EB:30|Cardenza`];
+  assert.equal(findFirmware({platform: "win32", pnp: v4.join("\r\n")}).mac, "70af09bceb30", "the serial number in the instance ID");
+  assert.equal(findFirmware({platform: "win32", pnp: String.raw`USB\VID_0203&PID_10CF\70:AF:09:BC:EB:30|Cardenza`}), null, "the Launcher's drive mode");
+  assert.deepEqual(launcherPorts([{path: "COM8", vendorId: "0203", productId: "10cf"}, {path: "COM9", vendorId: "0203", productId: "10c0"}]), ["COM8"],
+    "the Launcher's drive mode is a Launcher port; a firmware's serial port is not");
   assert.equal(findFirmware({platform: "win32", pnp: lines.slice(0, 2).join("\r\n")}), null, "a Mystrix or the Launcher is no Cardenza firmware");
 });
 
@@ -458,14 +494,14 @@ test("Windows: the restart over node-hid goes to the HAL's system channel only (
   process.env.C203_HID = HID_STAND_IN;
   try {
     const found = findFirmware({platform: "win32"});
-    assert.deepEqual(found, {name: "203 Systems Cardenza", usb: null, candidates: [{via: "hidapi"}]}, "node-hid's list, no PowerShell");
+    assert.deepEqual(found, {name: "203 Systems Cardenza", usb: null, mac: null, candidates: [{via: "serial"}, {via: "hidapi"}]}, "node-hid's list, no PowerShell");
     const sent = await restartFirmware(found, HAL_COMMAND.launcher, {ms: 500});
     assert.deepEqual(sent, {via: "hidapi", path: "node-hid", answered: true});
     assert.deepEqual(standIn.seen.written, [{path: standIn.SYSTEM, bytes: [0xcb, 0x40, 0, 0]}], "report 0xCB, command 0x40, once");
     assert.ok(!standIn.seen.opened.includes(standIn.MYSTRIX), "a Mystrix is never opened");
     await new Promise(resolve => setTimeout(resolve, 60));
     assert.equal(findFirmware({platform: "win32"}), null, "restarted: no firmware on HID any more");
-    await assert.rejects(restartFirmware(found, HAL_COMMAND.launcher, {ms: 200}), e => e.code === "unreachable" && /no Cardenza on HID/.test(e.tried[0].error));
+    await assert.rejects(restartFirmware(found, HAL_COMMAND.launcher, {ms: 200}), e => e.code === "unreachable" && /no Cardenza on HID/.test(e.tried.find(w => w.via === "hidapi").error));
   } finally {
     delete process.env.C203_HID;
     standIn.device.running = true;
@@ -523,4 +559,125 @@ test("flash on Windows: over the COM port, the one there is or --port; log says 
   const log = await cli(["log", "--json"]);
   assert.equal(log.error.code, "unsupported_platform");
   assert.match(log.error.hint, /cardenza_usb\.py console/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Every way to a device (usb-devices.mjs; the user, 2026-11-24: "条条大路通往罗马"): a HAL firmware's serial port, a chip in the
+// ROM's download mode, a firmware without USB on the chip's USB-Serial-JTAG, and one without a Launcher. The demo chip of
+// usb-devices.mjs behind ptys; DTR and RTS through C203_SIGNALS (a file 203cli appends "<dtr> <rts>" lines to).
+
+/** A Web Serial port (open, read, written) on the master side of a pty: {slave, close}. */
+async function ptyOf(port) {
+  await port.open({baudRate: 115200});
+  const py = spawn("python3", ["-I", "-c", BRIDGE], {stdio: ["pipe", "pipe", "inherit"]});
+  const writer = port.writable.getWriter();
+  const slave = await new Promise((resolve, reject) => {
+    let head = "", found = false;
+    py.on("error", reject);
+    py.stdout.on("data", chunk => {
+      if (found) { writer.write(new Uint8Array(chunk)).catch(() => {}); return; }
+      head += chunk.toString("latin1");
+      const at = head.indexOf("\n");
+      if (at < 0) return;
+      found = true;
+      resolve(head.slice(0, at));
+      const rest = Buffer.from(head.slice(at + 1), "latin1");
+      if (rest.length) writer.write(new Uint8Array(rest)).catch(() => {});
+    });
+  });
+  const reader = port.readable.getReader();
+  (async () => { for (;;) { const {value, done} = await reader.read().catch(() => ({done: true})); if (done) break; py.stdin.write(Buffer.from(value)); } })();
+  return {slave, close: () => { py.kill(); try { writer.releaseLock(); } catch { /* gone */ } }};
+}
+
+/** DTR/RTS lines 203cli writes to `file`, applied to the chip's port as they come. */
+function signalsTo(chip, file) {
+  fs.writeFileSync(file, "");
+  let done = 0;
+  const timer = setInterval(() => {
+    const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
+    for (; done < lines.length; done++) {
+      const [dtr, rts] = lines[done].split(" ").map(Number);
+      const port = chip.port;
+      if (port && port.setSignals) port.setSignals({dataTerminalReady: !!dtr, requestToSend: !!rts}).catch(() => {});
+    }
+  }, 5);
+  return () => clearInterval(timer);
+}
+
+/** The chip's serial port behind `link` (a symlink 203cli is given or finds), followed as the chip changes state. */
+function follow(chip, link) {
+  let current = null, bridge = null, stopped = false;
+  const tick = async () => {
+    if (stopped) return;
+    const port = chip.state === "off" ? null : chip.serialPort();
+    if (port !== current) {
+      current = port;
+      try { fs.unlinkSync(link); } catch { /* none */ }
+      if (bridge) { bridge.close(); bridge = null; }
+      if (port) { bridge = await ptyOf(port); if (!stopped) fs.symlinkSync(bridge.slave, link); }
+    }
+    setTimeout(tick, 10);
+  };
+  tick();
+  return () => { stopped = true; if (bridge) bridge.close(); chip.stop(); };
+}
+
+test("flash: a HAL firmware with a serial port is restarted with `launcher` there, its Launcher's port taken, written (no MIDI)", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  const {demoChip} = await import("../scripts/usb-devices.mjs");
+  const chip = demoChip({hal: {protocol: 4, classes: ["serial"]}, launcherPort: o => demoPort({...o, pace: 40})});
+  const system = fakeSystem({product: "Cardenza", productId: "10c0", tty: true, serial: "70:AF:09:BC:EB:30"});
+  const link = path.join(system.dev, "ttyACM0");
+  // While it runs the firmware its tty is under the HAL's USB device; gone, the Launcher's comes back as ttyACM0 on its own.
+  const watch = setInterval(() => {
+    if (chip.state !== "firmware" && fs.existsSync(path.join(system.sys, "class/tty/ttyACM0"))) {
+      system.unplug();
+      fs.rmSync(path.join(system.sys, "class/tty/ttyACM0"), {recursive: true, force: true});
+    }
+  }, 5);
+  const stop = follow(chip, link);
+  try {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const r = await cli(["flash", "ABC234", "--json"], {C203_SYS: system.sys, C203_DEV: system.dev});
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual([r.json.status, r.json.restarted, r.json.port], ["installed", "Cardenza", link]);
+    assert.deepEqual(chip.sent, [0x40], "`launcher` on its serial port, once");
+    assert.equal(chip.restarts, 1);
+  } finally { clearInterval(watch); stop(); }
+});
+
+test("flash --port on the chip's USB-Serial-JTAG: a firmware without USB, the ROM's download mode: reset, the Launcher held, written", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  const {demoChip} = await import("../scripts/usb-devices.mjs");
+  for (const state of ["bare", "rom"]) {
+    const chip = demoChip({state, launcherPort: o => demoPort({...o, pace: 40})});
+    const link = path.join(dir, `usj-${state}`);
+    const signals = path.join(dir, `signals-${state}`);
+    const unsignal = signalsTo(chip, signals);
+    const stop = follow(chip, link);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      const r = await cli(["flash", "ABC234", "--port", link, "--json"], {C203_SIGNALS: signals, C203_SYS: path.join(dir, "no-sys"), C203_DEV: path.join(dir, "no-dev")});
+      assert.equal(r.code, 0, `${state}: ${r.stderr}`);
+      assert.equal(r.json.status, "installed", state);
+      assert.deepEqual(chip.resets, ["run"], `${state}: a hard reset (RTS), never the ROM`);
+      assert.equal(chip.lostToCountdown, 0, `${state}: its countdown held`);
+      assert.match(fs.readFileSync(signals, "utf8"), /^0 1\n0 0\n$/, `${state}: RTS pulsed, DTR low`);
+    } finally { unsignal(); stop(); }
+  }
+});
+
+test("flash --port: a chip without a Launcher says to recover; nothing is written", {skip: (!PTY || process.platform !== "linux") && "linux pty"}, async () => {
+  const {demoChip} = await import("../scripts/usb-devices.mjs");
+  const chip = demoChip({state: "bare", launcher: null});
+  const link = path.join(dir, "usj-none");
+  const signals = path.join(dir, "signals-none");
+  const unsignal = signalsTo(chip, signals);
+  const stop = follow(chip, link);
+  try {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const r = await cli(["flash", "ABC234", "--port", link, "--json"], {C203_SIGNALS: signals, C203_SYS: path.join(dir, "no-sys"), C203_DEV: path.join(dir, "no-dev")});
+    assert.notEqual(r.code, 0);
+    assert.equal(r.error.code, "no_launcher", r.stderr);
+    assert.match(r.error.hint, /devices recover/);
+  } finally { unsignal(); stop(); }
 });

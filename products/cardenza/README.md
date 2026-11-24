@@ -123,16 +123,21 @@ applies them, so a firmware does not set the volume or the brightness itself. Ev
 `hal_too_old`.
 
 Two things it needs: the firmware is **built with a current CardenzaHAL** (an older one says `hal_too_old`: update the
-submodule, build, flash), and it **starts the HAL's USB device**: `CardenzaHAL::USB::Init();` after
-`CardenzaHAL::Init()` in `app_main` (`usb/usb.h`). The template does not call it, so such a firmware is only a serial
-port (USB-Serial-JTAG) and `203cli board` says `board_no_usb`; `203cli log` still reads its console there. With the
-device in its 203 Launcher there is no firmware to ask (`board_in_launcher`). `203cli help board` has every command.
+submodule, build, flash), and it **has the HAL's USB device**: from 2026-11-24 `CardenzaHAL::Init()` starts it by itself
+(before, `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in `app_main`; `usb/usb.h`). Without it the firmware is
+only the chip's own serial port (USB-Serial-JTAG) and `203cli board` says `board_no_usb`; `203cli log` still reads its
+console there. 203cli reaches the firmware over whichever way it has: its serial port (when the firmware has one: no
+MIDI, HID or python3 needed), its MIDI or its HID. With the device in its 203 Launcher there is no firmware to ask
+(`board_in_launcher`). `203cli help board` has every command.
 
 `idf.py flash` writes the whole flash and **erases the 203 Launcher** with every firmware it installed. While
 developing, the HAL's [`tools/cardenza_flash.py`](https://github.com/203-Systems/CardenzaHAL/blob/main/tools/cardenza_flash.py)
 refuses to do that and writes only the app into one of the Launcher's slots (`--app-into <label>`). A firmware that
-starts USB has no serial port: `python3 components/CardenzaHAL/tools/cardenza_usb.py command launcher` (or
-`download`) restarts it into the Launcher (or ROM download mode), and `console` reads its log.
+starts USB has no USB-Serial-JTAG port: `203cli flash` restarts it into its Launcher by itself;
+`python3 components/CardenzaHAL/tools/cardenza_usb.py command launcher` (or `download`) restarts it into the Launcher (or
+ROM download mode), and `console` reads its log. A firmware with the HAL's serial port takes `launcher` and `download`
+there as lines, and esptool's DTR/RTS reset puts it in the ROM's download mode (the board comes back as a new port, the
+chip's USB-Serial-JTAG).
 
 Before you write hot code, read the HAL's [`docs/developing.md`](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/developing.md):
 two RAMs (internal and the 2 MB PSRAM), atomics with PSRAM, `memcpy` and division on this chip, flash writes,

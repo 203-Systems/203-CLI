@@ -14,10 +14,14 @@
 //            its stdin, what the device sends out on its stdout, both as hex lines; the protocol stays here.
 //   Windows  its HID through node-hid (hidapi, 203cli's optional dependency there, prebuilt): the HAL's system channel, the
 //            first vendor collection of the device (restart.mjs systemCollections), read as node-hid's data events.
+//   Serial   a firmware with CardenzaHAL's serial port (protocol 4; usb-devices.mjs), first on every system: each HID-form
+//            report as a line `sys <hex>` both ways, the console's lines between passed over (no MIDI, HID, python3 or
+//            node-hid needed).
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import {spawn, spawnSync} from "node:child_process";
-import {findFirmware, macPython, nodeHid, systemCollections, COREMIDI_PRELUDE} from "./restart.mjs";
+import {findFirmware, macPython, nodeHid, systemCollections, windowsHalPort, COREMIDI_PRELUDE} from "./restart.mjs";
+import {sysLine, sysReport} from "./usb-devices.mjs";
 import {HAL_COMMAND, HAL_REPORT, halReport, halSysex, LauncherConsole} from "./launcher-usb.mjs";
 import {serialPorts, openPort} from "./flash.mjs";
 import {CliError, EXIT} from "./guide.mjs";
@@ -427,6 +431,47 @@ export function fileLink(file, kind) {
   };
 }
 
+/** A HAL firmware's serial port as a HID link (protocol 4): each report a `sys <hex>` line, both ways; other lines (its console)
+ *  passed over. */
+export async function serialLink(file, {platform = process.platform} = {}) {
+  if (!file) throw Object.assign(new Error("no serial port"), {code: "not_found"});
+  const port = await openPort(file, platform);
+  const reader = port.readable.getReader();
+  const writer = port.writable.getWriter();
+  let open = true, text = "";
+  return {
+    kind: "hid", via: "serial", where: file,
+    start(onBytes, onError) {
+      (async () => {
+        for (;;) {
+          let got;
+          try { got = await reader.read(); } catch (error) { if (open) { open = false; onError(error); } return; }
+          if (got.done) { if (open) { open = false; onError(new Error("the port closed")); } return; }
+          text += dec.decode(got.value, {stream: true});
+          let at;
+          while ((at = text.indexOf("\n")) >= 0) {
+            const report = sysReport(text.slice(0, at).trim());
+            text = text.slice(at + 1);
+            if (report) onBytes(report);
+          }
+          if (text.length > 8192) text = "";
+        }
+      })();
+    },
+    async send(bytes) {
+      if (!open) throw new BoardError("gone", "the device went away");
+      await writer.write(enc.encode(sysLine(bytes) + "\n"));
+    },
+    async close() {
+      if (!open && !port) return;
+      open = false;
+      try { await reader.cancel(); } catch { /* gone */ }
+      try { writer.releaseLock(); } catch { /* gone */ }
+      try { await port.close(); } catch { /* gone */ }
+    },
+  };
+}
+
 // The bridges: python3 holds the device for the whole command. Its first line on stdout is JSON, {"ready": true, "name"} or
 // {"error"}; then each line is hex: bytes the device sent ("!" and a reason when it failed). Lines of hex on its stdin are
 // sent to the device. It ignores Ctrl-C (203cli sends CANCEL through it first) and ends when its stdin closes.
@@ -572,16 +617,23 @@ export function boardLinks({platform = process.platform} = {}) {
   if (platform === "linux" || platform === "darwin") {
     const found = findFirmware({platform});
     if (!found) return [];
-    if (platform === "darwin") {
-      return found.candidates.map(way => ({via: "coremidi", where: "CoreMIDI", name: found.name, open: () => {
-        const python = macPython();
-        if (!python) throw new CliError("python_missing", "203cli board reaches a firmware's MIDI on macOS with python3 (CoreMIDI)", {exit: EXIT.refused, hint: "xcode-select --install"});
-        return bridgeLink([python], COREMIDI_BRIDGE, {kind: "sysex", via: way.via});
-      }}));
-    }
-    return found.candidates.map(way => ({via: way.via, where: way.path, name: found.name, open: () => fileLink(way.path, way.via === "hidraw" ? "hid" : "sysex")}));
+    return found.candidates.map(way => {
+      if (way.via === "serial") return {via: "serial", where: way.path, name: found.name, open: () => serialLink(way.path, {platform})};
+      if (way.via === "coremidi") {
+        return {via: "coremidi", where: "CoreMIDI", name: found.name, open: () => {
+          const python = macPython();
+          if (!python) throw new CliError("python_missing", "203cli board reaches a firmware's MIDI on macOS with python3 (CoreMIDI)", {exit: EXIT.refused, hint: "xcode-select --install"});
+          return bridgeLink([python], COREMIDI_BRIDGE, {kind: "sysex", via: way.via});
+        }};
+      }
+      return {via: way.via, where: way.path, name: found.name, open: () => fileLink(way.path, way.via === "hidraw" ? "hid" : "sysex")};
+    });
   }
-  if (platform === "win32") return [{via: "hidapi", where: "HID", name: "Cardenza", open: () => nodeHidLink()}];
+  if (platform === "win32") {
+    // Its serial port (a COM port of vendor 0203) when it has one, else its HID.
+    return [{via: "serial", where: "COM", name: "Cardenza", open: async () => serialLink(await windowsHalPort(), {platform})},
+      {via: "hidapi", where: "HID", name: "Cardenza", open: () => nodeHidLink()}];
+  }
   throw new CliError("unsupported_platform", `203cli board reaches a device over USB on macOS, Linux and Windows, not ${platform}`, {exit: EXIT.refused});
 }
 
@@ -681,7 +733,8 @@ export async function withoutChannel(platform = process.platform, {ms = 1200} = 
         hint: "Start the firmware from the Launcher (or install a build: 203cli flash --bin build/<project>.bin), then run this again", data: {port, launcher: version}});
     }
   }
-  return new CliError("board_no_usb", "This firmware does not start CardenzaHAL's USB device, so the development channel is not available: add `CardenzaHAL::USB::Init();` after " +
+  return new CliError("board_no_usb", "This firmware does not start CardenzaHAL's USB device, so the development channel is not available: rebuild it with a current " +
+    "CardenzaHAL (from 2026-11-24 CardenzaHAL::Init() starts it), or add `CardenzaHAL::USB::Init();` after " +
     "`CardenzaHAL::Init()` in app_main (usb/usb.h), rebuild, flash", {exit: EXIT.refused,
     hint: `It is on the serial port ${ports.join(", ")} (USB-Serial-JTAG)${unasked.length ? ` (not asked: ${unasked.join("; ")})` : ""}; 203cli log still reads its console there. ` +
       "After the change: build, 203cli flash --bin build/<project>.bin, then run this again", data: {ports}});

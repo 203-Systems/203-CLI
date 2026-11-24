@@ -14,12 +14,18 @@
 //          the HAL's system channel is the first vendor collection (usage page 0xFF00) of vendor 0203 named Cardenza, report
 //          0xCB, as `203cli board` reaches it there. Without node-hid the device is still found (PowerShell's Get-PnpDevice),
 //          so the error says what is missing.
+//   A HAL firmware with a serial port (CardenzaHAL protocol 4, usb-devices.mjs: `launcher`, `download` lines) is reached there
+//   first, on every system: no MIDI, HID, python3 or node-hid needed (Linux: the tty under the USB device; macOS: its callout
+//   device in ioreg; Windows: a COM port of vendor 0203). The Launcher's USB drive mode (0203:10CF) is no firmware.
+// Every way found carries the device's MAC when the system says it (its USB serial number): the port the device comes back on
+// is matched to it (flash.mjs waitForPort).
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {createRequire} from "node:module";
 import {HAL_COMMAND, HAL_VENDOR, halSysex, halReport, halAnswer, isCardenza} from "./launcher-usb.mjs";
+import {macKey, LAUNCHER_DRIVE} from "./usb-devices.mjs";
 
 export {HAL_COMMAND};
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -45,14 +51,18 @@ export function findFirmware({platform = process.platform, sys = process.env.C20
   pnp = process.env.C203_PNP ?? null} = {}) {
   if (platform === "win32") {
     // node-hid's list when it is there (no process to start); PowerShell's otherwise, so a missing node-hid is named.
+    // Its serial port (a COM port of vendor 0203, protocol 4) is looked for when the command goes (restartFirmware: the
+    // binding lists asynchronously), its HID beside it.
     const lib = pnp === null ? nodeHid() : null;
     if (lib) {
       const way = systemCollections(lib.devices())[0];
-      return way ? {name: String(way.product).trim(), usb: null, candidates: [{via: "hidapi"}]} : null;
+      if (way) return {name: String(way.product).trim(), usb: null, mac: macKey(way.serialNumber), candidates: [{via: "serial"}, {via: "hidapi"}]};
     }
-    for (const line of String(pnp ?? windowsPnp()).split(/\r?\n/)) {
+    for (const line of String(pnp ?? (lib ? "" : windowsPnp())).split(/\r?\n/)) {
       const [id = "", name = ""] = line.split("|");
-      if (/^USB\\VID_0203&/i.test(id) && isCardenza(name)) return {name: name.trim(), usb: null, candidates: [{via: "hidapi"}]};
+      if (/^USB\\VID_0203&/i.test(id) && !/&PID_10CF\\/i.test(id) && isCardenza(name)) {
+        return {name: name.trim(), usb: null, mac: macKey(id.split("\\").pop()), candidates: [{via: "serial"}, {via: "hidapi"}]};
+      }
     }
     return null;
   }
@@ -60,12 +70,18 @@ export function findFirmware({platform = process.platform, sys = process.env.C20
     for (const entry of list(path.join(sys, "bus/usb/devices"))) {
       const dir = path.join(sys, "bus/usb/devices", entry);
       if (read(path.join(dir, "idVendor")) !== VENDOR) continue;
+      // The Launcher's USB drive mode has 203 Systems' vendor ID too: no firmware.
+      if (parseInt(read(path.join(dir, "idProduct")) || "0", 16) === LAUNCHER_DRIVE.usbProductId) continue;
       const name = read(path.join(dir, "product")) || "";
       if (!isCardenza(name)) continue;
       const usb = real(dir);
       if (!usb) continue;
       const under = file => { const at = real(file); return !!at && at.startsWith(usb + path.sep); };
       const candidates = [];
+      // Its serial port (protocol 4), first: lines, no permission beyond the tty's.
+      for (const node of list(path.join(sys, "class/tty")).filter(n => /^ttyACM\d+$/.test(n)).sort()) {
+        if (under(path.join(sys, "class/tty", node, "device"))) candidates.push({via: "serial", path: path.join(dev, node)});
+      }
       for (const card of list(path.join(sys, "class/sound"))) {
         const m = /^card(\d+)$/.exec(card);
         if (!m || !under(path.join(sys, "class/sound", card, "device"))) continue;
@@ -76,26 +92,58 @@ export function findFirmware({platform = process.platform, sys = process.env.C20
       for (const node of list(path.join(sys, "class/hidraw")).sort()) {
         if (under(path.join(sys, "class/hidraw", node, "device"))) candidates.push({via: "hidraw", path: path.join(dev, node)});
       }
-      return {name, usb, candidates};
+      return {name, usb, mac: macKey(read(path.join(dir, "serial"))), candidates};
     }
     return null;
   }
   if (platform === "darwin") {
     let text = ioreg;
     if (text === null) {
-      const run = spawnSync("ioreg", ["-p", "IOUSB", "-l", "-w0"], {encoding: "utf8", maxBuffer: 16 << 20});
+      // Each USB device with what is under it (its serial port's callout device among them).
+      const run = spawnSync("ioreg", ["-r", "-c", "IOUSBHostDevice", "-l", "-w0"], {encoding: "utf8", maxBuffer: 32 << 20});
       text = run.status === 0 ? run.stdout : "";
     }
-    // One block a USB device ("+-o Name@…"), its properties as "key" = value lines.
-    for (const block of String(text).split(/\n(?=[ |]*\+-o )/)) {
-      const vendor = /"idVendor" = (\d+)/.exec(block);
-      const name = (/"USB Product Name" = "([^"]*)"/.exec(block) || [])[1] || "";
-      if (vendor && Number(vendor[1]) === HAL_VENDOR && isCardenza(name)) return {name, usb: null, candidates: [{via: "coremidi"}]};
+    for (const device of ioregDevices(text)) {
+      if (device.vendor !== HAL_VENDOR || device.product === LAUNCHER_DRIVE.usbProductId || !isCardenza(device.name)) continue;
+      return {name: device.name, usb: null, mac: macKey(device.serial),
+        candidates: [...device.callouts.map(p => ({via: "serial", path: p})), {via: "coremidi"}]};
     }
     return null;
   }
   return null;
 }
+
+/**
+ * The USB devices in ioreg's text (`ioreg -r -c IOUSBHostDevice -l`, or the IOUSB plane's `-p IOUSB -l`): [{name, vendor, product,
+ * serial, callouts}], each with the serial ports under it (their "IOCalloutDevice", /dev/cu.usbmodem…).
+ */
+export function ioregDevices(text) {
+  const devices = [];
+  let current = null, depth = -1;
+  for (const line of String(text || "").split(/\n/)) {
+    const node = /^([ |]*)\+-o (.*)$/.exec(line);
+    if (node) {
+      const at = node[1].length;
+      if (/<class IOUSB(Host)?Device\b/.test(node[2])) {
+        current = {name: "", vendor: null, product: null, serial: null, callouts: []};
+        devices.push(current);
+        depth = at;
+      } else if (current && at <= depth) current = null;
+      continue;
+    }
+    if (!current) continue;
+    let m;
+    if ((m = /"idVendor" = (\d+)/.exec(line))) current.vendor = Number(m[1]);
+    else if ((m = /"idProduct" = (\d+)/.exec(line))) current.product = Number(m[1]);
+    else if ((m = /"USB Product Name" = "([^"]*)"/.exec(line))) current.name = m[1];
+    else if ((m = /"USB Serial Number" = "([^"]*)"/.exec(line))) current.serial = m[1];
+    else if ((m = /"IOCalloutDevice" = "([^"]*)"/.exec(line)) && !current.callouts.includes(m[1])) current.callouts.push(m[1]);
+  }
+  return devices;
+}
+
+/** The serial line a system command is on a HAL's serial port. */
+const SERIAL_WORD = {[HAL_COMMAND.launcher]: "launcher", [HAL_COMMAND.download]: "download", [HAL_COMMAND.reboot]: "reboot"};
 
 /** Writes `bytes` to a device file and reads until `done(bytes read)` or `ms`: true when it answered. */
 async function exchange(file, bytes, done, ms) {
@@ -285,6 +333,41 @@ export function macPython(env = process.env) {
   return which;
 }
 
+/** A HAL firmware's serial port on Windows: the first COM port of vendor 0203 that is not the Launcher's drive mode, or null. */
+export async function windowsHalPort() {
+  if (process.platform !== "win32") return null;
+  const {windowsBinding} = await import("./flash.mjs");
+  const ports = await (await windowsBinding()).list();
+  const hal = ports.find(p => String(p.vendorId || "").toLowerCase() === "0203" && String(p.productId || "").toLowerCase() !== "10cf");
+  return hal ? hal.path : null;
+}
+
+/** `word` (launcher, download) on a HAL firmware's serial port, "OK <word>" awaited for `ms`: whether it answered. */
+async function serialCommand(file, word, ms) {
+  const {openPort} = await import("./flash.mjs");
+  const port = await openPort(file);
+  const reader = port.readable.getReader();
+  const writer = port.writable.getWriter();
+  let text = "", answered = false;
+  try {
+    const reading = (async () => {
+      for (;;) {
+        const {value, done} = await reader.read().catch(() => ({done: true}));
+        if (done) return;
+        text += new TextDecoder().decode(value);
+        if (new RegExp(`^OK ${word}\\b`, "m").test(text)) { answered = true; return; }
+      }
+    })();
+    await writer.write(new TextEncoder().encode(`\r\n${word}\n`));
+    await Promise.race([reading, sleep(ms)]);
+    return answered;
+  } finally {
+    try { await reader.cancel(); } catch { /* gone: it restarts */ }
+    try { writer.releaseLock(); } catch { /* gone */ }
+    try { await port.close(); } catch { /* gone */ }
+  }
+}
+
 /**
  * Sends a HAL system command (HAL_COMMAND.launcher, .download) to the firmware findFirmware found, through the first of its
  * ways that works: {via, answered}. Throws {code: "unreachable", tried: [{via, path, error}]} when none does.
@@ -293,6 +376,14 @@ export async function restartFirmware(found, command = HAL_COMMAND.launcher, {ms
   const tried = [];
   for (const way of found.candidates) {
     try {
+      if (way.via === "serial") {
+        const word = SERIAL_WORD[command];
+        if (!word) { tried.push({via: way.via, error: "no such line"}); continue; }
+        const file = way.path || await windowsHalPort();
+        if (!file) { tried.push({via: way.via, error: "no serial port"}); continue; }
+        const answered = await serialCommand(file, word, ms);
+        return {via: way.via, path: file, answered};
+      }
       if (way.via === "rawmidi") {
         const answered = await exchange(way.path, Uint8Array.from(halSysex(command)), got => !!halAnswer(got, command), ms);
         return {via: way.via, path: way.path, answered};
@@ -323,15 +414,21 @@ export async function restartFirmware(found, command = HAL_COMMAND.launcher, {ms
 }
 
 /**
- * The serial port the device comes back on: `want` when it appears, else the first one that was not there `before`;
- * null after `ms`. `ports()`: the ports there are now, or a promise of them (flash.mjs serialPorts).
+ * The serial port the device comes back on: `want` when it appears, else the first one that was not there `before` (or went
+ * away since) and is not another chip's (`mac`: the device's; `macOf(port)`: a port's, when the system says it); null after
+ * `ms`. `ports()`: the ports there are now, or a promise of them (flash.mjs serialPorts).
  */
-export async function waitForPort(before, ports, {want = null, ms = 15000, every = 50} = {}) {
+export async function waitForPort(before, ports, {want = null, ms = 15000, every = 50, mac = null, macOf = () => null} = {}) {
   const had = new Set(before);
+  const key = macKey(mac);
+  // Another chip's port (its USB serial number says so) is never the one this device comes back on.
+  const ours = p => { const m = key ? macKey(macOf(p)) : null; return !m || m === key; };
   for (const end = Date.now() + ms; Date.now() < end;) {
     const now = await ports();
+    // A name that went away and came back (the system gave the device's new port the old one's name) is a new port.
+    for (const p of [...had]) if (!now.includes(p)) had.delete(p);
     if (want && now.includes(want)) return want;
-    const fresh = now.find(p => !had.has(p));
+    const fresh = now.find(p => !had.has(p) && ours(p));
     if (fresh && !want) return fresh;
     if (fresh && want) {
       // Another name than the one given (a second device, a renumbered tty): give the given one a moment.

@@ -91,7 +91,7 @@ export const ERROR_CODES = [
   ["port_ambiguous", 1, "flash: several USB serial ports", "say which with `--port` (next lists them)"],
   ["port_unavailable", 1, "flash: the port cannot be opened (no permission, another program has it, not a serial port)", "Linux: the dialout group; close serial monitors and the website's page; check `--port`"],
   ["port_failed", 3, "flash: the port failed while it was used (unplugged)", "plug it in again and run it again"],
-  ["no_launcher", 1, "flash: no 203 Launcher answered on the port (another device's port, or the Launcher in USB Drive mode)", "leave USB Drive (its home screen) or give the right `--port`, then run it again"],
+  ["no_launcher", 1, "flash: no 203 Launcher answered on the port (another device's port, the Launcher in USB Drive mode, or a chip without a Launcher: restarted from the ROM's download mode or a firmware without USB, nothing answered)", "leave USB Drive (its home screen) or give the right `--port`, then run it again; a chip without a Launcher: `devices recover --port PORT`"],
   ["firmware_unreachable", 1, "flash / devices recover / board: the device runs a firmware and 203cli cannot reach it (Linux: no permission for its MIDI or HID, or another program has its MIDI port; macOS: no python3 for CoreMIDI)", "Linux: the audio group; macOS: xcode-select --install; or put it in its Launcher yourself (press HOME, left of the screen, and choose Back to Launcher; a firmware without that menu: hold FN while plugging it in)"],
   ["no_launcher_port", 3, "flash / devices recover: the firmware was asked to restart and no serial port came up", "plug the cable in again and run it again; a firmware that does not take the command: press HOME and choose Back to Launcher (no such menu: hold FN while plugging it in)"],
   ["launcher_countdown", 3, "flash: the restarted Launcher started the firmware again before 203cli reached it (twice)", "press HOME on the device and choose Back to Launcher, then run it again; a firmware without that menu: hold FN, run it again, let go of FN once the Launcher's menu shows"],
@@ -110,7 +110,8 @@ export const ERROR_CODES = [
   ["log_timeout", 1, "log --until: no line matched before --seconds ran out", "read log_tail: the firmware did not print it (or starts slower: a longer --seconds)"],
   ["python_missing", 1, "log and board on macOS: python3 is needed for CoreMIDI", "xcode-select --install"],
   ["board_not_found", 1, "board: no Cardenza on USB (no firmware with CardenzaHAL's USB device, and no serial port either)", "plug it in with a data cable (not a charging-only one), turn it on, start the firmware"],
-  ["board_no_usb", 1, "board: the firmware does not start CardenzaHAL's USB device (only its serial port is there, as with the template), so it has no development channel", "add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main, rebuild, flash; `log` reads its console meanwhile"],
+  ["board_no_usb", 1, "board: the firmware does not start CardenzaHAL's USB device (only the chip's own serial port is there), so it has no development channel", "rebuild it with a current CardenzaHAL (from 2026-11-24 CardenzaHAL::Init() starts USB), or add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main; flash; `log` reads its console meanwhile"],
+  ["signals_failed", 1, "flash: the serial port's DTR and RTS could not be set (python3 sets them on macOS and Linux)", "macOS: xcode-select --install; or unplug the device and plug it in again"],
   ["board_in_launcher", 1, "board: the device is in its 203 Launcher, not running a firmware", "start the firmware from the Launcher (or `flash --bin` a build), run it again"],
   ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again"],
   ["dev_channel_off", 1, "board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works)", "turn it on in its sdkconfig, build and install it again"],
@@ -547,12 +548,15 @@ firmware:
 {P} flash --bin build/app.bin --json                       a local application image
 {P} flash CODE --dry-run --json                            what it would write (nothing downloaded, no device needed)
 {P} log --json                                            what it prints (macOS and Linux): a running firmware's console (CardenzaHAL's
-                                                          system channel, over its MIDI or HID), else the serial port (the Launcher, a firmware without USB)
+                                                          serial port, or its system channel over MIDI or HID), else the serial port (the Launcher, a firmware without USB)
 {P} log --until "ready" --seconds 30 --json                a test: exit 0 at the line, 1 at a crash or when it never comes
 The port: --port PORT, else the one USB serial port there is. Nothing to switch on: the Launcher's console runs from power-on.
-A device running a firmware (CardenzaHAL: no serial port) is restarted into its Launcher first, over its MIDI (Linux: ALSA
-raw MIDI, else its HID; macOS: CoreMIDI through python3), and the port it comes back on is used; a Launcher counting down
-to the firmware is kept in its menus. If that fails (firmware_unreachable, launcher_countdown): on the device, press HOME (the
+A device running a firmware on CardenzaHAL is restarted into its Launcher first, over whichever way it has: its serial port
+(CardenzaHAL 2026-11-24 on, when the firmware has one: no MIDI, HID or python3 needed), its MIDI (Linux: ALSA raw MIDI;
+macOS: CoreMIDI through python3) or its HID; the port it comes back on (the same chip: its USB serial number, the MAC) is
+used, and a Launcher counting down to the firmware is kept in its menus. A port of the chip's own USB-Serial-JTAG is asked
+what it is, never taken for the Launcher: the ROM's download mode, or a firmware without USB, gets a hard reset (DTR/RTS,
+python3 on macOS and Linux) and its Launcher is held; a chip without a Launcher says no_launcher (devices recover). If that fails (firmware_unreachable, launcher_countdown): on the device, press HOME (the
 key left of the screen) and choose Back to Launcher in its system menu, then run it again; a firmware without that
 menu (released before it): hold FN while it starts (or while 203cli restarts it) and the Launcher stays in its menus.
 
@@ -603,8 +607,10 @@ CoreMIDI through python3); Windows over its HID (node-hid, which comes with 203c
                                           one. Every firmware that starts USB answers them, also one built without the
                                           development channel; a HAL from before 2026-11-23 does not (hal_too_old)
 A test with screenshots: {P} flash --bin …, {P} log --until "ready" --seconds 30, then board press … and board screen.
-Only a serial port there? board_no_usb: the firmware does not start CardenzaHAL's USB device (the template does not): add
-CardenzaHAL::USB::Init(); after CardenzaHAL::Init() in app_main, rebuild, flash ({P} log reads its console meanwhile);
+It reaches the firmware over its serial port (CardenzaHAL 2026-11-24 on, when it has one), else its MIDI or HID.
+Only the chip's own serial port there? board_no_usb: the firmware does not start CardenzaHAL's USB device: rebuild it with a
+current CardenzaHAL (from 2026-11-24 CardenzaHAL::Init() starts it), or add CardenzaHAL::USB::Init(); after
+CardenzaHAL::Init() in app_main, rebuild, flash ({P} log reads its console meanwhile);
 board_in_launcher: the device is in its 203 Launcher, start the firmware.
 Ctrl-C stops a transfer (the device is told to stop; an upload is aborted). Errors: board_not_found, firmware_unreachable
 (Linux: the audio group, or close what holds its MIDI port: a {P} log, a DAW), hal_too_old, dev_channel_off,

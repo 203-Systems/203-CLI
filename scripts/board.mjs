@@ -350,7 +350,7 @@ const usageOf = ctx => ctx.usage ?? ((message, extra = {}) => new CliError("usag
 // ---------------------------------------------------------------------------------------------
 // info, partitions, memory, storage, status, i2c
 
-const via = board => `${board.via === "rawmidi" || board.via === "coremidi" ? "MIDI" : "HID"} (${board.where})`;
+const via = board => `${board.via === "rawmidi" || board.via === "coremidi" ? "MIDI" : board.via === "serial" ? "serial port" : "HID"} (${board.where})`;
 
 export async function boardInfo(ctx) {
   return session(ctx, async board => {

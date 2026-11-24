@@ -24,8 +24,10 @@
 // chip's id.
 //
 // A firmware running instead of the Launcher (the user, 2026-11-18: "自动让设备重启回 Launcher 再刷"): a firmware on CardenzaHAL
-// is one composite USB device (203 Systems' vendor ID 0x0203; MIDI, audio, HID; its product name says Cardenza) with no
-// serial port. It takes the HAL's system commands (CardenzaHAL usb/usb.h, Matrix OS's bytes) as SysEx F0 23 <command> F7
+// is one composite USB device (203 Systems' vendor ID 0x0203; MIDI, audio, HID and, from CardenzaHAL's protocol 4 when the
+// firmware chooses it, a serial port: usb-devices.js; its product name says Cardenza). Never take a 303A:1001 port for the
+// Launcher by its ids: usb-devices.js probePort asks it. It takes the HAL's system commands (CardenzaHAL usb/usb.h, Matrix
+// OS's bytes) as SysEx F0 23 <command> F7
 // or as HID report 0xCB with the command in byte 0, and answers F0 24 <command | 0x80, 7-bit> F7 (HID: 0xCB, command | 0x80)
 // before it restarts. Restarted into the Launcher (0x40) the device comes back as the ESP32-S3's USB-Serial-JTAG (Espressif
 // 0x303A:0x1001), the Launcher's console. A HAL that restarts plainly (every firmware released before 2026-11-18) lets the
@@ -326,13 +328,15 @@ function trailerStatement(bytes) {
 }
 
 /**
- * A fake Web Serial port with the demo Launcher behind it. `mode`: home, other, old, busy, full (no room). `onLine(line)`: sees each
+ * A fake Web Serial port with the demo Launcher behind it. `mode`: home, other, old, busy, full (no room); `info`: it answers
+ * `info` (a Launcher after 0.3.3); `version`: the version it says. `onLine(line)`: sees each
  * command line first (firmware-usb.js's demo device: Esc during a countdown); true swallows it. unplug(): the port goes
  * away as a restarting device's does (reads end, writes fail).
  */
-export function demoPort({mode = 'home', id = '', pace = 4000, slow = 0, onLine = null} = {}) {
+export function demoPort({mode = 'home', id = '', pace = 4000, slow = 0, onLine = null, info = false, version = null} = {}) {
   let answered = 0;
   const s = demoState(id);
+  if (version) s.version = version;
   if (mode === 'other') Object.assign(s, {bound: true, user_id: 'b3nwu7xk', user_name: 'Ben Wu', api: 'https://cardenza.203.io/community/api'});
   demoSave(s);
   const enc = new TextEncoder();
@@ -358,6 +362,12 @@ export function demoPort({mode = 'home', id = '', pace = 4000, slow = 0, onLine 
     if (cmd === 'nav') { say('OK nav ' + (words[1] || '')); return; }
     // slow: the first `version` answered late (a Launcher still drawing its home), so the page asks again.
     if (cmd === 'version') { say('Launcher ' + s.version, slow && !answered++ ? slow : 15); return; }
+    // info: a Launcher after 0.3.3 (usb-devices.js): what it is and its chip's MAC, one JSON line.
+    if (cmd === 'info' && info) {
+      say(JSON.stringify({kind: 'launcher', name: '203 Launcher', version: s.version, board: 'Cardenza',
+        chip: {mac: s.device_id.toUpperCase().match(/../g).join(':')}, flash_bytes: 16777216}));
+      return;
+    }
     if (cmd === 'account' && mode !== 'old') {
       if (busy) { say('ERR busy Return to the Launcher home screen first'); return; }
       if (words.length === 1) {

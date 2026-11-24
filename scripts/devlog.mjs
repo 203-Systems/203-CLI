@@ -191,6 +191,8 @@ function readerFor(source, seconds) {
   const tried = [];
   for (const way of source.firmware.candidates) {
     try {
+      // Its serial port (CardenzaHAL protocol 4): the console is the port's text.
+      if (way.via === "serial") return [serialReader(way.path), way.path];
       if (way.via === "rawmidi") return [deviceReader(way.path, {start: consoleSysex(true), stop: consoleSysex(false), decode: sysexConsole}), way.path];
       if (way.via === "hidraw") return [deviceReader(way.path, {start: consoleReport(true), stop: consoleReport(false), decode: hidConsole}), way.path];
       if (way.via === "coremidi") return [coremidiReader(seconds), "CoreMIDI"];

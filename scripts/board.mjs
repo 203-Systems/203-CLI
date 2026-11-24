@@ -1,9 +1,9 @@
 // 203cli board: a running firmware on CardenzaHAL, seen and driven from a computer over its USB cable (the HAL's development
 // channel, CardenzaHAL docs/usb-dev.md; the bytes: board-usb.mjs). What it is (info), its flash (partitions), memory and
-// tasks, the SD card, the I2C bus, its screen as a PNG, keys pressed as if by a finger, its last crash (core dump), files
-// on its SD card, and the board's settings (CardenzaHAL docs/SETTINGS.md). No sign-in, like flash and log. Nothing here
-// writes the device's flash itself: files on the card, and when asked, erasing the core dump; a setting changed here the
-// device writes to its flash on its own, a second after the last change.
+// tasks, the SD card, the I2C bus, its screen as a PNG (and the HAL's own screenshot, kept on its card), keys pressed as if
+// by a finger, its last crash (core dump), files on its SD card, and the board's settings (CardenzaHAL docs/SETTINGS.md). No
+// sign-in, like flash and log. Nothing here writes the device's flash itself: files on the card, and when asked, erasing the
+// core dump; a setting changed here the device writes to its flash on its own, a second after the last change.
 // Part of the Agent Skill skill/203-community.
 import fs from "node:fs";
 import path from "node:path";
@@ -12,6 +12,7 @@ import {spawnSync} from "node:child_process";
 import {BoardError, OP, LIMITS, openBoard, concat, u32, i32, readU32, lostPart, settingsTooOld} from "./board-usb.mjs";
 import {CliError, EXIT} from "./guide.mjs";
 import {nearest} from "./checks.mjs";
+import {isPng, decodePng, rgb565Of} from "./png.mjs";
 
 const EMPTY = new Uint8Array(0);
 const enc = new TextEncoder();
@@ -178,12 +179,12 @@ function pngChunk(type, data) {
   const body = concat(enc.encode(type), data);
   return concat(be32(data.length), body, be32(crc32(body)));
 }
-/** A PNG of 8-bit RGB pixels (IHDR, one IDAT of the rows deflated, each with filter 0, IEND). */
-export function encodePng(width, height, rgb) {
-  const stride = width * 3;
+/** A PNG of 8-bit RGB pixels, or RGBA with channels 4 (IHDR, one IDAT of the rows deflated, each with filter 0, IEND). */
+export function encodePng(width, height, rgb, channels = 3) {
+  const stride = width * channels;
   const raw = new Uint8Array((stride + 1) * height);
   for (let y = 0; y < height; y++) raw.set(rgb.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
-  const header = concat(be32(width), be32(height), Uint8Array.of(8, 2, 0, 0, 0));
+  const header = concat(be32(width), be32(height), Uint8Array.of(8, channels === 4 ? 6 : 2, 0, 0, 0));
   return concat(Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a), pngChunk("IHDR", header),
     pngChunk("IDAT", new Uint8Array(zlib.deflateSync(raw, {level: 9}))), pngChunk("IEND", EMPTY));
 }
@@ -292,6 +293,7 @@ export function boardCliError(error, ctx, {need = "dev", product = "the device"}
 }
 function refusalHint(reason) {
   if (/framebuffer/i.test(reason)) return "This firmware draws through the panel's handles itself (Display::GetPanel): there is no frame to copy";
+  if (/memory/i.test(reason)) return "The firmware has too little free memory for it now (203cli board memory shows it): run it again in a moment, or take the frame as it is with 203cli board screen";
   if (/not found|no such|enoent/i.test(reason)) return "Check the path: 203cli board files ls lists the card";
   if (/card|mount/i.test(reason)) return "Is there an SD card? 203cli board storage says whether one is mounted";
   if (/exist/i.test(reason)) return "Something has that name already: remove it first (203cli board files rm), or choose another";
@@ -503,6 +505,181 @@ export async function boardScreen(ctx) {
     if (!ctx.json) ctx.say?.(`${screen.width} × ${screen.height}, ${source === "new" ? "a frame the firmware presented after the request" : "the firmware's last frame (it presented none for 250 ms)"}`);
     return {json: {path: file, width: screen.width, height: screen.height, encoding: screen.encoding === 1 ? "rle" : "raw", source, bytes: bytes.length}, text: file};
   });
+}
+
+// ---------------------------------------------------------------------------------------------
+// screenshot: SCREENSHOT (0x12, CardenzaHAL from 2026-11-24 on; HELLO says "screenshot": true), the HAL's own screenshot, the
+// same as HOME + space on the device: a PNG of the screen saved on its SD card in /screenshot/ (queued for the account the
+// device is bound to when auto-upload is on), sent back here too; or raw RGB565 instead of the PNG. Args [flags]: bit 0 save,
+// 1 return, 2 raw, 3 quiet (no flash or toast). Its answer: 'K', version 1, format (0 PNG, 1 raw RGB565), saved (0 not asked,
+// 1 saved, 2 no SD card, 3 the card refused the write), width and height (u16), the name's length (u8) and the name (the file
+// in /screenshot/, empty when not saved), u32 the data's length, the data.
+
+export const SHOT_FLAG = Object.freeze({save: 1, return: 2, raw: 4, quiet: 8});
+/** The saved byte in words: what happened on the card. */
+export const SHOT_SAVED = Object.freeze(["not_asked", "saved", "no_card", "card_refused"]);
+/** The folder at the card's root the HAL saves screenshots in. */
+export const SHOT_FOLDER = "screenshot";
+const SHOT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+
+/** The answer's head once enough of it came: {version, format, saved, width, height, name, length, at (where the data starts)}; else null. */
+export function screenshotHead(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+  if (!b.length) return null;
+  if (b[0] !== 0x4b) throw new BoardError("bad_answer", "the screenshot's answer does not start with its header ('K')");
+  if (b.length < 9) return null;
+  const version = b[1];
+  if (version !== 1) throw new BoardError("bad_answer", `the screenshot's format ${version} is newer than this 203cli (it reads 1): update 203cli`);
+  const n = b[8];
+  if (b.length < 13 + n) return null;
+  return {version, format: b[2], saved: b[3], width: b[4] | (b[5] << 8), height: b[6] | (b[7] << 8),
+    name: Buffer.from(b.subarray(9, 9 + n)).toString("latin1"), length: readU32(b, 9 + n), at: 13 + n};
+}
+
+/** The whole answer, checked: its head and `data` (the PNG, or width × height RGB565 pixels). */
+export function decodeScreenshot(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+  const head = screenshotHead(b);
+  if (!head) throw new BoardError("bad_answer", `the screenshot's answer is short: ${b.length} bytes, not its whole header`);
+  const {format, width, height, name, length} = head;
+  if (format !== 0 && format !== 1) throw new BoardError("bad_answer", `the screenshot's format ${format} is unknown to this 203cli: update 203cli`);
+  if (!width || !height || width * height > 4 << 20) throw new BoardError("bad_answer", `the screenshot's size ${width} × ${height} is not a screen`);
+  if (name && !SHOT_NAME.test(name)) throw new BoardError("bad_answer", `the screenshot's name "${name}" is not a file name`);
+  const data = b.subarray(head.at, head.at + length);
+  if (data.length < length) throw new BoardError("bad_answer", `the screenshot's answer is short: ${data.length} of its ${length} bytes`);
+  if (length && format === 1 && length !== width * height * 2) throw new BoardError("bad_answer", `${length} bytes of RGB565 for ${width} × ${height}`);
+  if (length && format === 0 && !isPng(data)) throw new BoardError("bad_answer", "the screenshot's data is not a PNG");
+  return {...head, data};
+}
+
+/** RGB565 pixels as the device's raw bytes (u16 little-endian). */
+const rgb565Bytes = pixels => Uint8Array.from({length: pixels.length * 2}, (_, i) => (i & 1 ? pixels[i >> 1] >> 8 : pixels[i >> 1] & 0xff));
+/** The device's raw bytes as RGB565 pixels. */
+const pixelsOf = data => Uint16Array.from({length: data.length >> 1}, (_, i) => data[2 * i] | (data[2 * i + 1] << 8));
+
+/**
+ * SCREENSHOT asked and its answer put together. A busy device (taking another one) is asked again a moment later. Part of the
+ * answer lost: without save asked again; with save the PNG is on the card already, so it is read from there (GET).
+ */
+async function takeScreenshot(ctx, board, flags) {
+  const save = !!(flags & SHOT_FLAG.save);
+  const shown = meter(ctx, "screenshot");
+  try {
+    for (let attempt = 0; ; attempt++) {
+      const chunks = [];
+      let got = 0, head = null;
+      try {
+        await board.request(OP.SCREENSHOT, Uint8Array.of(flags), {timeout: board.timeout + 5000, onPayload: chunk => {
+          chunks.push(Uint8Array.from(chunk));
+          got += chunk.length;
+          if (!head) head = screenshotHead(concat(...chunks));
+          shown.update(got, head ? head.at + head.length : 0);
+        }});
+        return decodeScreenshot(concat(...chunks));
+      } catch (error) {
+        if (!(error instanceof BoardError)) throw error;
+        if (error.code === "device" && error.reason === "busy") {
+          if (attempt < 4) { await sleep(400); continue; }
+          throw new CliError("board_busy", "The device is busy: it is taking another screenshot, or its development channel has 8 requests queued", {exit: EXIT.later,
+            next: ctx.cmd ? [ctx.cmd()] : [], hint: "Run it again in a moment"});
+        }
+        if (!lostPart(error)) throw error;
+        if (!save) {
+          if (attempt >= 2) throw error;
+          await board.cancel();
+          continue;
+        }
+        let known = null;
+        try { known = screenshotHead(concat(...chunks)); } catch { known = null; }
+        if (known?.saved === 1 && known.name && SHOT_NAME.test(known.name)) {
+          await board.cancel();
+          const parts = [];
+          await getFile(board, `${SHOT_FOLDER}/${known.name}`, chunk => parts.push(Uint8Array.from(chunk)));
+          const data = concat(...parts);
+          if (!isPng(data)) throw new BoardError("bad_answer", `/${SHOT_FOLDER}/${known.name} on the card is not a PNG`);
+          return {...known, format: 0, length: data.length, data, from_card: true};
+        }
+        throw new CliError("board_timeout", `The screenshot's answer was cut short (${error.message})`, {exit: EXIT.later, next: ctx.cmd ? [ctx.cmd()] : [],
+          hint: `The device may have saved it on its card already (203cli board files ls ${SHOT_FOLDER}); run it again, or with --no-save to only bring the pixels here`});
+      }
+    }
+  } finally { shown.end(); }
+}
+
+/**
+ * The firmware's HAL has no SCREENSHOT (HELLO does not say "screenshot", or the op answers "unknown request" / "off"): with
+ * --no-save the frame comes through SCREEN instead (the same pixels, nothing on the device's screen); else it says so.
+ */
+async function screenshotWithoutOp(ctx, board, {save, rawFile, fileFor, why, off = false}) {
+  const product = board.identity?.product || board.name || "the device";
+  if (save) {
+    throw new CliError("hal_too_old", (off ? `The firmware on ${product} answers the screenshot (USB op 0x12) "off": its CardenzaHAL was built without it`
+      : `The firmware on ${product} was built with a CardenzaHAL older than its screenshot (USB op 0x12; ${why})`) + ": it cannot save one on its SD card or upload it", {exit: EXIT.refused,
+      hint: "Only the pixels, here: the same command with --no-save (or 203cli board screen). To save it on the card and upload it to the account: rebuild the firmware " +
+        "with a current CardenzaHAL (update the HAL submodule to its main branch: git -C components/CardenzaHAL pull origin main, or the project's own way, e.g. make " +
+        "hal-update), install it with 203cli flash --bin build/<project>.bin, then run this again",
+      next: [ctx.cmd?.({add: {no_save: true}}), ctx.run?.(["board", "screen"])].filter(Boolean), data: {needs: "screenshot", protocol: board.identity?.protocol ?? null}});
+  }
+  const answer = await board.ask(OP.SCREEN, EMPTY, {timeout: board.timeout});
+  const screen = decodeScreen(answer);
+  const bytes = rawFile ? rgb565Bytes(screen.pixels) : encodePng(screen.width, screen.height, rgbOf(screen.pixels));
+  const file = fileFor("");
+  fs.writeFileSync(file, bytes);
+  const note = `This firmware's CardenzaHAL has no screenshot of its own (USB op 0x12; ${why}): the frame came through SCREEN instead (the same pixels; nothing saved, no flash on the device)`;
+  ctx.say?.(`${screen.width} × ${screen.height}. ${note}.`);
+  return {json: {path: file, name: null, saved: false, card: "not_asked", width: screen.width, height: screen.height, format: rawFile ? "rgb565" : "png",
+    device_format: "rgb565", bytes: bytes.length, via: "screen", note}, text: file};
+}
+
+export async function boardScreenshot(ctx) {
+  const o = ctx.flags ?? {}, cwd = ctx.cwd ?? process.cwd();
+  const save = !o.no_save;
+  const out = o.out !== undefined ? path.resolve(cwd, String(o.out)) : null;
+  // --out a folder: one there, or a path ending in / (made when its parent is there).
+  const intoFolder = !!out && ((fs.existsSync(out) && fs.statSync(out).isDirectory()) || /[\\/]$/.test(String(o.out)));
+  if (out && !fs.existsSync(path.dirname(out))) throw new CliError("file_not_found", `The folder of --out does not exist (${path.dirname(out)})`, {field: "out"});
+  // --out FILE.rgb565: the device's raw frame as it is; else a PNG (the device's, or made here from its raw frame with --raw).
+  const rawFile = !!out && !intoFolder && /\.rgb565$/i.test(out);
+  const flags = (save ? SHOT_FLAG.save : 0) | SHOT_FLAG.return | (o.raw || rawFile ? SHOT_FLAG.raw : 0) | (o.quiet ? SHOT_FLAG.quiet : 0);
+  const fileFor = name => {
+    if (out && !intoFolder) return out;
+    if (intoFolder) fs.mkdirSync(out, {recursive: true});
+    return path.join(intoFolder ? out : cwd, name || "screenshot.png");
+  };
+  return session(ctx, async board => {
+    if (board.helloed?.screenshot !== true) return screenshotWithoutOp(ctx, board, {save, rawFile, fileFor, why: "its HELLO does not list it"});
+    let shot;
+    try { shot = await takeScreenshot(ctx, board, flags); } catch (error) {
+      if (error instanceof BoardError && error.code === "device" && ["unknown request", "off"].includes(error.reason)) {
+        return screenshotWithoutOp(ctx, board, {save, rawFile, fileFor, why: `it answered "${error.reason}"`, off: error.reason === "off"});
+      }
+      throw error;
+    }
+    let bytes;
+    if (rawFile) bytes = shot.format === 1 ? shot.data : rgb565Of(pngPixels(shot.data));
+    else bytes = shot.format === 0 ? shot.data : encodePng(shot.width, shot.height, rgbOf(pixelsOf(shot.data)));
+    const file = fileFor(shot.name);
+    fs.writeFileSync(file, bytes);
+    const card = SHOT_SAVED[shot.saved] ?? `unknown (${shot.saved})`;
+    const where = `/${SHOT_FOLDER}/${shot.name}`;
+    const note = shot.saved === 2 ? "Not saved on the device: it has no SD card (the picture is only here)"
+      : shot.saved === 3 ? "Not saved on the device: its SD card refused the write (full, read-only or failing: 203cli board storage says more); the picture is only here"
+        : shot.saved === 1 && !shot.name ? "Saved on the device's SD card (it gave no name)" : null;
+    // (ctx.say writes nothing with --json.)
+    ctx.say?.(`${shot.width} × ${shot.height}, ${shot.format === 0 ? "the device's PNG" : "raw RGB565 from the device"}${rawFile ? ", written as RGB565" : shot.format === 1 ? ", written as a PNG" : ""} (${size(bytes.length)})` +
+      `${shot.from_card ? "; read back from its card (part of the answer was lost)" : ""}.`);
+    if (shot.saved === 1 && shot.name) {
+      ctx.say?.(`On the device's SD card as ${where}; uploaded to the account the device is bound to when its auto-upload is on (the board's screenshot_upload, on by default) and it is online: 203cli screenshots list.`);
+    }
+    if (note) ctx.say?.(`${note}.`);
+    return {json: {path: file, name: shot.name || null, saved: shot.saved === 1, card, ...(shot.saved === 1 && shot.name ? {card_path: where} : {}),
+      width: shot.width, height: shot.height, format: rawFile ? "rgb565" : "png", device_format: shot.format === 0 ? "png" : "rgb565", bytes: bytes.length,
+      quiet: !!o.quiet, via: shot.from_card ? "screenshot+card" : "screenshot", ...(note ? {note} : {})}, text: file};
+  });
+}
+/** A PNG's pixels as 8-bit RGB (for its RGB565 bytes); a PNG this 203cli cannot read is the device's fault. */
+function pngPixels(data) {
+  try { return decodePng(data); } catch (error) { throw new BoardError("bad_answer", `the device's PNG cannot be read: ${error.message}`); }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -807,13 +984,18 @@ export async function filesMv(ctx) {
 // after the last one.
 
 /** The keys, in the device's order. */
-export const SETTING_KEYS = Object.freeze(["volume", "volume_limit", "screen_brightness", "key_brightness", "mic_gain", "language"]);
+// screenshot_upload (CardenzaHAL 2026-11-24): whether a device bound to an account uploads its screenshots there (0 off, 1 on).
+export const SETTING_KEYS = Object.freeze(["volume", "volume_limit", "screen_brightness", "key_brightness", "mic_gain", "language", "screenshot_upload"]);
 // Other words taken for keys (never shown): the flash's names and short ones.
 const SETTING_ALIASES = Object.freeze({lang: "language", limit: "volume_limit", volume_max: "volume_limit", max_volume: "volume_limit",
-  brightness: "screen_brightness", backlight: "screen_brightness", key_light: "key_brightness", key_lights: "key_brightness", mic: "mic_gain"});
+  brightness: "screen_brightness", backlight: "screen_brightness", key_light: "key_brightness", key_lights: "key_brightness", mic: "mic_gain",
+  auto_upload: "screenshot_upload", screenshots_upload: "screenshot_upload", upload: "screenshot_upload"});
 // The unit a VALUE may carry (80%, +6dB).
 const SETTING_UNITS = Object.freeze({volume: "%", volume_limit: "%", screen_brightness: "%", mic_gain: "db"});
-const SETTING_EXAMPLES = Object.freeze({volume: "50", volume_limit: "80", screen_brightness: "60", key_brightness: "8", mic_gain: "-6", language: "zh"});
+const SETTING_EXAMPLES = Object.freeze({volume: "50", volume_limit: "80", screen_brightness: "60", key_brightness: "8", mic_gain: "-6", language: "zh", screenshot_upload: "off"});
+// A switch's words (screenshot_upload): on 1, off 0.
+const SWITCH_WORDS = Object.freeze({on: 1, off: 0, yes: 1, no: 0, true: 1, false: 0, "1": 1, "0": 0, "开": 1, "关": 0});
+const isSwitch = key => key === "screenshot_upload";
 /** The 203 Launcher's languages: its code, the tag the device names it by, its own name, and the words taken for it. */
 export const LANGUAGES = Object.freeze([
   {code: 0, tag: "en", name: "English", words: ["english", "en-us", "en-gb", "英文", "英语"]},
@@ -833,7 +1015,7 @@ export function settingKey(text, usage, {fix = null} = {}) {
   if (key) return key;
   const guess = nearest(typed, SETTING_KEYS);
   throw usage(`"${text}" is not one of the board's settings: ${SETTING_KEYS.join(", ")}`, {field: "KEY",
-    hint: `${guess ? `Did you mean ${guess}? ` : ""}The keys: volume (0-100), volume_limit (10-100), screen_brightness (10-100 %), key_brightness (0-15), mic_gain (-12 to +36 dB), language`,
+    hint: `${guess ? `Did you mean ${guess}? ` : ""}The keys: volume (0-100), volume_limit (10-100), screen_brightness (10-100 %), key_brightness (0-15), mic_gain (-12 to +36 dB), language, screenshot_upload (on or off)`,
     ...(guess && fix ? {next: [fix(guess)]} : {})});
 }
 
@@ -843,6 +1025,11 @@ export function settingKey(text, usage, {fix = null} = {}) {
  */
 export function settingValue(key, text, usage) {
   const typed = String(text ?? "").trim();
+  if (isSwitch(key)) {
+    const value = SWITCH_WORDS[typed.toLowerCase()];
+    if (value !== undefined) return value;
+    throw usage(`${key} is on or off, not "${typed}"`, {field: "VALUE", hint: `e.g. 203cli board settings set ${key} off (on: the device uploads its screenshots to the account it is bound to)`});
+  }
   if (key === "language") {
     if (/^[+-]?\d{1,9}$/.test(typed)) return Number(typed);
     const word = typed.toLowerCase().replace(/_/g, "-");
@@ -863,6 +1050,7 @@ export function settingValue(key, text, usage) {
 const signed = n => (n > 0 ? `+${n}` : String(n));
 /** A setting's value as people read it: 64, 80 %, +6 dB, 简体中文 (zh-Hans). */
 export function settingShown(entry, value = entry.value) {
+  if (isSwitch(entry.key) && !Array.isArray(entry.choices) && (value === 0 || value === 1)) return value ? "on" : "off";
   if (Array.isArray(entry.choices)) {
     const choice = entry.choices.find(c => c.value === value);
     if (!choice) return String(value);
@@ -877,6 +1065,7 @@ export function settingShown(entry, value = entry.value) {
 /** Its range (the volume's top is the limit), or its choices' tags. */
 export function settingRange(entry) {
   if (Array.isArray(entry.choices)) return entry.choices.map(c => c.name).join(" ");
+  if (isSwitch(entry.key) && entry.min === 0 && entry.max === 1) return "off on";
   const unit = entry.unit ? ` ${entry.unit}` : "";
   const span = entry.min < 0 ? `${signed(entry.min)} to ${signed(entry.max)}${unit}` : `${entry.min}-${entry.max}${unit}`;
   return entry.key === "volume" ? `${span} (at most volume_limit)` : span;

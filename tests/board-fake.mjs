@@ -2,10 +2,13 @@
 // from the spec apart from scripts/board-usb.mjs (its own 7-bit packing, framing, queue), so a mistake shared by both sides
 // does not hide. It answers in-process through link() (the same link interface the real backends give 203cli), or behind a
 // pseudo-terminal (`sink` and receive(), tests/board.test.mjs). An SD card in memory, a screen, keys, a core dump, and the
-// board's settings (CardenzaHAL docs/SETTINGS.md: protocol 3; a firmware of protocol 2 answers them "unknown request").
+// board's settings (CardenzaHAL docs/SETTINGS.md: protocol 3; a firmware of protocol 2 answers them "unknown request"), and
+// the HAL's screenshot (SCREENSHOT, 0x12, with `screenshot: true`: a PNG saved on the card in /screenshot/, its own encoder
+// here, a palette for a screen of 256 colours or fewer, as the HAL writes it; a HAL without it answers "unknown request").
 // It also checks what it is sent: a request longer than the HAL can collect lands in `violations`.
+import zlib from "node:zlib";
 
-const OPS = {HELLO: 0x00, INFO: 0x01, PARTITIONS: 0x02, MEMORY: 0x03, STORAGE: 0x04, STATUS: 0x05, I2C: 0x06, ARG: 0x0e, SCREEN: 0x10, KEYS: 0x11,
+const OPS = {HELLO: 0x00, INFO: 0x01, PARTITIONS: 0x02, MEMORY: 0x03, STORAGE: 0x04, STATUS: 0x05, I2C: 0x06, ARG: 0x0e, SCREEN: 0x10, KEYS: 0x11, SCREENSHOT: 0x12,
   COREDUMP_INFO: 0x20, COREDUMP_READ: 0x21, COREDUMP_ERASE: 0x22, LS: 0x30, GET: 0x31, PUT_BEGIN: 0x32, PUT_DATA: 0x33, PUT_END: 0x34, PUT_ABORT: 0x35,
   RM: 0x36, MKDIR: 0x37, MV: 0x38, SETTINGS: 0x40, SETTING_GET: 0x41, SETTING_SET: 0x42, SETTINGS_RESET: 0x43, CANCEL: 0x7f};
 const SETTINGS_OPS = [OPS.SETTINGS, OPS.SETTING_GET, OPS.SETTING_SET, OPS.SETTINGS_RESET];
@@ -37,6 +40,26 @@ export function unpackFake(bytes) {
 export function fakePixel(x, y, width = 240, height = 135) {
   if ((x === 0 || x === width - 1) && (y === 0 || y === height - 1)) return 0xffff;
   return [0xf800, 0x07e0, 0x001f, 0x8410][Math.floor((x * 4) / width)];
+}
+
+// A PNG as the HAL writes a screenshot: RGB565 widened to 8 bits a channel (r5 << 3 | r5 >> 2, g6 << 2 | g6 >> 4), colour
+// type 3 with a palette when the frame has 256 colours or fewer, else 2; rows unfiltered.
+const CRC = Array.from({length: 256}, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crcOf = bytes => { let c = 0xffffffff; for (const b of bytes) c = CRC[(c ^ b) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+const be = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+const chunk = (type, data) => { const body = [...text(type), ...data]; return [...be(data.length), ...body, ...be(crcOf(body))]; };
+export const widen = p => [((p >> 11) << 3) | ((p >> 11) >> 2), (((p >> 5) & 63) << 2) | (((p >> 5) & 63) >> 4), ((p & 31) << 3) | ((p & 31) >> 2)];
+export function fakePng(pixels, width, height) {
+  const colours = [...new Set(pixels)];
+  const palette = colours.length <= 256;
+  const index = new Map(colours.map((p, i) => [p, i]));
+  const rows = [];
+  for (let y = 0; y < height; y++) {
+    rows.push(0);
+    for (let x = 0; x < width; x++) { const p = pixels[y * width + x]; if (palette) rows.push(index.get(p)); else rows.push(...widen(p)); }
+  }
+  return [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...chunk("IHDR", [...be(width), ...be(height), 8, palette ? 3 : 2, 0, 0, 0]),
+    ...(palette ? chunk("PLTE", colours.flatMap(widen)) : []), ...chunk("IDAT", [...zlib.deflateSync(Uint8Array.from(rows))]), ...chunk("IEND", [])];
 }
 
 export const INFO = {protocol: 2,
@@ -71,13 +94,18 @@ export const SETTING_SPECS = [
   {key: "key_brightness", min: 0, max: 15, step: 1, default: 15, unit: ""},
   {key: "mic_gain", min: -12, max: 36, step: 1, default: 0, unit: "dB"},
   {key: "language", default: 0, choices: [{value: 0, name: "en"}, {value: 1, name: "zh-Hans"}, {value: 3, name: "ja"}, {value: 4, name: "id"}, {value: 5, name: "vi"}]},
+  {key: "screenshot_upload", min: 0, max: 1, step: 1, default: 1, unit: ""},
 ];
 
 export class FakeBoard {
   constructor(options = {}) {
     // pace: ms the firmware takes before each answer and every 16 messages (a slow card, for Ctrl-C).
+    // screenshot: SCREENSHOT answered (and HELLO says so); card: an SD card in it; cardRefuses: its writes fail; shotError: the
+    // op's error instead ("busy", "no memory", "off" …), shotBusy: answered "busy" that many times first; clock: the shot's
+    // name from that time (UTC), else shot-NNNN; shots: what was asked (flags).
     Object.assign(this, {kind: "sysex", protocol: 2, hello: true, off: false, framebuffer: true, rle: true, noise: true, timeScale: 0.05, width: 240, height: 135,
-      memory: MEMORY, pace: 0}, options);
+      memory: MEMORY, pace: 0, screenshot: false, card: true, cardRefuses: false, shotError: null, shotBusy: 0, clock: null, project: "CardenzaSynth"}, options);
+    this.shots = [];
     this.files = new Map();
     this.dirs = new Set([""]);
     for (const [name, data] of Object.entries(options.files ?? {})) this.addFile(name, data);
@@ -235,7 +263,8 @@ export class FakeBoard {
     const json = value => ({bytes: text(JSON.stringify(value))});
     const path = from => Buffer.from(args.slice(from)).toString("utf8");
     switch (op) {
-      case OPS.HELLO: return json(this.protocol >= 3 ? {protocol: 3, max_args: 52, dev: !this.off, settings: true} : {protocol: 2, max_args: 52});
+      case OPS.HELLO: return json({...(this.protocol >= 3 ? {protocol: 3, max_args: 52, dev: !this.off, settings: true} : {protocol: 2, max_args: 52}),
+        ...(this.screenshot ? {screenshot: true} : {})});
       case OPS.INFO: return json(INFO);
       case OPS.PARTITIONS: return json(PARTITIONS);
       case OPS.MEMORY: this.window = args[0] ?? null; return json(this.memory);
@@ -258,6 +287,7 @@ export class FakeBoard {
         } else for (const p of pixels) body.push(p & 255, p >> 8);
         return {bytes: [0x53, 1, width & 255, width >> 8, height & 255, height >> 8, this.rle ? 1 : 0, 0, ...body]};
       }
+      case OPS.SCREENSHOT: return this.screenshotAnswer(args);
       case OPS.KEYS: {
         if (args.length % 3) return {error: "bad steps"};
         for (let i = 0; i < args.length; i += 3) {
@@ -338,6 +368,41 @@ export class FakeBoard {
       case OPS.SETTINGS_RESET: return this.protocol >= 3 ? this.settingsAnswer(op, args) : {error: "unknown request"};
       default: return {error: "unknown request"};
     }
+  }
+
+  // SCREENSHOT: [flags] (none: save and return); 'K', 1, format, saved, width, height, the name, u32 length, the data.
+  screenshotAnswer(args) {
+    if (!this.screenshot) return {error: "unknown request"};
+    if (this.shotBusy > 0) { this.shotBusy--; return {error: "busy"}; }
+    if (this.shotError) return {error: this.shotError};
+    if (!this.framebuffer) return {error: "no framebuffer"};
+    const flags = args.length ? args[0] : 0x03;
+    this.shots.push(flags);
+    const {width, height} = this;
+    const pixels = [];
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) pixels.push(fakePixel(x, y, width, height));
+    const png = fakePng(pixels, width, height);
+    let saved = 0, name = "";
+    if (flags & 1) {
+      if (!this.card) saved = 2;
+      else if (this.cardRefuses) saved = 3;
+      else {
+        const taken = [...this.files.keys()].filter(f => f.startsWith("screenshot/"));
+        if (this.clock) {
+          const stamp = new Date(this.clock * 1000).toISOString().replace(/^(\d+-\d+-\d+)T(\d+):(\d+):(\d+).*$/, "$1_$2$3$4");
+          name = `${stamp}_${this.project}.png`;
+          for (let n = 2; taken.includes("screenshot/" + name); n++) name = `${stamp}-${n}_${this.project}.png`;
+        } else {
+          const top = Math.max(0, ...taken.map(f => Number(/^screenshot\/shot-(\d+)_/.exec(f)?.[1] ?? 0)));
+          name = `shot-${String(top + 1).padStart(4, "0")}_${this.project}.png`;
+        }
+        this.addFile("screenshot/" + name, png);
+        saved = 1;
+      }
+    }
+    const raw = !!(flags & 4);
+    const data = !(flags & 2) ? [] : raw ? pixels.flatMap(p => [p & 255, p >> 8]) : png;
+    return {bytes: [0x4b, 1, raw ? 1 : 0, saved, width & 255, width >> 8, height & 255, height >> 8, name.length, ...text(name), ...le32(data.length), ...data]};
   }
 
   setting(spec) {

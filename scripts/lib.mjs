@@ -445,7 +445,11 @@ export class Client {
     return true;
   }
 
-  async send(method, apiPath, {body, query, headers = {}, auth = true, raw} = {}) {
+  /**
+   * One request. `raw`: the body as it is (bytes, with headers' Content-Type), else `body` as JSON. Answers the parsed JSON;
+   * `bytes`: an answer that is not JSON (a picture) as a Uint8Array; `full`: {status, headers, data}.
+   */
+  async send(method, apiPath, {body, query, headers = {}, auth = true, raw, bytes = false, full = false} = {}) {
     const url = new URL(this.api + apiPath);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
@@ -460,15 +464,18 @@ export class Client {
     let response;
     try { response = await this.fetch(url, {method, headers: sent, body: payload}); }
     catch (error) { throw failed(error, reason => new ApiError(0, "unreachable", "Cannot reach " + this.api + " (" + reason + ")")); }
+    if (bytes && response.ok && !/json/i.test(response.headers.get("content-type") ?? "")) return new Uint8Array(await response.arrayBuffer());
     const text = await response.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
     // The community moved (any status): Client.sendFollowing goes there.
     if (!response.ok || (data && typeof data === "object" && data.code === "moved")) {
       const message = data && typeof data === "object" && data.error ? data.error : `HTTP ${response.status}`;
-      throw new ApiError(response.status, data?.code || "http_" + response.status, message, typeof data === "object" ? data : {});
+      const retry = response.headers.get("retry-after");
+      throw new ApiError(response.status, data?.code || "http_" + response.status, message,
+        {...(retry && /^\d+$/.test(retry) ? {retry_after: Number(retry)} : {}), ...(typeof data === "object" ? data : {})});
     }
-    return data;
+    return full ? {status: response.status, headers: response.headers, data} : data;
   }
 
   get(apiPath, query) { return this.request("GET", apiPath, {query}); }
@@ -1220,6 +1227,37 @@ op("tutorial_images", "Your pictures for a firmware's tutorials (id, sha256, whe
 op("tutorials_all", "Firmware that have tutorials, the most downloaded first, each with its first 3", {target: s("A device: firmware with a build for it"),
   q: s("Words in a firmware's name or a tutorial's title"), page}, [], (c, x) => c.get("/tutorials", pick(x, ["target", "q", "page"])));
 
+// Screenshots (COMMUNITY.md "Screenshots", the user 2026-11-24): a device's (HOME + space, or 203cli board screenshot), kept on its
+// card in /screenshot/ and uploaded to the account it is bound to, or one the person uploads; private until its owner makes it
+// public. The PNG is served as uploaded (its owner, or anyone when public).
+const shotId = s("A screenshot's id (screenshots_list lists them)");
+const shotCursor = s("The previous answer's next (the page after it)");
+const shotLimit = n("Items a page");
+op("screenshots_list", "Your screenshots, newest first (private ones too), with the quota (count, bytes, max_count, max_bytes); the answer's next gives the next page",
+  {cursor: shotCursor, limit: shotLimit}, [], (c, x) => c.get("/me/screenshots", pick(x, ["cursor", "limit"])));
+op("user_screenshots", "A person's public screenshots, newest first; the answer's next gives the next page", {id: s("User id"), cursor: shotCursor, limit: shotLimit}, ["id"],
+  (c, x) => c.get(`/users/${enc(x.id)}/screenshots`, pick(x, ["cursor", "limit"])));
+op("screenshot_show", "A screenshot: name, title, size, public or not, when it was taken, the firmware, the device (its owner only)", {id: shotId}, ["id"],
+  (c, x) => c.get("/screenshots/" + enc(x.id)));
+op("screenshot_download", "Save a screenshot's PNG, the bytes as uploaded (yours, or a public one), to a local file", {id: shotId, out: s("Local path to save to")}, ["id", "out"],
+  async (c, x) => {
+    const bytes = await downloadScreenshot(c, x.id);
+    fs.writeFileSync(x.out, bytes);
+    return {id: x.id, saved: x.out, bytes: bytes.length};
+  });
+op("screenshot_edit", "Make your screenshot public (anyone sees it on your page) or private again, or give it a title (up to 80 characters; empty: none)",
+  {id: shotId, public: b("true: public, false: private"), title: s("Up to 80 characters; empty: none")}, ["id"],
+  (c, x) => c.post(`/screenshots/${enc(x.id)}/edit`, pick(x, ["public", "title"])), {write: true});
+op("screenshot_delete", "Delete your screenshot (a device does not upload one of that name again)", {id: shotId}, ["id"],
+  (c, x) => c.post(`/screenshots/${enc(x.id)}/delete`), {write: true});
+op("screenshot_upload", "Upload a PNG from a local file as your screenshot (at most 256 KB and 1024 × 1024; private): status uploaded, already_there (the account has one of that name) or deleted_by_owner",
+  {file: s("Local path of the PNG"), name: s("Its name: [A-Za-z0-9._-], up to 80 (default the file's)"), taken_at: n("When it was taken (Unix seconds; default from a device's name, YYYY-MM-DD_HHMMSS_…, UTC)"),
+    device: n("One of your devices it was taken on (devices lists them)")}, ["file"],
+  (c, x) => {
+    const name = x.name ?? screenshotName(x.file);
+    return uploadScreenshot(c, {bytes: readFile(x.file), name, taken_at: x.taken_at ?? screenshotTakenAt(name), device: x.device});
+  }, {write: true});
+
 // Requests (public) and the developer tracker (the firmware's owner, or an admin)
 op("requests_list", "Requests under a firmware, each with its public status (new 未处理, in_progress 正在完成, done 已完成, rejected 已拒绝)",
   {code, sort: s("top or new"), status: s("new, in_progress, done or rejected", {enum: ["new", "in_progress", "done", "rejected"]}), page}, ["code"],
@@ -1299,6 +1337,38 @@ op("api_request", "Any API call (see /openapi.json): method, path below the API 
   (c, x) => c.request(x.method, x.path.startsWith("/") ? x.path : "/" + x.path, {body: x.method === "POST" ? x.body ?? {} : undefined, query: x.query}));
 
 export const opsByName = Object.fromEntries(OPS.map(entry => [entry.name, entry]));
+
+// A screenshot's PNG (GET /screenshots/<id>/png): the bytes as uploaded.
+export async function downloadScreenshot(client, id) {
+  const bytes = await client.request("GET", `/screenshots/${enc(id)}/png`, {bytes: true});
+  if (!(bytes instanceof Uint8Array)) throw new ApiError(0, "download_failed", "The screenshot's PNG did not come (the answer was not a picture)");
+  return bytes;
+}
+
+/** A file's name as a screenshot's: [A-Za-z0-9._-] (others become -), starting with a letter or digit, ending .png, at most 80. */
+export function screenshotName(file) {
+  let stem = path.basename(String(file)).replace(/\.png$/i, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "").replace(/-+$/, "");
+  if (!stem) stem = "screenshot";
+  return stem.slice(0, 76) + ".png";
+}
+/** When a device took it, from its name (YYYY-MM-DD_HHMMSS…, UTC: a device whose clock was set): Unix seconds, else null. */
+export function screenshotTakenAt(name) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})(?:-\d+)?_/.exec(String(name));
+  if (!m) return null;
+  const at = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return Number.isFinite(at) && +m[2] >= 1 && +m[2] <= 12 ? Math.floor(at / 1000) : null;
+}
+/**
+ * POST /me/screenshots: the PNG as the body, its name and what is known in headers (as a device sends it, COMMUNITY.md
+ * "Screenshots"). {status: uploaded (201) | already_there (200: this account has one of that name) | deleted_by_owner (200:
+ * its owner deleted one of that name; not uploaded again), screenshot, now}.
+ */
+export async function uploadScreenshot(client, {bytes, name, taken_at, device}) {
+  const headers = {"Content-Type": "image/png", "X-Screenshot-Name": name, ...(taken_at ? {"X-Taken-At": String(taken_at)} : {}),
+    ...(device !== undefined && device !== null ? {"X-Device-Id": String(device)} : {})};
+  const {status, data} = await client.request("POST", "/me/screenshots", {raw: bytes, headers, full: true});
+  return {status: status === 201 ? "uploaded" : data?.deleted ? "deleted_by_owner" : "already_there", screenshot: data?.screenshot ?? null, now: data?.now ?? null};
+}
 
 // A version's source archive (a .tar.gz; scripts/source.mjs makes and checks it): a ticket, then the upload.
 export async function uploadSource(client, code, versionCode, bytes, sha256) {

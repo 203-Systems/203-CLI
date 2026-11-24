@@ -45,7 +45,10 @@ npm install -g 203cli  # 203cli 命令
 python3 components/CardenzaHAL/tools/cardenza.py build   # HAL 的编译工具（鸣片）
 203cli flash --bin build/my_synth.bin  # 通过 Launcher 用 USB 线装到你的鸣片上
 203cli log                      # 看它打印的日志
-203cli board screen             # 看它显示的画面（PNG）；board info、memory、press、coredump、files：203cli help board
+203cli board screenshot --no-save --out screen.png  # 截下它的屏幕，存成这台电脑上的 PNG（给 AI 用时加 --json）
+203cli board screenshot          # 设备自己的截图：同时存在它的 SD 卡上，并上传到你的账号
+203cli screenshots list          # 你的设备上传的截图；download（--scale 4 放大）、public、rename、delete
+203cli board info                # 它运行的是什么；board memory、press、coredump、files、screen：203cli help board
 203cli board settings           # 板子的音量、亮度、键灯、麦克风增益、语言；set KEY VALUE 修改，reset 恢复默认
 203cli publish --dry-run        # 先按社区的检查全部检查一遍
 203cli publish
@@ -60,6 +63,8 @@ python3 components/CardenzaHAL/tools/cardenza.py build   # HAL 的编译工具�
 ### 交给 AI
 
 照上面安装，然后告诉 AI 你想做什么、给哪台设备做；或者复制社区[开发指引](https://cardenza.203.io/community/develop)里的那段话。Skill 会让它先读这台设备的指引、遵守规则、先用 `--dry-run` 检查，并且绝不经手你的令牌。
+
+AI 开发固件时，一条命令就能看到设备屏幕上显示的内容（USB 线，不用登录）：`203cli board screenshot --no-save --out /tmp/screen.png --json` 把屏幕存成 PNG，回答 `{"path", "width", "height", …}`，AI 再去看这张图。不加 `--no-save` 时就是设备自己的截图，和按 HOME + 空格一样：存在它 SD 卡的 `/screenshot/` 里，并上传到设备绑定的账号（`203cli screenshots list`）；`board screen` 只取下一帧画面，设备上什么都不留。
 
 ## 各产品怎么开发
 

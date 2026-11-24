@@ -59,7 +59,10 @@ with `node 203-CLI/scripts/203cli.mjs`.
 python3 components/CardenzaHAL/tools/cardenza.py build   # the HAL's build tool (Cardenza)
 203cli flash --bin build/my_synth.bin  # onto your Cardenza over USB, through its Launcher
 203cli log                      # what it prints
-203cli board screen             # what it shows (a PNG); board info, memory, press, coredump, files: 203cli help board
+203cli board screenshot --no-save --out screen.png  # what it shows, as a PNG here (an AI agent: add --json)
+203cli board screenshot          # the device's own screenshot: also on its SD card and uploaded to your account
+203cli screenshots list          # the screenshots your devices uploaded; download (--scale 4), public, rename, delete
+203cli board info                # what runs on it; board memory, press, coredump, files, screen: 203cli help board
 203cli board settings           # the board's volume, brightness, key lights, mic gain, language; set KEY VALUE, reset
 203cli publish --dry-run        # checks everything the community will check
 203cli publish
@@ -78,6 +81,12 @@ command. Every command and flag: [`reference/cli.md`](reference/cli.md); the com
 Install as above, then tell your agent what you want to make and for which device; or copy the prompt on the
 community's [developer guide](https://cardenza.203.io/community/develop). The skill tells it to read the
 device's guide first, follow its rules, check with `--dry-run` and never handle your tokens.
+
+An agent developing a firmware sees what it shows with one command, over the USB cable, no sign-in:
+`203cli board screenshot --no-save --out /tmp/screen.png --json` writes the screen as a PNG and answers
+`{"path", "width", "height", …}`; then it looks at the picture. `board screenshot` (without `--no-save`) is the
+device's own screenshot, the same as HOME + space: kept on its SD card in `/screenshot/` and uploaded to the account
+the device is bound to (`203cli screenshots list`); `board screen` is just the next frame, nothing on the device.
 
 ## The repository
 

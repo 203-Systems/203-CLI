@@ -118,14 +118,16 @@ all of them) as JSON.
 | `board_no_usb` | 1 | board: the firmware does not start CardenzaHAL's USB device (only the chip's own serial port is there), so it has no development channel | rebuild it with a current CardenzaHAL (from 2026-11-24 CardenzaHAL::Init() starts USB), or add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main; flash; `log` reads its console meanwhile |
 | `signals_failed` | 1 | flash: the serial port's DTR and RTS could not be set (python3 sets them on macOS and Linux) | macOS: xcode-select --install; or unplug the device and plug it in again |
 | `board_in_launcher` | 1 | board: the device is in its 203 Launcher, not running a firmware | start the firmware from the Launcher (or `flash --bin` a build), run it again |
-| `hal_too_old` | 1 | board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23) | rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again |
+| `hal_too_old` | 1 | board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), for board settings the board's settings (protocol 2: a HAL from before 2026-11-23), for board screenshot its screenshot (HELLO without "screenshot": true) | rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again; board screenshot: `--no-save` (or `board screen`) gets the pixels meanwhile |
 | `dev_channel_off` | 1 | board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works) | turn it on in its sdkconfig, build and install it again |
 | `hidapi_missing` | 1 | board on Windows: node-hid (hidapi; 203cli's optional dependency for a running firmware's HID, prebuilt) is not installed (flash there restarts a running firmware through it too, and says firmware_unreachable) | install 203cli again (`npm install -g 203cli`) |
 | `board_refused` | 1 | board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …) | read `error` and `hint` |
-| `board_busy` | 3 | board: the firmware's development channel has 8 requests queued | wait a moment, run it again |
+| `board_busy` | 3 | board: the firmware's development channel has 8 requests queued, or (board screenshot) it is taking another screenshot | wait a moment, run it again |
 | `board_timeout` | 3 | board: the device stopped answering, or part of an answer was lost more than once | run it again; if it keeps happening, read its log (`log`) |
 | `board_lost` | 3 | board: the device went away (restarted, unplugged) | plug it in, let the firmware start, run it again |
 | `board_protocol` | 1 | board: the firmware's answer is not what this 203cli reads | update 203cli (`npm install -g 203cli`); else report it |
+| `screenshots_unavailable` | 1 | screenshots: the community answers 404 to them: an older community without screenshots yet | wait for its update; meanwhile `board screenshot --no-save --out FILE` brings a screenshot here over USB |
+| `quota_full` | 1 | screenshots upload: the account holds its 1000 screenshots or 200 MB (nothing is deleted by itself) | delete some (`screenshots list --all`, then `screenshots delete ID… --yes` if the user agrees), then run it again |
 | `dir_not_empty` | 1 | new: the folder is there and not empty | give another DIR |
 | `git_missing` | 1 | new, project diff: git is not installed | install git |
 | `not_a_repository` | 1 | project diff local: this folder is not a git repository | compare two versions or a fork instead, or git init |
@@ -1709,12 +1711,26 @@ Every device that answers on the shared I2C bus (the codec, the expansion port's
 
 ### `203cli board screen`
 
-A screenshot: the firmware's next frame as a PNG (prints its path)
+The firmware's next frame as a PNG here (prints its path): just the pixels, nothing on the device's screen or card; board screenshot is the device's own, kept on its card and uploaded
 
 - `--out FILE.png` Where to write it (default cardenza-<date>-<time>.png in the current folder)
 
     203cli board screen
     203cli board screen --out menu.png --json
+
+### `203cli board screenshot`
+
+The device's own screenshot, as HOME + space takes it: a PNG of its screen saved on its SD card in /screenshot/ (uploaded to the account the device is bound to when its auto-upload is on) and written here too (prints its path); --no-save: only here. An agent developing a firmware: board screenshot --no-save --out /tmp/screen.png --json
+
+- `--out FILE` Where to write it: a .png file, a .rgb565 file (the raw frame) or a folder (default: the name the device gave it, else screenshot.png, in the current folder)
+- `--no-save` Not on the device's card (and not uploaded): only the picture here; on a CardenzaHAL from before the screenshot it comes as board screen's
+- `--raw` Ask the device for its raw RGB565 frame and make the PNG here (the same pixels); with --out FILE.rgb565 the raw bytes as they are
+- `--quiet` No flash or toast on the device's screen
+
+    203cli board screenshot
+    203cli board screenshot --no-save --out /tmp/screen.png --json
+    203cli board screenshot --quiet --out shots/ --json
+    203cli board screenshot --no-save --raw --out frame.rgb565 --json
 
 ### `203cli board press KEY...`
 
@@ -1788,26 +1804,27 @@ Rename or move a file or folder on the SD card
 
 ### `203cli board settings`
 
-Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language (value, range or choices, default, stored). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload (value, range or choices, default, stored). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
 
     203cli board settings
     203cli board settings --json
 
 ### `203cli board settings get KEY`
 
-One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language): its value, range or choices, default, whether it is stored
+One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload): its value, range or choices, default, whether it is stored
 
     203cli board settings get volume
     203cli board settings get language --json
 
 ### `203cli board settings set KEY VALUE`
 
-Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code. The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code; screenshot_upload: on or off (whether the device uploads its screenshots to its account). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
 
     203cli board settings set volume 50
     203cli board settings set language zh --json
     203cli board settings set mic_gain -6 --json
     203cli board settings set volume_limit 60 --json
+    203cli board settings set screenshot_upload off --json
 
 ### `203cli board settings reset`
 
@@ -1817,6 +1834,78 @@ Every one of the board's settings but the language back to its default (as the L
 
     203cli board settings reset
     203cli board settings reset --yes --json
+
+## Screenshots
+
+### `203cli screenshots list`
+
+Your screenshots on the community, newest first (private ones too): id, name, size, public or not, when taken, firmware, device; the quota (1000, 200 MB); --user: a person's public ones
+
+- `--public-only` Only the public ones
+- `--user ID` A person's public screenshots (their user id) instead of yours
+- `--all` Every page (yours)
+- `--cursor C` The previous answer's next (the next page)
+- `--limit N` Items a page
+
+    203cli screenshots list --json
+    203cli screenshots list --public-only
+    203cli screenshots list --user ab12cd34 --json
+    203cli screenshots list --all --json
+
+### `203cli screenshots show ID`
+
+A screenshot: name, title, size, public or not, when taken, firmware, device and its PNG's address (ID: its id, or its file name among yours, .png may be left out)
+
+    203cli screenshots show q4hzuufx --json
+    203cli screenshots show 2026-11-24_101500_CardenzaSynth --json
+
+### `203cli screenshots download REF...`
+
+Save screenshots' PNGs here (REF: its id, or its file name among yours, .png may be left out; or a public one's id); --scale 4 makes each pixel a 4 × 4 block (a PNG made here, name-4x.png)
+
+- `--out DIR` The folder (made when missing; default the current one), or with one screenshot a .png file
+- `--scale N` Larger pixel for pixel, 1-16 (default 1: the bytes as uploaded)
+
+    203cli screenshots download q4hzuufx --json
+    203cli screenshots download q4hzuufx 7ces8nvr --out shots --scale 4 --json
+    203cli screenshots download 2026-11-24_101500_CardenzaSynth.png --out home.png
+
+### `203cli screenshots public ID`
+
+Make your screenshot public: anyone sees it on your page (a public one stays as it is) (sign-in with write)
+
+    203cli screenshots public q4hzuufx --json
+
+### `203cli screenshots private ID`
+
+Make your screenshot private again: only you see it (sign-in with write)
+
+    203cli screenshots private q4hzuufx --json
+
+### `203cli screenshots rename ID TITLE...`
+
+Give your screenshot a title (up to 80 characters; "" removes it: its file name shows) (sign-in with write)
+
+    203cli screenshots rename q4hzuufx "The step sequencer" --json
+    203cli screenshots rename q4hzuufx "" --json
+
+### `203cli screenshots delete ID...`
+
+Delete your screenshots (a device does not upload one of that name again); asks, --yes from a program (sign-in with write) Needs `--yes`.
+
+- `--yes` Yes, do it (it cannot be undone)
+
+    203cli screenshots delete q4hzuufx --yes --json
+
+### `203cli screenshots upload FILE...`
+
+Upload PNG screenshots from this computer to your account (each at most 256 KB and 1024 × 1024; private; a device's name dates it): one taken with board screenshot --no-save, say (sign-in with write)
+
+- `--device ID` The device it was taken on: one of yours (devices list)
+- `--dry-run` Check everything (files, values, permissions) and print the plan; change nothing
+
+    203cli screenshots upload screen.png --json
+    203cli screenshots upload shots/*.png --device 3 --dry-run --json
 
 ## People
 
@@ -2197,6 +2286,7 @@ Every API operation with its JSON schema (for programs)
 - `203cli help launchers` — Launchers: only the official 203 Launcher
 - `203cli help devices` — Installing firmware on a device: over a USB cable (no sign-in) or sent over Wi-Fi
 - `203cli help board` — A running firmware over USB: what it is, its memory, screen, keys, crash and SD card (203cli board)
+- `203cli help screenshots` — Screenshots: the device's own (board screenshot), on its card and on your account (screenshots)
 - `203cli help requests` — Requests and the developer tracker
 - `203cli help sandbox` — Running in a sandboxed agent (Claude Code on the web, Codex cloud…): allowing the community's hosts
 - `203cli help admin` — Admins

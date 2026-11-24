@@ -13,14 +13,15 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import {ROOT, NO_UPDATES} from "./fixtures.mjs";
-import {FakeBoard, INFO, SETTING_SPECS, fakePixel, packFake, unpackFake} from "./board-fake.mjs";
+import {FakeBoard, INFO, SETTING_SPECS, fakePixel, fakePng, widen, packFake, unpackFake} from "./board-fake.mjs";
 import {pack7, unpack7, sysexRequest, hidRequest, sysexAnswer, hidAnswer, SysexReader, HidReader, Board, BoardError, OP, FLAG, openBoard,
   bridgeLink, lostPart, nodeHidLink, withoutChannel, COREMIDI_BRIDGE} from "../scripts/board-usb.mjs";
 import {keyNumber, keyName, parseCombo, pressSteps, parseSteps, keyRequests, decodeScreen, rgbOf, encodePng, crc32, cardPath, size,
-  boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardPress, boardKeys, boardCoredump,
+  boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardScreenshot, decodeScreenshot, screenshotHead, boardPress, boardKeys, boardCoredump,
   filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, partitionsText, memoryText,
   boardSettings, boardSettingsGet, boardSettingsSet, boardSettingsReset, settingKey, settingValue, textWidth, table, SETTING_KEYS} from "../scripts/board.mjs";
 import {CliError, EXIT} from "../scripts/guide.mjs";
+import {decodePng} from "../scripts/png.mjs";
 
 const CLI = path.join(ROOT, "scripts/203cli.mjs");
 const PTY = process.platform === "linux" && spawnSync("python3", ["-I", "-c", "import pty, tty"]).status === 0;
@@ -309,6 +310,136 @@ test("screen: the firmware's frame as a PNG, run-length and raw, over SysEx and 
   await assert.rejects(boardScreen(ctxFor(blind, {flags: {out: path.join(dir, "none.png")}})), e => e.code === "board_refused" && /GetPanel/.test(e.hint));
 });
 
+// ---------------------------------------------------------------------------------------------
+// The HAL's own screenshot (SCREENSHOT, 0x12)
+
+/** A SCREENSHOT answer by hand: 'K', version, format, saved, width, height, the name, u32 length, the data. */
+const shotAnswer = ({version = 1, format = 0, saved = 1, width = 2, height = 1, name = "shot-0001_X.png", data = []} = {}) =>
+  Uint8Array.from([0x4b, version, format, saved, width & 255, width >> 8, height & 255, height >> 8, name.length, ...Buffer.from(name, "latin1"),
+    data.length & 255, (data.length >> 8) & 255, (data.length >> 16) & 255, data.length >>> 24, ...data]);
+const SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const shotCtx = (fake, flags = {}, json = false) => ctxFor(fake, {flags, json});
+const deviceRgb = (x, y) => widen(fakePixel(x, y));
+
+test("screenshot: its answer read as the contract writes it ('K', version 1, format, saved, size, name, length, data); a wrong one said plainly", () => {
+  const png = decodeScreenshot(shotAnswer({data: [...SIG, 1, 2]}));
+  assert.deepEqual({...png, data: [...png.data]}, {version: 1, format: 0, saved: 1, width: 2, height: 1, name: "shot-0001_X.png", length: 10, at: 28, data: [...SIG, 1, 2]});
+  const raw = decodeScreenshot(shotAnswer({format: 1, saved: 0, name: "", data: [0x00, 0xf8, 0xe0, 0x07]}));
+  assert.deepEqual([raw.format, raw.saved, raw.name, [...raw.data]], [1, 0, "", [0x00, 0xf8, 0xe0, 0x07]]);
+  assert.equal(screenshotHead(Uint8Array.of(0x4b, 1, 0, 1)), null, "not enough yet");
+  assert.equal(screenshotHead(shotAnswer().subarray(0, 20)), null, "the name not whole yet");
+  assert.equal(screenshotHead(shotAnswer({data: [1]})).length, 1);
+  const bad = (bytes, pattern) => assert.throws(() => decodeScreenshot(bytes), e => e.code === "bad_answer" && pattern.test(e.message), String(pattern));
+  bad(Uint8Array.of(0x53, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0), /header \('K'\)/);
+  bad(shotAnswer({version: 2}), /newer than this 203cli/);
+  bad(shotAnswer({format: 7, data: [1]}), /format 7 is unknown/);
+  bad(shotAnswer({data: [...SIG, 1, 2]}).subarray(0, 30), /short: 2 of its 10 bytes/);
+  bad(shotAnswer({format: 1, data: [1, 2]}), /2 bytes of RGB565 for 2 × 1/);
+  bad(shotAnswer({data: [1, 2, 3]}), /not a PNG/);
+  bad(shotAnswer({name: "../evil.png", data: [...SIG]}), /not a file name/);
+  bad(shotAnswer({width: 0, data: [...SIG]}), /not a screen/);
+});
+
+test("screenshot: saved on the card and written here, over SysEx and HID; the flags as asked (save, return, raw, quiet); the device's PNG as it is", async () => {
+  for (const kind of ["sysex", "hid"]) {
+    const fake = new FakeBoard({kind, protocol: 3, screenshot: true, clock: 1795515300});
+    const r = await boardScreenshot(shotCtx(fake, {}, true));
+    const name = "2026-11-24_101500_CardenzaSynth.png";
+    assert.deepEqual({...r.json, path: path.basename(r.json.path)}, {path: name, name, saved: true, card: "saved", card_path: `/screenshot/${name}`, width: 240, height: 135,
+      format: "png", device_format: "png", bytes: fake.files.get(`screenshot/${name}`).length, quiet: false, via: "screenshot"});
+    assert.equal(r.text, path.join(dir, name), "its path on stdout");
+    assert.deepEqual([...fs.readFileSync(r.json.path)], [...fake.files.get(`screenshot/${name}`)], "the device's PNG byte for byte");
+    const pixels = decodePng(fs.readFileSync(r.json.path));
+    assert.deepEqual([pixels.width, pixels.height, pixels.channels], [240, 135, 3]);
+    for (const [x, y] of [[0, 0], [239, 134], [10, 10], [70, 50], [130, 100], [200, 3]]) assert.deepEqual([...pixels.data.subarray((y * 240 + x) * 3, (y * 240 + x) * 3 + 3)], deviceRgb(x, y), `${kind} ${x},${y}`);
+    assert.deepEqual(fake.shots, [0b0011], "save and return");
+    // A second one in the same second: the device's -2.
+    const again = await boardScreenshot(shotCtx(fake, {quiet: true}));
+    assert.equal(path.basename(again.text), "2026-11-24_101500-2_CardenzaSynth.png");
+    assert.deepEqual(fake.shots, [0b0011, 0b1011], "quiet: bit 3");
+    assert.deepEqual(fake.violations, []);
+  }
+  // Not on the card: --no-save asks for the picture only; the default file then screenshot.png.
+  const fake = new FakeBoard({protocol: 3, screenshot: true});
+  const only = await boardScreenshot(shotCtx(fake, {no_save: true}, true));
+  assert.equal(only.json.path, path.join(dir, "screenshot.png"));
+  assert.deepEqual([only.json.saved, only.json.card, only.json.name, only.json.card_path], [false, "not_asked", null, undefined]);
+  assert.deepEqual(fake.shots, [0b0010]);
+  assert.ok(![...fake.files.keys()].some(f => f.startsWith("screenshot/")), "nothing on the card");
+  // --raw: the raw frame, made a PNG here (the same pixels); --out FILE.rgb565: the raw bytes as they are; --out a folder.
+  const raw = await boardScreenshot(shotCtx(fake, {no_save: true, raw: true, out: "raw.png"}));
+  const made = readPng(fs.readFileSync(path.join(dir, "raw.png")));
+  for (const [x, y] of [[0, 0], [70, 50], [239, 134]]) assert.deepEqual(made.pixel(x, y), deviceRgb(x, y));
+  assert.equal(raw.text, path.join(dir, "raw.png"));
+  const bytes = await boardScreenshot(shotCtx(fake, {no_save: true, out: "frame.rgb565"}, true));
+  assert.deepEqual([bytes.json.format, bytes.json.device_format, bytes.json.bytes], ["rgb565", "rgb565", 240 * 135 * 2], ".rgb565 asks for the raw frame by itself");
+  const frame = fs.readFileSync(path.join(dir, "frame.rgb565"));
+  assert.equal(frame.readUInt16LE((50 * 240 + 70) * 2), fakePixel(70, 50));
+  assert.deepEqual(fake.shots.slice(-2), [0b0110, 0b0110]);
+  const folder = await boardScreenshot(shotCtx(fake, {out: "shots/"}, true));
+  assert.equal(folder.json.path, path.join(dir, "shots", "shot-0001_CardenzaSynth.png"), "into a folder made for it, under the device's name");
+  await assert.rejects(boardScreenshot(shotCtx(fake, {out: "no/such/folder/x.png"})), e => e.code === "file_not_found");
+});
+
+test("screenshot: no SD card, a card that refuses the write: the picture still comes, and that is said", async () => {
+  for (const [options, card, words] of [[{card: false}, "no_card", /no SD card/], [{cardRefuses: true}, "card_refused", /refused the write/]]) {
+    const fake = new FakeBoard({protocol: 3, screenshot: true, ...options});
+    const ctx = shotCtx(fake);
+    const r = await boardScreenshot(ctx);
+    assert.deepEqual([r.json.saved, r.json.card, r.json.name], [false, card, null]);
+    assert.match(r.json.note, words);
+    assert.ok(ctx.said.some(line => words.test(line)), "said on a terminal too");
+    assert.equal(path.basename(r.json.path), "screenshot.png");
+    assert.equal(decodePng(fs.readFileSync(r.json.path)).width, 240);
+  }
+});
+
+test("screenshot: a busy device asked again; part of the answer lost: asked again, or read back from the card when it was saved", async () => {
+  const busy = new FakeBoard({protocol: 3, screenshot: true, shotBusy: 2});
+  assert.equal((await boardScreenshot(shotCtx(busy, {no_save: true}, true))).json.card, "not_asked");
+  assert.equal(busy.requests.filter(q => q.op === OP.SCREENSHOT).length, 3);
+  const stuck = new FakeBoard({protocol: 3, screenshot: true, shotBusy: 99});
+  await assert.rejects(boardScreenshot(shotCtx(stuck, {no_save: true})), e => e.code === "board_busy" && e.exit === EXIT.later && /another screenshot/.test(e.message));
+
+  const lost = new FakeBoard({protocol: 3, screenshot: true});
+  lost.dropOnce = {op: OP.SCREENSHOT, seq: 2};
+  const again = await boardScreenshot(shotCtx(lost, {no_save: true}, true));
+  assert.equal(again.json.via, "screenshot");
+  assert.deepEqual(lost.requests.map(q => q.op).filter(op => op !== OP.HELLO), [OP.SCREENSHOT, OP.CANCEL, OP.SCREENSHOT], "--no-save: asked again");
+
+  const saved = new FakeBoard({protocol: 3, screenshot: true, kind: "hid"});
+  saved.dropOnce = {op: OP.SCREENSHOT, seq: 2};
+  const fromCard = await boardScreenshot(shotCtx(saved, {}, true));
+  assert.equal(fromCard.json.via, "screenshot+card");
+  assert.deepEqual(saved.requests.map(q => q.op).filter(op => op !== OP.HELLO), [OP.SCREENSHOT, OP.CANCEL, OP.GET], "not taken twice: read from /screenshot/");
+  assert.deepEqual([...fs.readFileSync(fromCard.json.path)], [...saved.files.get("screenshot/shot-0001_CardenzaSynth.png")]);
+  assert.equal([...saved.files.keys()].filter(f => f.startsWith("screenshot/")).length, 1);
+  assert.deepEqual(saved.violations, []);
+});
+
+test("screenshot: a CardenzaHAL from before it: --no-save comes through SCREEN (said); else what to do; its refusals said plainly", async () => {
+  for (const options of [{protocol: 3}, {protocol: 2}, {protocol: 3, screenshot: true, shotError: "unknown request"}]) {
+    const old = new FakeBoard(options);
+    await assert.rejects(boardScreenshot(shotCtx(old)), e => e.code === "hal_too_old" && e.exit === EXIT.refused && /older than its screenshot/.test(e.message) &&
+      /--no-save/.test(e.hint) && /flash --bin/.test(e.hint));
+    const ctx = shotCtx(old, {no_save: true});
+    const r = await boardScreenshot(ctx);
+    assert.equal(r.json.via, "screen");
+    assert.match(r.json.note, /through SCREEN/);
+    assert.ok(ctx.said.some(line => /through SCREEN/.test(line)));
+    const png = readPng(fs.readFileSync(r.json.path));
+    assert.deepEqual(png.pixel(70, 50), deviceRgb(70, 50));
+    assert.equal(old.requests.filter(q => q.op === OP.SCREENSHOT).length, options.screenshot ? 2 : 0, "a HELLO without it: not asked at all");
+  }
+  // The next commands: the same with --no-save, and board screen.
+  const next = await boardScreenshot({...shotCtx(new FakeBoard({protocol: 3})), cmd: changes => `203cli board screenshot${changes?.add?.no_save ? " --no-save" : ""}`,
+    run: words => `203cli ${words.join(" ")}`}).catch(e => e);
+  assert.deepEqual(next.next, ["203cli board screenshot --no-save", "203cli board screen"]);
+  await assert.rejects(boardScreenshot(shotCtx(new FakeBoard({protocol: 3, screenshot: true, shotError: "off"}))), e => e.code === "hal_too_old" && /"off"/.test(e.message));
+  await assert.rejects(boardScreenshot(shotCtx(new FakeBoard({protocol: 3, screenshot: true, framebuffer: false}))), e => e.code === "board_refused" && /GetPanel/.test(e.hint));
+  await assert.rejects(boardScreenshot(shotCtx(new FakeBoard({protocol: 3, screenshot: true, shotError: "no memory"}))), e => e.code === "board_refused" && /board memory/.test(e.hint));
+});
+
 test("press and keys: steps as the HAL takes them, combos, long sequences in several requests", async () => {
   const fake = new FakeBoard();
   const r = await boardPress(ctxFor(fake, {args: {KEY: ["down", "fn+s", "home"]}, flags: {hold: 50, gap: 20}, json: true}));
@@ -448,6 +579,9 @@ test("settings: keys and values as typed (aliases, units, languages by tag or na
   assert.equal(settingValue("mic_gain", "+6dB", usage), 6);
   assert.equal(settingValue("screen_brightness", "80 %", usage), 80);
   assert.equal(settingValue("volume", "150", usage), 150, "out of range: the device's to clamp");
+  assert.equal(settingKey("auto-upload", usage), "screenshot_upload");
+  for (const [typed, value] of [["off", 0], ["ON", 1], ["0", 0], ["yes", 1], ["false", 0]]) assert.equal(settingValue("screenshot_upload", typed, usage), value, typed);
+  assert.throws(() => settingValue("screenshot_upload", "2", usage), e => e.code === "usage" && /on or off/.test(e.message));
   for (const bad of ["loud", "5.5", "6dB", "", "99999999999"]) assert.throws(() => settingValue("volume", bad, usage), e => e.code === "usage" && e.field === "VALUE", bad);
   for (const [typed, code] of [["en", 0], ["English", 0], ["zh", 1], ["ZH-HANS", 1], ["zh_Hans", 1], ["简体中文", 1], ["ja", 3], ["日本語", 3], ["id", 4], ["Bahasa Indonesia", 4],
     ["vi", 5], ["Tiếng Việt", 5], ["3", 3], ["7", 7]]) assert.equal(settingValue("language", typed, usage), code, typed);
@@ -469,6 +603,7 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.match(all.text, /\nkey_brightness +15 +0-15 +15 +no\n/);
     assert.match(all.text, /\nmic_gain +\+6 dB +-12 to \+36 dB +0 dB +yes\n/);
     assert.match(all.text, /\nlanguage +简体中文 \(zh-Hans\) +en zh-Hans ja id vi +English \(en\) +yes\n/);
+    assert.match(all.text, /\nscreenshot_upload +on +off on +on +no\n/);
     const column = line => textWidth(line.slice(0, line.search(/ (0-90|en zh-Hans)/) + 1));
     assert.equal(column(rows.find(l => l.startsWith("volume "))), column(rows.find(l => l.startsWith("language "))), "the language's name does not shift its row");
     assert.match(all.text, /HOME menu \(Settings\)/);
@@ -510,6 +645,10 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.equal(none.json.clamped, true);
     assert.deepEqual(none.json.changes, []);
     assert.match(none.text, /^language is 日本語 \(ja\) already: nothing changed\.\nThe board has no language with the code 7 \(it has 0 en, 1 zh-Hans, 3 ja, 4 id, 5 vi\): it kept 日本語 \(ja\)\./);
+    const upload = await boardSettingsSet(ctxFor(fake, {args: {KEY: "screenshot_upload", VALUE: "off"}}));
+    assert.deepEqual(fake.requests.at(-1).args, [0, 0, 0, 0, ...Buffer.from("screenshot_upload")]);
+    assert.match(upload.text, /^screenshot_upload on → off\./);
+    await boardSettingsSet(ctxFor(fake, {args: {KEY: "upload", VALUE: "on"}}));
     const same = await boardSettingsSet(ctxFor(fake, {args: {KEY: "key_brightness", VALUE: "15"}}));
     assert.match(same.text, /^key_brightness is 15 already: nothing changed\.$/m);
     assert.equal(same.json.clamped, false);
@@ -548,7 +687,7 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
 test("settings: answered by a firmware built without the development channel; a HAL from before them, a setting it lacks, said plainly", async () => {
   // Protocol 3, the development channel off: the settings answer, the rest is dev_channel_off (HELLO says dev: false).
   const off = new FakeBoard({protocol: 3, off: true});
-  assert.equal((await boardSettings(ctxFor(off))).json.settings.length, 6);
+  assert.equal((await boardSettings(ctxFor(off))).json.settings.length, 7);
   assert.equal((await boardSettingsSet(ctxFor(off, {args: {KEY: "volume", VALUE: "40"}}))).json.setting.value, 40);
   await assert.rejects(boardInfo(ctxFor(off)), e => e.code === "dev_channel_off" && /board settings works without it/.test(e.hint));
   assert.ok(!off.requests.some(q => q.op === OP.INFO), "HELLO said so: INFO not asked");
@@ -773,6 +912,41 @@ test("203cli board over raw MIDI, signed out: info, screen, press, files put and
   } finally { pty.close(); }
 });
 
+test("203cli board screenshot over raw MIDI: an agent's one command, the card's copy, an older HAL's next commands", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
+  const fake = new FakeBoard({protocol: 3, screenshot: true});
+  const pty = await ptyFor(fake);
+  try {
+    const env = standInSystem({midi: pty.slave});
+    const agent = await cli(["board", "screenshot", "--no-save", "--out", "agent.png", "--json"], env);
+    assert.equal(agent.code, 0, agent.stderr);
+    assert.equal(agent.json.path, path.join(dir, "agent.png"));
+    assert.deepEqual([agent.json.saved, agent.json.card, agent.json.width, agent.json.height, agent.json.format], [false, "not_asked", 240, 135, "png"]);
+    assert.equal(agent.stderr, "", "nothing but the JSON");
+    assert.equal(decodePng(fs.readFileSync(agent.json.path)).height, 135);
+    const saved = await cli(["board", "screenshot", "--out", "card.png"], env);
+    assert.equal(saved.code, 0, saved.stderr);
+    assert.equal(saved.stdout.trim(), path.join(dir, "card.png"));
+    assert.match(saved.stderr, /On the device's SD card as \/screenshot\/shot-0001_CardenzaSynth\.png/);
+    assert.ok(fake.files.has("screenshot/shot-0001_CardenzaSynth.png"));
+    const help = JSON.parse((await cli(["board", "screenshot", "--help", "--json"])).stdout);
+    assert.equal(help.signin, false, "no sign-in");
+    assert.deepEqual(fake.violations, []);
+  } finally { pty.close(); }
+  const old = new FakeBoard({protocol: 3});
+  const pty2 = await ptyFor(old);
+  try {
+    const env = standInSystem({midi: pty2.slave});
+    const r = await cli(["board", "screenshot", "--quiet", "--json"], env);
+    assert.equal(r.code, 1, r.stderr);
+    assert.equal(r.error.code, "hal_too_old");
+    assert.match(r.error.next[0], /board screenshot --quiet --no-save --json$/);
+    assert.match(r.error.next[1], /board screen --json$/);
+    const ok = await cli(["board", "screenshot", "--no-save", "--json"], env);
+    assert.equal(ok.code, 0, ok.stderr);
+    assert.equal(ok.json.via, "screen");
+  } finally { pty2.close(); }
+});
+
 test("203cli board over hidraw when raw MIDI cannot be opened; a HAL too old says so", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
   const fake = new FakeBoard({kind: "hid", rle: false});
   const pty = await ptyFor(fake);
@@ -805,7 +979,8 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
     const env = standInSystem({midi: pty.slave});
     const all = await cli(["board", "settings", "--json"], env);
     assert.equal(all.code, 0, all.stderr);
-    assert.deepEqual(all.json.settings.map(s => [s.key, s.value]), [["volume", 64], ["volume_limit", 90], ["screen_brightness", 100], ["key_brightness", 15], ["mic_gain", 0], ["language", 1]]);
+    assert.deepEqual(all.json.settings.map(s => [s.key, s.value]), [["volume", 64], ["volume_limit", 90], ["screen_brightness", 100], ["key_brightness", 15], ["mic_gain", 0], ["language", 1],
+      ["screenshot_upload", 1]]);
     const text = await cli(["board", "settings"], env);
     assert.equal(text.code, 0, text.stderr);
     assert.match(text.stdout, /language +简体中文 \(zh-Hans\)/);
@@ -824,7 +999,7 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
     assert.equal(fake.values.volume_limit, 50, "not reset");
     const reset = await cli(["board", "settings", "reset", "--yes", "--json"], env);
     assert.equal(reset.code, 0, reset.stderr);
-    assert.deepEqual(reset.json.settings.map(s => s.value), [70, 100, 100, 15, 0, 3]);
+    assert.deepEqual(reset.json.settings.map(s => s.value), [70, 100, 100, 15, 0, 3, 1]);
     const help = JSON.parse((await cli(["board", "settings", "reset", "--help", "--json"])).stdout);
     assert.equal(help.signin, false);
     assert.deepEqual(help.flags.map(f => f.name), ["--yes"]);
@@ -887,7 +1062,7 @@ test("only a serial port: the 203 Launcher is told apart from a firmware that do
 
 test("203cli board over a HAL firmware's serial port (protocol 4): each report a `sys` line, its console between passed over", {skip: !PTY && "Linux with python3 (pty)"}, async () => {
   const {sysLine, sysReport} = await import("../scripts/usb-devices.mjs");
-  const fake = new FakeBoard({kind: "hid", protocol: 4});
+  const fake = new FakeBoard({kind: "hid", protocol: 4, screenshot: true});
   // The serial port's side: lines in, the fake's HID reports out as lines, a log line now and then between them.
   let text = "", sent = 0;
   const port = {receive(bytes) {
@@ -928,6 +1103,10 @@ test("203cli board over a HAL firmware's serial port (protocol 4): each report a
     assert.match(textInfo.stdout, /USB +serial port \(.*ttyACM0\)/);
     const ls = await cli(["board", "files", "ls", "--json"], env);
     assert.equal(ls.code, 0, ls.stderr);
+    const shot = await cli(["board", "screenshot", "--raw", "--out", "serial.png", "--json"], env);
+    assert.equal(shot.code, 0, shot.stderr);
+    assert.deepEqual([shot.json.device_format, shot.json.card], ["rgb565", "saved"], "the raw frame over the serial port, and the card's PNG");
+    assert.deepEqual(readPng(fs.readFileSync(shot.json.path)).pixel(130, 100), widen(fakePixel(130, 100)));
     assert.deepEqual(fake.violations, []);
   } finally { pty.close(); }
 });

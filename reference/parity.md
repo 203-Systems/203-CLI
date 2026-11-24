@@ -115,6 +115,9 @@ account; a token never does those (COMMUNITY.md "Credentials"). `203cli` is the 
 | 我的设备 › 添加设备 › 用 USB 线 (binding the device on a USB cable: `account`, `POST /me/devices/usb`, `account bind`) | **web only** (a credential is made, and Web Serial reaches the device; Node has no serial port) |
 | 我的设备 › files (/files): a device's TF card and internal flash over USB (upload, download, rename, delete, a partition backup) | **web only** (Web Serial to the Launcher's USB console; Node has no serial port) |
 | 恢复刷机 Recovery flash (/recover, Web Serial): the official Launcher and official firmware, whole flash erased | `devices recover --dry-run --json`; `--out DIR` (the images, plan.json, flash.sh); `--port PORT --yes` (writes it with Python's esptool: Node has no serial port) |
+| 截图 Screenshots (the profile's tab: the ones the person's devices uploaded, private until made public; a person's page shows their public ones) | `screenshots list --json` (with the quota; `--all`, `--public-only`), `screenshots list --user ID --json` (a person's public ones), `screenshots show ID --json` |
+| A screenshot: download, ×4 larger, make public or private, title, delete | `screenshots download ID --scale 4 --json`, `screenshots public ID`, `screenshots private ID`, `screenshots rename ID "…"`, `screenshots delete ID --yes` (ID: its id, or its file name among yours) |
+| Upload a screenshot (a file, or one read from the device over USB by the page) | `screenshots upload FILE.png --json` (`--device ID`); from the device over USB: `board screenshot` (saved on its card and uploaded by the device itself) or `board screenshot --no-save --out FILE.png`, then `screenshots upload FILE.png` |
 | Feedback and appeals | `feedback --kind bug --title … --message …`, `feedback mine` |
 | Close the account (注销) | **web only**, after a recent sign-in |
 | Linked sign-ins (GitHub, WeChat) | **web only** (personal data) |

@@ -108,13 +108,19 @@ computer's side, signed out like `flash` and `log` (macOS, Linux and Windows):
 203cli board info --json               # name, version, code, build, ELF SHA-256, HAL commit, Launcher, chip, reset reason
 203cli board memory                    # heaps (internal, PSRAM, DMA) and tasks: stack left, CPU
 203cli board partitions                # the flash table, app images, NVS use, the running slot
-203cli board screen --out shot.png     # the next frame as a PNG: check what you drew
+203cli board screenshot --no-save --out shot.png  # the screen as a PNG here: check what you drew (an agent: --json)
+203cli board screenshot                # the device's own (as HOME + space): on its SD card, uploaded to its account too
 203cli board press down down ok        # keys as by a finger (cap names, up/down/left/right, fn+s, home)
 203cli board coredump --out crash.elf --elf build/<project>.elf  # the last crash, its backtrace decoded
 203cli board files ls Apps            # the SD card: ls, get, put, rm, mkdir, mv
 203cli board settings                  # the board's settings: volume and its limit, brightness, key lights, mic gain, language
 203cli board settings set volume 50    # one of them (get KEY, reset); the device writes it to its flash a second later
 ```
+
+A screenshot is the HAL's, in every firmware on it and in the Launcher: HOME + space on the device, or `203cli board
+screenshot` over USB. The device keeps it on its SD card in `/screenshot/` and uploads it to the account it is bound to
+(`203cli screenshots list`, then `download --scale 4`, `public`, `rename`, `delete`); `--no-save` brings the picture here
+only, and on a CardenzaHAL from before the screenshot it comes as `board screen`'s frame.
 
 The board's settings are the HAL's, the same in every firmware on it and in the HOME menu (Settings;
 [`docs/SETTINGS.md`](https://github.com/203-Systems/CardenzaHAL/blob/main/docs/SETTINGS.md)): `CardenzaHAL::Init`

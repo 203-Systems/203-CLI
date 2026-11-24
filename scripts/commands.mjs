@@ -7,8 +7,9 @@ import {CHANNELS, ENGINES, LICENSES} from "./checks.mjs";
 import {recoverDevice} from "./recover.mjs";
 import {flashDevice} from "./flash.mjs";
 import {deviceLog} from "./devlog.mjs";
-import {boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardPress, boardKeys, boardCoredump,
+import {boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardScreenshot, boardPress, boardKeys, boardCoredump,
   filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, boardSettings, boardSettingsGet, boardSettingsSet, boardSettingsReset} from "./board.mjs";
+import {screenshotsList, screenshotsShow, screenshotsDownload, screenshotsVisibility, screenshotsRename, screenshotsDelete, screenshotsUpload} from "./screenshots.mjs";
 import {newProject} from "./scaffold.mjs";
 import {inbox, link} from "./feedback.mjs";
 import {projectShow, projectVersions, projectFeedback, projectForks, projectDiff, sync} from "./project-view.mjs";
@@ -611,9 +612,17 @@ cmd("board memory", "Heaps (internal, PSRAM, DMA: free, least free, largest bloc
 cmd("board storage", "The SD card: mounted, its size, the file system's size and free space", {...BOARD, run: boardStorage, examples: ["board storage --json"]});
 cmd("board status", "The display, keys down, the system menu, USB and the presence service", {...BOARD, run: boardStatus, examples: ["board status --json"]});
 cmd("board i2c", "Every device that answers on the shared I2C bus (the codec, the expansion port's)", {...BOARD, run: boardI2c, examples: ["board i2c --json"]});
-cmd("board screen", "A screenshot: the firmware's next frame as a PNG (prints its path)", {...BOARD,
+cmd("board screen", "The firmware's next frame as a PNG here (prints its path): just the pixels, nothing on the device's screen or card; board screenshot is the device's own, kept on its card and uploaded", {...BOARD,
   flags: {out: V("FILE.png", "Where to write it (default cardenza-<date>-<time>.png in the current folder)")}, run: boardScreen,
   examples: ["board screen", "board screen --out menu.png --json"]});
+// The HAL's own screenshot (CardenzaHAL 2026-11-24, the device's HOME + space): SCREENSHOT, 0x12 (docs/usb-dev.md).
+cmd("board screenshot", "The device's own screenshot, as HOME + space takes it: a PNG of its screen saved on its SD card in /screenshot/ (uploaded to the account the device is bound to when its auto-upload is on) and written here too (prints its path); --no-save: only here. An agent developing a firmware: board screenshot --no-save --out /tmp/screen.png --json", {...BOARD,
+  flags: {out: V("FILE", "Where to write it: a .png file, a .rgb565 file (the raw frame) or a folder (default: the name the device gave it, else screenshot.png, in the current folder)"),
+    "no-save": B("Not on the device's card (and not uploaded): only the picture here; on a CardenzaHAL from before the screenshot it comes as board screen's"),
+    raw: B("Ask the device for its raw RGB565 frame and make the PNG here (the same pixels); with --out FILE.rgb565 the raw bytes as they are"),
+    quiet: B("No flash or toast on the device's screen")},
+  run: boardScreenshot, examples: ["board screenshot", "board screenshot --no-save --out /tmp/screen.png --json", "board screenshot --quiet --out shots/ --json",
+    "board screenshot --no-save --raw --out frame.rgb565 --json"]});
 cmd("board press KEY...", "Press keys as a finger would, one after another (fn+s: together): esc, 1, q, fn, ok, space, up/down/left/right (; . , /), home …", {...BOARD,
   flags: {hold: V("MS", "How long each is held (default 100)", {type: "int"}), gap: V("MS", "The pause after each (default 100)", {type: "int"})},
   run: boardPress, examples: ["board press down down ok", "board press fn+s", "board press home --json", "board press esc --hold 1500"]});
@@ -634,14 +643,41 @@ cmd("board files mv FROM TO", "Rename or move a file or folder on the SD card", 
 // The board's settings (CardenzaHAL docs/SETTINGS.md): the HAL's, in every firmware that starts USB on a HAL from 2026-11-23 on,
 // also one built without the development channel. The user may say "device settings": the cable's commands are board's.
 const SETTINGS_ABOUT = "The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one";
-cmd("board settings", `Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language (value, range or choices, default, stored). ${SETTINGS_ABOUT}`, {...BOARD,
+cmd("board settings", `Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload (value, range or choices, default, stored). ${SETTINGS_ABOUT}`, {...BOARD,
   run: boardSettings, examples: ["board settings", "board settings --json"]});
-cmd("board settings get KEY", "One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language): its value, range or choices, default, whether it is stored", {...BOARD,
+cmd("board settings get KEY", "One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, mic_gain, language, screenshot_upload): its value, range or choices, default, whether it is stored", {...BOARD,
   run: boardSettingsGet, examples: ["board settings get volume", "board settings get language --json"]});
-cmd("board settings set KEY VALUE", `Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code. ${SETTINGS_ABOUT}`, {...BOARD,
-  run: boardSettingsSet, examples: ["board settings set volume 50", "board settings set language zh --json", "board settings set mic_gain -6 --json", "board settings set volume_limit 60 --json"]});
+cmd("board settings set KEY VALUE", `Change one of the board's settings: VALUE a whole number (80, -6; 80% or +6dB), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code; screenshot_upload: on or off (whether the device uploads its screenshots to its account). ${SETTINGS_ABOUT}`, {...BOARD,
+  run: boardSettingsSet, examples: ["board settings set volume 50", "board settings set language zh --json", "board settings set mic_gain -6 --json", "board settings set volume_limit 60 --json", "board settings set screenshot_upload off --json"]});
 cmd("board settings reset", "Every one of the board's settings but the language back to its default (as the Launcher's reset): what the user chose goes, so it asks on a terminal and a program needs --yes; nothing to reset changes nothing", {...BOARD,
   flags: {yes: B("Yes, put them back (only when the user asked for it)")}, run: boardSettingsReset, examples: ["board settings reset", "board settings reset --yes --json"]});
+
+// Screenshots (COMMUNITY.md "Screenshots", the user 2026-11-24): taken on a device (HOME + space, board screenshot), kept on its card
+// and uploaded to the account it is bound to, or uploaded here; private until made public (then on the person's page).
+const SHOTS = {group: "Screenshots", topic: "screenshots"};
+const SHOT_REF = "its id, or its file name among yours, .png may be left out";
+cmd("screenshots list", "Your screenshots on the community, newest first (private ones too): id, name, size, public or not, when taken, firmware, device; the quota (1000, 200 MB); --user: a person's public ones", {...SHOTS,
+  flags: {"public-only": B("Only the public ones"), user: V("ID", "A person's public screenshots (their user id) instead of yours"), all: B("Every page (yours)"),
+    cursor: V("C", "The previous answer's next (the next page)"), limit: V("N", "Items a page", {type: "int"})},
+  run: screenshotsList, examples: ["screenshots list --json", "screenshots list --public-only", "screenshots list --user ab12cd34 --json", "screenshots list --all --json"]});
+cmd("screenshots show ID", `A screenshot: name, title, size, public or not, when taken, firmware, device and its PNG's address (ID: ${SHOT_REF})`, {...SHOTS,
+  run: screenshotsShow, examples: ["screenshots show q4hzuufx --json", "screenshots show 2026-11-24_101500_CardenzaSynth --json"]});
+cmd("screenshots download REF...", `Save screenshots' PNGs here (REF: ${SHOT_REF}; or a public one's id); --scale 4 makes each pixel a 4 × 4 block (a PNG made here, name-4x.png)`, {...SHOTS,
+  flags: {out: V("DIR", "The folder (made when missing; default the current one), or with one screenshot a .png file"),
+    scale: V("N", "Larger pixel for pixel, 1-16 (default 1: the bytes as uploaded)", {type: "int"})},
+  run: screenshotsDownload, examples: ["screenshots download q4hzuufx --json", "screenshots download q4hzuufx 7ces8nvr --out shots --scale 4 --json",
+    "screenshots download 2026-11-24_101500_CardenzaSynth.png --out home.png"]});
+cmd("screenshots public ID", "Make your screenshot public: anyone sees it on your page (a public one stays as it is)", {...SHOTS, write: true,
+  run: ctx => screenshotsVisibility(ctx, true), examples: ["screenshots public q4hzuufx --json"]});
+cmd("screenshots private ID", "Make your screenshot private again: only you see it", {...SHOTS, write: true,
+  run: ctx => screenshotsVisibility(ctx, false), examples: ["screenshots private q4hzuufx --json"]});
+cmd("screenshots rename ID TITLE...", "Give your screenshot a title (up to 80 characters; \"\" removes it: its file name shows)", {...SHOTS, write: true,
+  run: screenshotsRename, examples: ['screenshots rename q4hzuufx "The step sequencer" --json', 'screenshots rename q4hzuufx "" --json']});
+cmd("screenshots delete ID...", "Delete your screenshots (a device does not upload one of that name again); asks, --yes from a program", {...SHOTS, write: true,
+  flags: YES, confirm: true, run: screenshotsDelete, examples: ["screenshots delete q4hzuufx --yes --json"]});
+cmd("screenshots upload FILE...", "Upload PNG screenshots from this computer to your account (each at most 256 KB and 1024 × 1024; private; a device's name dates it): one taken with board screenshot --no-save, say", {...SHOTS, write: true,
+  flags: {device: V("ID", "The device it was taken on: one of yours (devices list)", {type: "int"}), ...DRY},
+  run: screenshotsUpload, examples: ["screenshots upload screen.png --json", "screenshots upload shots/*.png --device 3 --dry-run --json"]});
 
 cmd("me edit", "Change your name, bio or avatar", {group: "People",
   flags: {name: V("NAME", "2-24 letters, digits, CJK, _ - . (single spaces inside)"), bio: V("TEXT", "Up to 300 characters"), "bio-file": V("PATH", "The bio from a file"),
@@ -856,7 +892,7 @@ export const ALIASES = {
   signin: "login", "sign-in": "login", auth: "login", authenticate: "login", profile: "me edit", status: "doctor", check: "doctor", health: "doctor", version: "versions",
   fw: "firmware", firmwares: "firmware", sound: "sounds", project: "projects", work: "works", model: "models", post: "posts", comment: "comments",
   request: "requests", device: "devices", merge: "merges", cover: "firmware cover", list: "firmware mine", info: "doctor",
-  images: "firmware images", pictures: "firmware images", gallery: "firmware images", screenshots: "firmware images",
+  images: "firmware images", pictures: "firmware images", gallery: "firmware images", screenshot: "board screenshot", screencap: "board screenshot",
   checkout: "clone", "git-clone": "clone", remix: "fork", "based-on": "firmware based-on", lineage: "firmware based-on", spec: "rules", guide: "rules",
   quota: "quotas", limits: "quotas", update: "updates", upgrade: "updates", outdated: "updates", lookup: "firmware lookup", archive: "source upload",
   simulator: "sim", emulator: "sim", wasm: "sim build", web: "sim build", play: "sim check",

@@ -113,14 +113,16 @@ export const ERROR_CODES = [
   ["board_no_usb", 1, "board: the firmware does not start CardenzaHAL's USB device (only the chip's own serial port is there), so it has no development channel", "rebuild it with a current CardenzaHAL (from 2026-11-24 CardenzaHAL::Init() starts USB), or add `CardenzaHAL::USB::Init();` after `CardenzaHAL::Init()` in app_main; flash; `log` reads its console meanwhile"],
   ["signals_failed", 1, "flash: the serial port's DTR and RTS could not be set (python3 sets them on macOS and Linux)", "macOS: xcode-select --install; or unplug the device and plug it in again"],
   ["board_in_launcher", 1, "board: the device is in its 203 Launcher, not running a firmware", "start the firmware from the Launcher (or `flash --bin` a build), run it again"],
-  ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), or for board settings the board's settings (protocol 2: a HAL from before 2026-11-23)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again"],
+  ["hal_too_old", 1, "board: the firmware's CardenzaHAL is older than the command needs: the development channel (IDENTIFY says protocol 1, or no answer to HELLO), for board settings the board's settings (protocol 2: a HAL from before 2026-11-23), for board screenshot its screenshot (HELLO without \"screenshot\": true)", "rebuild the firmware with a current CardenzaHAL (update its submodule), install it (`flash --bin`), run it again; board screenshot: `--no-save` (or `board screen`) gets the pixels meanwhile"],
   ["dev_channel_off", 1, "board: the firmware was built with CONFIG_CARDENZA_HAL_USB_DEV off (board settings still works)", "turn it on in its sdkconfig, build and install it again"],
   ["hidapi_missing", 1, "board on Windows: node-hid (hidapi; 203cli's optional dependency for a running firmware's HID, prebuilt) is not installed (flash there restarts a running firmware through it too, and says firmware_unreachable)", "install 203cli again (`npm install -g 203cli`)"],
   ["board_refused", 1, "board: the firmware refused the request (`reason`: no framebuffer, a path not found, no SD card, …)", "read `error` and `hint`"],
-  ["board_busy", 3, "board: the firmware's development channel has 8 requests queued", "wait a moment, run it again"],
+  ["board_busy", 3, "board: the firmware's development channel has 8 requests queued, or (board screenshot) it is taking another screenshot", "wait a moment, run it again"],
   ["board_timeout", 3, "board: the device stopped answering, or part of an answer was lost more than once", "run it again; if it keeps happening, read its log (`log`)"],
   ["board_lost", 3, "board: the device went away (restarted, unplugged)", "plug it in, let the firmware start, run it again"],
   ["board_protocol", 1, "board: the firmware's answer is not what this 203cli reads", "update 203cli (`npm install -g 203cli`); else report it"],
+  ["screenshots_unavailable", 1, "screenshots: the community answers 404 to them: an older community without screenshots yet", "wait for its update; meanwhile `board screenshot --no-save --out FILE` brings a screenshot here over USB"],
+  ["quota_full", 1, "screenshots upload: the account holds its 1000 screenshots or 200 MB (nothing is deleted by itself)", "delete some (`screenshots list --all`, then `screenshots delete ID… --yes` if the user agrees), then run it again"],
   ["dir_not_empty", 1, "new: the folder is there and not empty", "give another DIR"],
   ["git_missing", 1, "new, project diff: git is not installed", "install git"],
   ["not_a_repository", 1, "project diff local: this folder is not a git repository", "compare two versions or a fork instead, or git init"],
@@ -172,6 +174,8 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   see why a version was sent back                  {P} versions check VCODE --json
   try a build on your Cardenza (USB cable)         {P} flash --bin build/<project>.bin --json   then   {P} log --json
   look inside it running: screen, keys, memory, SD {P} board info --json, board screen, board press …   ({P} help board)
+  see what it shows (an agent: one command)        {P} board screenshot --no-save --out /tmp/screen.png --json   (then look at the PNG)
+  the device's screenshots on your account         {P} screenshots list --json, screenshots download ID --scale 4   ({P} help screenshots)
   the device's volume, brightness, language (USB)  {P} board settings --json, then board settings set volume 50 --json
   everything about this project's firmware (an AI) {P} sync --json   (.203/community.md: page, versions, requests, comments, forks)
   what users asked for and said since last time    {P} inbox --json   ({P} help project)
@@ -185,7 +189,7 @@ Always add --json when a program reads the answer. Run doctor first. Never guess
   what is left of today's limits                   {P} quotas --json
   change your name or bio                          {P} me edit --name "…" --bio "…" --json
 
-Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover pictures tutorials sounds projects works models signin errors devices board requests launchers sandbox admin)`},
+Topics: {P} help <topic>   (new project publish sim ci manifest link fork source rules channels versions checks page cover pictures tutorials sounds projects works models signin errors devices board screenshots requests launchers sandbox admin)`},
 
   new: {title: "A new firmware for the Cardenza: make, build, try, publish, listen", text: `
 1. {P} new "My firmware" --summary "What it does" --json     a folder with CardenzaHAL (git submodule) and its template,
@@ -590,7 +594,10 @@ CoreMIDI through python3); Windows over its HID (node-hid, which comes with 203c
 {P} board partitions                      the flash table: offsets and sizes, app images, NVS entries used, the running one, free flash
 {P} board memory --window 2000            heaps (internal, PSRAM, DMA) and tasks: stack left, CPU over 2 s
 {P} board storage | status | i2c --json   the SD card; display, keys, system menu, USB; the I2C bus
-{P} board screen --out shot.png           the next frame as a PNG (240 × 135; prints the path)
+{P} board screen --out shot.png           the next frame as a PNG (240 × 135; prints the path): the pixels only
+{P} board screenshot --no-save --out /tmp/screen.png --json
+                                          the device's own screenshot (as HOME + space), here; without --no-save it is
+                                          also saved on its card (/screenshot/) and uploaded to its account ({P} help screenshots)
 {P} board press down down ok              keys pressed as by a finger: cap names (esc 1 q fn shift opt alt ok space del …),
                                           up down left right (the arrows on ; . , /), home (the side key); fn+s together;
                                           --hold MS, --gap MS; 10-57 or k1-k57 are the HAL's key numbers
@@ -600,13 +607,14 @@ CoreMIDI through python3); Windows over its HID (node-hid, which comes with 203c
 {P} board files ls CardenzaSynth          the SD card: ls, get PATH [LOCAL], put LOCAL [PATH], rm, mkdir, mv FROM TO
                                           (paths from the card's root; a progress line on a terminal)
 {P} board settings                        the board's settings: volume, volume_limit, screen_brightness, key_brightness,
-                                          mic_gain, language (value, range or choices, default, stored); get KEY, set KEY VALUE
+                                          mic_gain, language, screenshot_upload (on: the device uploads its screenshots to
+                                          its account) (value, range or choices, default, stored); get KEY, set KEY VALUE
                                           (the device keeps it in range and says so; language: en zh ja id vi), reset (all but
                                           the language; asks, --yes from a program). The HAL's, the same in every firmware and
                                           in HOME > Settings; the device writes a change to its flash a second after the last
                                           one. Every firmware that starts USB answers them, also one built without the
                                           development channel; a HAL from before 2026-11-23 does not (hal_too_old)
-A test with screenshots: {P} flash --bin …, {P} log --until "ready" --seconds 30, then board press … and board screen.
+A test with screenshots: {P} flash --bin …, {P} log --until "ready" --seconds 30, then board press … and board screenshot --no-save.
 It reaches the firmware over its serial port (CardenzaHAL 2026-11-24 on, when it has one), else its MIDI or HID.
 Only the chip's own serial port there? board_no_usb: the firmware does not start CardenzaHAL's USB device: rebuild it with a
 current CardenzaHAL (from 2026-11-24 CardenzaHAL::Init() starts it), or add CardenzaHAL::USB::Init(); after
@@ -615,6 +623,34 @@ board_in_launcher: the device is in its 203 Launcher, start the firmware.
 Ctrl-C stops a transfer (the device is told to stop; an upload is aborted). Errors: board_not_found, firmware_unreachable
 (Linux: the audio group, or close what holds its MIDI port: a {P} log, a DAW), hal_too_old, dev_channel_off,
 board_refused (the firmware's reason), board_busy, board_timeout, board_lost.`},
+
+  screenshots: {title: "Screenshots: the device's own (board screenshot), on its card and on your account (screenshots)", text: `
+A Cardenza takes a screenshot with HOME + space (the key at the bottom right), in any firmware on a current CardenzaHAL and in
+its Launcher: a PNG of the screen's 240 × 135 pixels, saved on its SD card in /screenshot/ (2026-11-24_101500_<Firmware>.png
+when its clock is set, else shot-0001_<Firmware>.png). A device bound to an account uploads them there by itself when it is
+online (the board's setting screenshot_upload, on by default; HOME > Settings; {P} board settings set screenshot_upload
+off). They are private until made public.
+
+Over the USB cable (no sign-in), the same screenshot from here, its PNG written on this computer too:
+{P} board screenshot --no-save --out /tmp/screen.png --json   only here: nothing on the card, nothing uploaded (an agent
+                                          checking what its firmware shows: one command, then look at the PNG)
+{P} board screenshot --json               saved on the card and queued for the account as well (the device's name for it)
+  --quiet: no flash or toast on the device; --raw: the raw RGB565 frame, made a PNG here (--out f.rgb565: the bytes as
+  they are); --out DIR: into that folder. JSON: {path, name, saved, card (saved, not_asked, no_card, card_refused),
+  card_path, width, height, format, bytes}. No SD card: the PNG still comes here (saved false, card no_card).
+{P} board screen --out shot.png           just the firmware's next frame (any HAL with the development channel): what
+                                          board screenshot --no-save falls back to on a CardenzaHAL from before it
+On the account (signed in):
+{P} screenshots list --json               yours, newest first (private ones too), with the quota; --public-only, --all,
+                                          --user ID (a person's public ones)
+{P} screenshots show ID --json            one (ID: its id, or its file name among yours)
+{P} screenshots download ID … --out shots --scale 4    the PNGs, ×4 pixel for pixel (name-4x.png)
+{P} screenshots public ID / private ID    on your page for anyone, or only yours again
+{P} screenshots rename ID "Title"         its title (up to 80; "" removes it)
+{P} screenshots delete ID --yes           gone (a device does not upload one of that name again)
+{P} screenshots upload screen.png --json  a PNG from here (at most 256 KB, 1024 × 1024; --device ID: the device it came from)
+Errors: hal_too_old (the firmware's HAL predates the screenshot: --no-save, or rebuild it), board_busy, board_refused
+(no framebuffer, no memory), screenshots_unavailable (an older community), quota_full (1000 or 200 MB: delete some).`},
 
   requests: {title: "Requests and the developer tracker", text: `
 {P} inbox --json                                          everything new about this project's firmware (203.json) since
@@ -785,6 +821,10 @@ export function explainApiError(error, ctx) {
       return out;
     }
     case "too_large": out.hint = "The file is over the limit: make it smaller (help " + (ctx.topic ?? "errors") + ")."; return out;
+    case "quota_full":
+      out.hint = "The account holds as many screenshots as it may (1000, or 200 MB): nothing is deleted by itself. Delete some (screenshots delete ID --yes, only if the user agrees), then run the same command again.";
+      out.next = [ctx.run(["screenshots", "list", "--all"])];
+      return out;
     case "expired": out.hint = "It ran out: start again."; out.next = [ctx.cmd({})]; return out;
     case "deleted": out.hint = "It was deleted: nothing more to do with it (running the same command again answers the same)."; return out;
     case "device_offline": out.hint = "The device is off or not online (设备没开机或没联网): ask the user to switch it on with Wi-Fi (its Launcher, or any CardenzaHAL firmware running), then run the same command again."; out.next = [ctx.cmd({})]; return out;

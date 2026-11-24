@@ -1863,26 +1863,28 @@ Rename or move a file or folder on the SD card
 
 ### `203cli board settings`
 
-Every setting of the board: volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload (value, range or choices, default, stored). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+Every setting the board lists, in its order (a current HAL: volume, volume_limit, screen_brightness, key_brightness, language, webusb_landing, webusb_seen, screenshot_upload): value, range or choices, default, stored. The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
 
     203cli board settings
     203cli board settings --json
 
 ### `203cli board settings get KEY`
 
-One of the board's settings (KEY: volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload): its value, range or choices, default, whether it is stored
+One of the board's settings (KEY: any key the board lists, a newer HAL's too; board settings shows them): its value, range or choices, default, whether it is stored
 
     203cli board settings get volume
     203cli board settings get language --json
+    203cli board settings get webusb_landing --json
 
 ### `203cli board settings set KEY VALUE`
 
-Change one of the board's settings: VALUE a whole number (80, or 80% where the unit is %), kept in range by the device, which says so (the volume under volume_limit; lowering the limit lowers the volume); language: en, zh (zh-Hans), ja, id, vi, its name or the Launcher's code; screenshot_upload: on or off (whether the device uploads its screenshots to its account). The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
+Change one of the board's settings: KEY any key the board lists; VALUE checked against what the board says of that key before it is sent: a whole number in its range (80, or 80% where the unit is %; the volume's top is volume_limit, and lowering the limit lowers the volume), one of its choices (language: en, zh (zh-Hans), ja, id, vi or its own name), or a named value (webusb_landing: first, always or never, whether browsers are told the community's page when the board is plugged in; screenshot_upload: on or off; any other 0-1 switch: on or off). Out of range or not a choice: a usage error, with the nearest value in next. The board's system settings, shared by every firmware on CardenzaHAL (also in its HOME menu > Settings); the device writes a change to its flash itself, a second after the last one
 
     203cli board settings set volume 50
     203cli board settings set language zh --json
     203cli board settings set key_brightness 8 --json
     203cli board settings set volume_limit 60 --json
+    203cli board settings set webusb_landing never --json
     203cli board settings set screenshot_upload off --json
 
 ### `203cli board settings reset`

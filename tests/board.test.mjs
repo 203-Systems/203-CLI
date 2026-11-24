@@ -19,7 +19,7 @@ import {pack7, unpack7, sysexRequest, hidRequest, sysexAnswer, hidAnswer, SysexR
 import {keyNumber, keyName, parseCombo, pressSteps, parseSteps, keyRequests, decodeScreen, rgbOf, encodePng, crc32, cardPath, size,
   boardInfo, boardPartitions, boardMemory, boardStorage, boardStatus, boardI2c, boardScreen, boardScreenshot, decodeScreenshot, screenshotHead, boardPress, boardKeys, boardCoredump,
   filesLs, filesGet, filesPut, filesRm, filesMkdir, filesMv, partitionsText, memoryText,
-  boardSettings, boardSettingsGet, boardSettingsSet, boardSettingsReset, settingKey, settingValue, textWidth, table, SETTING_KEYS} from "../scripts/board.mjs";
+  boardSettings, boardSettingsGet, boardSettingsSet, boardSettingsReset, settingEntry, settingKeyShape, settingNames, settingRange, settingShown, settingValue, textWidth, table} from "../scripts/board.mjs";
 import {CliError, EXIT} from "../scripts/guide.mjs";
 import {decodePng} from "../scripts/png.mjs";
 
@@ -567,36 +567,75 @@ test("a firmware too old for the channel, one built without it, one that does no
 // ---------------------------------------------------------------------------------------------
 // The board's settings (CardenzaHAL docs/SETTINGS.md)
 
-test("settings: keys and values as typed (aliases, units, languages by tag or name), checked before the device is asked", () => {
-  assert.deepEqual(SETTING_KEYS, SETTING_SPECS.map(s => s.key), "the device's order");
-  assert.equal(settingKey("Volume-Limit", usage), "volume_limit");
-  assert.equal(settingKey("lang", usage), "language");
-  assert.equal(settingKey("key_lights", usage), "key_brightness");
-  assert.throws(() => settingKey("loudness", usage), e => e.code === "usage" && e.field === "KEY" && /volume, volume_limit, screen_brightness, key_brightness, language, screenshot_upload$/.test(e.message) &&
-    !/mic/.test(e.message + e.hint));
-  // mic_gain: a HAL's from the first hours of the settings, gone in CardenzaHAL 8746b6f (the firmware's own now): never listed,
-  // still taken, so a board on such a HAL answers it.
-  assert.ok(!SETTING_KEYS.includes("mic_gain"));
-  assert.equal(settingKey("mic_gain", usage), "mic_gain");
-  assert.throws(() => settingKey("volum", usage, {fix: guess => `203cli board settings get ${guess}`}), e => /Did you mean volume\?/.test(e.hint) && e.next[0] === "203cli board settings get volume");
-  assert.equal(settingValue("volume", "50", usage), 50);
-  assert.equal(settingValue("mic_gain", "-6", usage), -6);
-  assert.equal(settingValue("mic_gain", "+6dB", usage), 6);
-  assert.equal(settingValue("screen_brightness", "80 %", usage), 80);
-  assert.equal(settingValue("volume", "150", usage), 150, "out of range: the device's to clamp");
-  assert.equal(settingKey("auto-upload", usage), "screenshot_upload");
-  for (const [typed, value] of [["off", 0], ["ON", 1], ["0", 0], ["yes", 1], ["false", 0]]) assert.equal(settingValue("screenshot_upload", typed, usage), value, typed);
-  assert.throws(() => settingValue("screenshot_upload", "2", usage), e => e.code === "usage" && /on or off/.test(e.message));
-  for (const bad of ["loud", "5.5", "6dB", "", "99999999999"]) assert.throws(() => settingValue("volume", bad, usage), e => e.code === "usage" && e.field === "VALUE", bad);
+test("settings: keys and values checked against what the board says of them (its keys, ranges, choices), any key it lists", () => {
+  const fake = new FakeBoard({protocol: 3, extra: [{key: "haptics", min: 0, max: 3, step: 1, default: 1, unit: ""},
+    {key: "theme", default: 0, choices: [{value: 0, name: "dark"}, {value: 1, name: "light"}, {value: 2, name: "retro"}]},
+    {key: "click", min: 0, max: 1, step: 1, default: 0, unit: ""}, {key: "tilt", min: -20, max: 20, step: 1, default: 0, unit: "dB"}]});
+  const entries = fake.specs.map(spec => fake.setting(spec));
+  const entry = key => entries.find(e => e.key === key);
+  // Keys: the board's own, any case, - for _; words taken for one of its keys; never a fixed list.
+  assert.equal(settingEntry("Volume-Limit", entries, usage).key, "volume_limit");
+  assert.equal(settingEntry("lang", entries, usage).key, "language");
+  assert.equal(settingEntry("key_lights", entries, usage).key, "key_brightness");
+  assert.equal(settingEntry("browser-notice", entries, usage).key, "webusb_landing");
+  assert.equal(settingEntry("WEBUSB_SEEN", entries, usage).key, "webusb_seen");
+  assert.equal(settingEntry("haptics", entries, usage).key, "haptics", "a key only a future HAL has");
+  assert.throws(() => settingEntry("loudness", entries, usage), e => e.code === "usage" && e.field === "KEY" &&
+    /not one of this board's settings: volume, volume_limit, screen_brightness, key_brightness, language, webusb_landing, webusb_seen, screenshot_upload, haptics, theme, click, tilt$/.test(e.message));
+  assert.throws(() => settingEntry("volum", entries, usage, {fix: guess => `203cli board settings get ${guess}`}), e => /Did you mean volume\?/.test(e.hint) && e.next[0] === "203cli board settings get volume");
+  assert.throws(() => settingEntry("mic_gain", entries, usage), e => e.code === "usage" && /8746b6f, 2026-11-23, the microphone's gain is a firmware's own setting/.test(e.hint));
+  assert.throws(() => settingEntry("volume", [{key: "language", choices: []}], usage), e => /not one of this board's settings: language$/.test(e.message), "the board's list, not ours");
+  assert.equal(settingKeyShape("Volume-Limit", usage), "volume_limit");
+  for (const bad of ["", "vol ume", "音量", "1volume", "x".repeat(49)]) assert.throws(() => settingKeyShape(bad, usage), e => e.code === "usage" && e.field === "KEY", bad);
+
+  // Ranges: a whole number in the board's range, in its unit (or % for the volumes); out of range refused, the nearest in next.
+  assert.equal(settingValue(entry("volume"), "50", usage), 50);
+  assert.equal(settingValue(entry("screen_brightness"), "80 %", usage), 80);
+  assert.equal(settingValue(entry("volume"), "80%", usage), 80);
+  assert.equal(settingValue(entry("tilt"), "-6dB", usage), -6);
+  assert.equal(settingValue(entry("haptics"), "3", usage), 3);
+  assert.throws(() => settingValue(entry("volume"), "150", usage, {fix: near => `203cli board settings set volume ${near}`}), e => e.code === "usage" && e.field === "VALUE" &&
+    /^volume is 0-100 on this board, not 150$/.test(e.message) && e.data.nearest === 100 && e.next[0] === "203cli board settings set volume 100");
+  assert.throws(() => settingValue({...entry("volume"), max: 60}, "80", usage), e => /0-60 on this board/.test(e.message) && /the most is volume_limit \(60\)/.test(e.hint));
+  assert.throws(() => settingValue(entry("screen_brightness"), "5", usage), e => /10-100 % on this board, not 5 %/.test(e.message) && /nearest it takes is 10 %/.test(e.hint));
+  assert.throws(() => settingValue(entry("haptics"), "4", usage), e => /haptics is 0-3 on this board/.test(e.message));
+  for (const bad of ["loud", "5.5", "6dB", "99999999999"]) assert.throws(() => settingValue(entry("volume"), bad, usage), e => e.code === "usage" && e.field === "VALUE", bad);
+
+  // Choices the board gives: by name or value, only those; the language also by its own name or common tags.
   for (const [typed, code] of [["en", 0], ["English", 0], ["zh", 1], ["ZH-HANS", 1], ["zh_Hans", 1], ["简体中文", 1], ["ja", 3], ["日本語", 3], ["id", 4], ["Bahasa Indonesia", 4],
-    ["vi", 5], ["Tiếng Việt", 5], ["3", 3], ["7", 7]]) assert.equal(settingValue("language", typed, usage), code, typed);
-  assert.throws(() => settingValue("language", "klingon", usage), e => e.code === "usage" && /en \(English\), zh-Hans \(简体中文\), ja \(日本語\), id \(Bahasa Indonesia\), vi \(Tiếng Việt\)/.test(e.message));
+    ["vi", 5], ["Tiếng Việt", 5], ["3", 3]]) assert.equal(settingValue(entry("language"), typed, usage), code, typed);
+  for (const bad of ["klingon", "7", "2"]) {
+    assert.throws(() => settingValue(entry("language"), bad, usage), e => e.code === "usage" && e.data.choices.length === 5 &&
+      /^language is one of en \(English, 0\), zh-Hans \(简体中文, 1\), ja \(日本語, 3\), id \(Bahasa Indonesia, 4\), vi \(Tiếng Việt, 5\), not/.test(e.message), bad);
+  }
+  assert.equal(settingValue(entry("theme"), "Light", usage), 1, "a future setting's choices");
+  assert.equal(settingValue(entry("theme"), "2", usage), 2);
+  assert.throws(() => settingValue(entry("theme"), "neon", usage), e => /^theme is one of dark \(0\), light \(1\), retro \(2\), not "neon"$/.test(e.message));
+
+  // Named values of settings the board describes by a range: webusb_landing first / always / never, the switches.
+  for (const [typed, value] of [["first", 0], ["always", 1], ["NEVER", 2], ["first-time", 0], ["1", 1]]) assert.equal(settingValue(entry("webusb_landing"), typed, usage), value, typed);
+  assert.throws(() => settingValue(entry("webusb_landing"), "sometimes", usage), e => /^webusb_landing is one of first \(0\), always \(1\), never \(2\), not "sometimes"$/.test(e.message));
+  assert.throws(() => settingValue(entry("webusb_landing"), "3", usage), e => /^webusb_landing is one of first \(0\), always \(1\), never \(2\), not "3"$/.test(e.message), "a number out of its range");
+  for (const [typed, value] of [["off", 0], ["ON", 1], ["0", 0], ["yes", 1], ["false", 0], ["开", 1]]) assert.equal(settingValue(entry("screenshot_upload"), typed, usage), value, typed);
+  assert.throws(() => settingValue(entry("screenshot_upload"), "2", usage), e => e.code === "usage" && /^screenshot_upload is one of off \(0\), on \(1\), not "2"$/.test(e.message));
+  assert.equal(settingValue(entry("webusb_seen"), "no", usage), 0);
+  assert.equal(settingValue(entry("click"), "on", usage), 1, "any other 0-1 setting with no unit is a switch");
+  assert.equal(settingNames({key: "webusb_landing", min: 0, max: 1}), null, "names only while they fit the board's range");
+
+  // Read as people read them.
+  assert.equal(settingShown(entry("webusb_landing")), "first");
+  assert.equal(settingRange(entry("webusb_landing")), "first always never");
+  assert.equal(settingShown(entry("webusb_seen"), 1), "yes");
+  assert.equal(settingShown(entry("screenshot_upload")), "on");
+  assert.equal(settingShown(entry("theme"), 2), "retro");
+  assert.equal(settingRange(entry("tilt")), "-20 to +20 dB");
+  assert.equal(settingShown(entry("tilt"), 6), "+6 dB");
   assert.equal(textWidth("简体中文 (zh-Hans)"), 18);
   assert.equal(textWidth("Tiếng Việt"), 10);
   assert.deepEqual(table([["a", "简体中文", "x"], ["bb", "en", "y"]]).split("\n").map(line => textWidth(line.slice(0, line.lastIndexOf(" ") + 1))), [14, 14], "columns as wide as a terminal shows them");
 });
 
-test("settings: every one, one, set (the device's clamp said, the limit lowering the volume, a language by name), reset (asked first, the language stays), over SysEx and HID", async () => {
+test("settings: every one, one, set (checked against the board's answer, the limit lowering the volume, a language by name, webusb_landing by name), reset (asked first, the language stays), over SysEx and HID", async () => {
   for (const kind of ["sysex", "hid"]) {
     const fake = new FakeBoard({kind, protocol: 3, settings: {volume: 64, volume_limit: 90, screen_brightness: 80, language: 1}});
     const all = await boardSettings(ctxFor(fake));
@@ -609,6 +648,8 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.doesNotMatch(all.text, /mic_gain/);
     assert.match(all.text, /\nlanguage +简体中文 \(zh-Hans\) +en zh-Hans ja id vi +English \(en\) +yes\n/);
     assert.match(all.text, /\nscreenshot_upload +on +off on +on +no\n/);
+    assert.match(all.text, /\nwebusb_landing +first +first always never +first +no\n/);
+    assert.match(all.text, /\nwebusb_seen +no +no yes +no +no\n/);
     const column = line => textWidth(line.slice(0, line.search(/ (0-90|en zh-Hans)/) + 1));
     assert.equal(column(rows.find(l => l.startsWith("volume "))), column(rows.find(l => l.startsWith("language "))), "the language's name does not shift its row");
     assert.match(all.text, /HOME menu \(Settings\)/);
@@ -621,16 +662,19 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.equal(fake.requests.at(-1).op, OP.SETTING_GET);
     assert.deepEqual(fake.requests.at(-1).args, [...Buffer.from("volume")], "the key, nothing else");
 
-    // Clamped: the volume under its limit.
-    const loud = await boardSettingsSet(ctxFor(fake, {args: {KEY: "volume", VALUE: "120"}}));
-    assert.deepEqual(fake.requests.at(-1).args, [120, 0, 0, 0, ...Buffer.from("volume")], "i32 little-endian, then the key");
-    assert.equal(loud.json.asked, 120);
+    // Over the board's range (the volume under its limit): refused, nothing sent; the nearest it takes is said.
+    const sets = () => fake.requests.filter(q => q.op === OP.SETTING_SET).length;
+    await assert.rejects(boardSettingsSet(ctxFor(fake, {args: {KEY: "volume", VALUE: "120"}})), e => e.code === "usage" && e.field === "VALUE" &&
+      /^volume is 0-90 on this board, not 120$/.test(e.message) && /the most is volume_limit \(90\)/.test(e.hint) && e.data.nearest === 90);
+    assert.equal(sets(), 0, "nothing sent");
+    const loud = await boardSettingsSet(ctxFor(fake, {args: {KEY: "volume", VALUE: "90"}}));
+    assert.deepEqual(fake.requests.at(-1).args, [90, 0, 0, 0, ...Buffer.from("volume")], "i32 little-endian, then the key");
     assert.equal(loud.json.setting.value, 90);
-    assert.equal(loud.json.clamped, true);
+    assert.equal(loud.json.clamped, false);
     assert.deepEqual(loud.json.changed, ["volume"]);
     assert.deepEqual(loud.json.changes, [{key: "volume", from: 64, to: 90}]);
     assert.equal(loud.json.saved, false);
-    assert.match(loud.text, /^volume 64 → 90\.\nThe device kept it in its range 0-90 \(the most is volume_limit, 90\): asked 120, set 90\.\nNot in the board's flash yet/);
+    assert.match(loud.text, /^volume 64 → 90\.\nNot in the board's flash yet/);
     // The limit lowered: the volume with it.
     const limit = await boardSettingsSet(ctxFor(fake, {args: {KEY: "volume-limit", VALUE: "60"}}));
     assert.deepEqual(limit.json.changed, ["volume", "volume_limit"]);
@@ -638,15 +682,20 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.equal(limit.json.clamped, false);
     assert.match(limit.text, /^volume_limit 90 → 60\.\nAlso changed: volume 90 → 60 \(the volume stays under its limit\)\./);
     assert.equal(fake.values.volume, 60);
-    // A language by name; one the board does not have; the same again.
+    // A language by name; one the board does not have (refused, not sent); the same again.
     const ja = await boardSettingsSet(ctxFor(fake, {args: {KEY: "language", VALUE: "日本語"}}));
     assert.deepEqual(fake.requests.at(-1).args, [3, 0, 0, 0, ...Buffer.from("language")]);
     assert.equal(ja.json.setting.value, 3);
     assert.match(ja.text, /^language 简体中文 \(zh-Hans\) → 日本語 \(ja\)\./);
-    const none = await boardSettingsSet(ctxFor(fake, {args: {KEY: "language", VALUE: "7"}}));
-    assert.equal(none.json.clamped, true);
-    assert.deepEqual(none.json.changes, []);
-    assert.match(none.text, /^language is 日本語 \(ja\) already: nothing changed\.\nThe board has no language with the code 7 \(it has 0 en, 1 zh-Hans, 3 ja, 4 id, 5 vi\): it kept 日本語 \(ja\)\./);
+    const before = sets();
+    await assert.rejects(boardSettingsSet(ctxFor(fake, {args: {KEY: "language", VALUE: "7"}})), e => e.code === "usage" && /^language is one of en \(English, 0\)/.test(e.message));
+    assert.equal(sets(), before, "nothing sent");
+    // webusb_landing by name; a key only the board's answer names.
+    const never = await boardSettingsSet(ctxFor(fake, {args: {KEY: "webusb_landing", VALUE: "never"}}));
+    assert.deepEqual(fake.requests.at(-1).args, [2, 0, 0, 0, ...Buffer.from("webusb_landing")]);
+    assert.match(never.text, /^webusb_landing first → never\./);
+    assert.match((await boardSettingsGet(ctxFor(fake, {args: {KEY: "browser-notice"}}))).text, /^webusb_landing  never\n  range    first always never\n  default  first/);
+    await boardSettingsSet(ctxFor(fake, {args: {KEY: "webusb_landing", VALUE: "first"}}));
     const upload = await boardSettingsSet(ctxFor(fake, {args: {KEY: "screenshot_upload", VALUE: "off"}}));
     assert.deepEqual(fake.requests.at(-1).args, [0, 0, 0, 0, ...Buffer.from("screenshot_upload")]);
     assert.match(upload.text, /^screenshot_upload on → off\./);
@@ -655,8 +704,9 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
     assert.match(same.text, /^key_brightness is 15 already: nothing changed\.$/m);
     assert.equal(same.json.clamped, false);
     fake.saved = true;
-    const big = await boardSettingsSet(ctxFor(fake, {args: {KEY: "screen_brightness", VALUE: "5%"}}));
-    assert.match(big.text, /^screen_brightness 80 % → 10 %\.\nThe device kept it in its range 10-100 %: asked 5 %, set 10 %\./);
+    await assert.rejects(boardSettingsSet(ctxFor(fake, {args: {KEY: "screen_brightness", VALUE: "5%"}})), e => /^screen_brightness is 10-100 % on this board, not 5 %$/.test(e.message));
+    const dim = await boardSettingsSet(ctxFor(fake, {args: {KEY: "screen_brightness", VALUE: "10%"}}));
+    assert.match(dim.text, /^screen_brightness 80 % → 10 %\.$/m);
 
     // Reset: asked first (here no terminal: needs_confirmation, nothing sent); the language stays.
     const resets = () => fake.requests.filter(q => q.op === OP.SETTINGS_RESET).length;
@@ -689,7 +739,7 @@ test("settings: every one, one, set (the device's clamp said, the limit lowering
 test("settings: answered by a firmware built without the development channel; a HAL from before them, a setting it lacks, said plainly", async () => {
   // Protocol 3, the development channel off: the settings answer, the rest is dev_channel_off (HELLO says dev: false).
   const off = new FakeBoard({protocol: 3, off: true});
-  assert.equal((await boardSettings(ctxFor(off))).json.settings.length, 6);
+  assert.equal((await boardSettings(ctxFor(off))).json.settings.length, 8);
   assert.equal((await boardSettingsSet(ctxFor(off, {args: {KEY: "volume", VALUE: "40"}}))).json.setting.value, 40);
   await assert.rejects(boardInfo(ctxFor(off)), e => e.code === "dev_channel_off" && /board settings works without it/.test(e.hint));
   assert.ok(!off.requests.some(q => q.op === OP.INFO), "HELLO said so: INFO not asked");
@@ -704,20 +754,55 @@ test("settings: answered by a firmware built without the development channel; a 
   // One that says 3 but answers "unknown request" all the same; "off" is never dev_channel_off here; a setting the HAL lacks.
   const odd = new FakeBoard({protocol: 3});
   const real = odd.answer.bind(odd);
-  odd.answer = async job => (job.op === OP.SETTINGS ? {error: "unknown request"} : job.op === OP.SETTING_GET ? {error: "off"} : real(job));
+  odd.answer = async job => (job.op === OP.SETTINGS ? {error: "unknown request"} : real(job));
   await assert.rejects(boardSettings(ctxFor(odd)), e => e.code === "hal_too_old" && /2026-11-23/.test(e.hint));
+  await assert.rejects(boardSettingsGet(ctxFor(odd, {args: {KEY: "volume"}})), e => e.code === "hal_too_old");
+  odd.answer = async job => (job.op === OP.SETTING_GET ? {error: "off"} : real(job));
   await assert.rejects(boardSettingsGet(ctxFor(odd, {args: {KEY: "volume"}})), e => e.code === "board_refused" && e.data.reason === "off");
+  // A key the board does not list: a usage error with the board's own keys, nothing asked of the key.
   const fewer = new FakeBoard({protocol: 3, keys: ["volume", "volume_limit", "language"]});
-  await assert.rejects(boardSettingsGet(ctxFor(fewer, {args: {KEY: "screen_brightness"}})), e => e.code === "board_refused" && e.data.reason === "unknown setting" &&
-    /does not have that setting: 203cli board settings lists/.test(e.hint));
-  // mic_gain on a current HAL: refused by the board, and why.
-  await assert.rejects(boardSettingsGet(ctxFor(new FakeBoard({protocol: 3}), {args: {KEY: "mic_gain"}})), e => e.code === "board_refused" && e.data.reason === "unknown setting" &&
-    /does not have that setting \(since 8746b6f, 2026-11-23, the microphone's gain is a firmware's own setting, not the board's\)/.test(e.hint));
-  // A wrong key or value: before the device is opened.
+  await assert.rejects(boardSettingsGet(ctxFor(fewer, {args: {KEY: "screen_brightness"}})), e => e.code === "usage" && e.field === "KEY" &&
+    /^"screen_brightness" is not one of this board's settings: volume, volume_limit, language$/.test(e.message) && e.data.keys.length === 3);
+  assert.ok(!fewer.requests.some(q => q.op === OP.SETTING_GET || q.op === OP.SETTING_SET));
+  // mic_gain on a current HAL: not listed, and why.
+  await assert.rejects(boardSettingsGet(ctxFor(new FakeBoard({protocol: 3}), {args: {KEY: "mic_gain"}})), e => e.code === "usage" &&
+    /This firmware's CardenzaHAL does not have it \(since 8746b6f, 2026-11-23, the microphone's gain is a firmware's own setting, not the board's\)/.test(e.hint));
+  // The board refusing a key it listed all the same (it changed in between): said plainly.
+  const changing = new FakeBoard({protocol: 3});
+  const realChanging = changing.answer.bind(changing);
+  changing.answer = async job => (job.op === OP.SETTING_GET ? {error: "unknown setting"} : realChanging(job));
+  await assert.rejects(boardSettingsGet(ctxFor(changing, {args: {KEY: "volume"}})), e => e.code === "board_refused" && /does not have that setting: 203cli board settings lists/.test(e.hint));
+  // A key that cannot be one, or no value: before the device is opened. Any other key or value is checked against the board.
   const untouched = new FakeBoard({protocol: 3});
-  await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "loudness", VALUE: "3"}})), e => e.code === "usage");
-  await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "volume", VALUE: "loud"}})), e => e.code === "usage");
+  await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "loud ness", VALUE: "3"}})), e => e.code === "usage" && e.field === "KEY");
+  await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "volume", VALUE: " "}})), e => e.code === "usage" && e.field === "VALUE");
   assert.deepEqual(untouched.requests, []);
+  await assert.rejects(boardSettingsSet(ctxFor(untouched, {args: {KEY: "volume", VALUE: "loud"}})), e => e.code === "usage" && e.field === "VALUE");
+  assert.ok(!untouched.requests.some(q => q.op === OP.SETTING_SET), "checked against the board's answer, not sent");
+});
+
+test("settings: a key only a newer HAL has, with its range or its choices, is read and set from the board's own description", async () => {
+  const future = new FakeBoard({protocol: 3, extra: [{key: "haptics", min: 0, max: 3, step: 1, default: 1, unit: ""},
+    {key: "theme", default: 0, choices: [{value: 0, name: "dark"}, {value: 1, name: "light"}]}]});
+  const all = await boardSettings(ctxFor(future));
+  assert.match(all.text, /\nhaptics +1 +0-3 +1 +no\n/);
+  assert.match(all.text, /\ntheme +dark +dark light +dark +no\n/);
+  assert.match((await boardSettingsGet(ctxFor(future, {args: {KEY: "haptics"}}))).text, /^haptics  1\n  range    0-3\n  default  1/);
+  const strong = await boardSettingsSet(ctxFor(future, {args: {KEY: "haptics", VALUE: "3"}}));
+  assert.match(strong.text, /^haptics 1 → 3\./);
+  await assert.rejects(boardSettingsSet(ctxFor(future, {args: {KEY: "haptics", VALUE: "4"}})), e => e.code === "usage" && /^haptics is 0-3 on this board, not 4$/.test(e.message));
+  const light = await boardSettingsSet(ctxFor(future, {args: {KEY: "theme", VALUE: "light"}}));
+  assert.deepEqual(future.requests.at(-1).args, [1, 0, 0, 0, ...Buffer.from("theme")]);
+  assert.match(light.text, /^theme dark → light\./);
+  await assert.rejects(boardSettingsSet(ctxFor(future, {args: {KEY: "theme", VALUE: "neon"}})), e => /^theme is one of dark \(0\), light \(1\), not "neon"$/.test(e.message));
+  // The device clamping all the same (the limit lowered between the answer and the change): said as before.
+  const race = new FakeBoard({protocol: 3, settings: {volume: 60}});
+  const real = race.answer.bind(race);
+  race.answer = async job => { if (job.op === OP.SETTING_SET) race.values.volume_limit = 50; return real(job); };
+  const raced = await boardSettingsSet(ctxFor(race, {args: {KEY: "volume", VALUE: "55"}}));
+  assert.equal(raced.json.clamped, true);
+  assert.match(raced.text, /^volume 60 → 50\.\nThe device kept it in its range 0-50 \(the most is volume_limit, 50\): asked 55, set 50\./);
+  assert.deepEqual([...future.violations, ...race.violations], []);
 });
 
 test("settings: a HAL that still has mic_gain (before 8746b6f) shows it, answers it and resets it, as the board reports it", async () => {
@@ -1016,10 +1101,26 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
     const all = await cli(["board", "settings", "--json"], env);
     assert.equal(all.code, 0, all.stderr);
     assert.deepEqual(all.json.settings.map(s => [s.key, s.value]), [["volume", 64], ["volume_limit", 90], ["screen_brightness", 100], ["key_brightness", 15], ["language", 1],
-      ["screenshot_upload", 1]]);
+      ["webusb_landing", 0], ["webusb_seen", 0], ["screenshot_upload", 1]]);
     const text = await cli(["board", "settings"], env);
     assert.equal(text.code, 0, text.stderr);
     assert.match(text.stdout, /language +简体中文 \(zh-Hans\)/);
+    // Checked against the board's answer: a misspelt key and a value over its range are usage errors with the command to run.
+    const typo = await cli(["board", "settings", "set", "volum", "50", "--json"], env);
+    assert.equal(typo.code, 2, typo.stderr);
+    assert.equal(typo.error.field, "KEY");
+    assert.match(typo.error.next[0], /board settings set volume 50 --json$/);
+    const loud = await cli(["board", "settings", "set", "volume", "120", "--json"], env);
+    assert.equal(loud.code, 2, loud.stderr);
+    assert.equal(loud.error.field, "VALUE");
+    assert.match(loud.error.next[0], /board settings set volume 90 --json$/);
+    const klingon = await cli(["board", "settings", "set", "language", "klingon", "--json"], env);
+    assert.equal(klingon.code, 2);
+    assert.match(klingon.error.error, /zh-Hans \(简体中文, 1\)/);
+    assert.ok(!fake.requests.some(q => q.op === OP.SETTING_SET), "none of them sent");
+    const never = await cli(["board", "settings", "set", "webusb-landing", "never"], env);
+    assert.equal(never.code, 0, never.stderr);
+    assert.match(never.stdout, /^webusb_landing first → never\./);
     const set = await cli(["board", "settings", "set", "volume_limit", "50", "--json"], env);
     assert.equal(set.code, 0, set.stderr);
     assert.deepEqual(set.json.changed, ["volume", "volume_limit"]);
@@ -1035,7 +1136,7 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
     assert.equal(fake.values.volume_limit, 50, "not reset");
     const reset = await cli(["board", "settings", "reset", "--yes", "--json"], env);
     assert.equal(reset.code, 0, reset.stderr);
-    assert.deepEqual(reset.json.settings.map(s => s.value), [70, 100, 100, 15, 3, 1]);
+    assert.deepEqual(reset.json.settings.map(s => s.value), [70, 100, 100, 15, 3, 0, 0, 1]);
     const help = JSON.parse((await cli(["board", "settings", "reset", "--help", "--json"])).stdout);
     assert.equal(help.signin, false);
     assert.deepEqual(help.flags.map(f => f.name), ["--yes"]);
@@ -1051,17 +1152,20 @@ test("203cli board settings: text and JSON, set, reset asking for --yes, an olde
   } finally { pty2.close(); }
 });
 
-test("203cli board settings: a wrong key or value, or a misspelt action, is a usage error before any device is looked for", async () => {
+test("203cli board settings: a key that cannot be one, no value or a misspelt action is a usage error before any device is looked for", async () => {
   // No device anywhere: no sysfs or /dev (Linux), no node-hid (Windows: the one there would reach a real Cardenza).
   const nowhere = {C203_SYS: path.join(dir, "no-sys"), C203_DEV: path.join(dir, "no-dev"), C203_HID: path.join(dir, "no-node-hid.cjs")};
-  const key = await cli(["board", "settings", "set", "volum", "50", "--json"], nowhere);
+  const key = await cli(["board", "settings", "set", "vol ume", "50", "--json"], nowhere);
   assert.equal(key.code, 2, key.stderr);
   assert.equal(key.error.code, "usage");
   assert.equal(key.error.field, "KEY");
-  assert.match(key.error.next[0], /board settings set volume 50 --json$/);
-  const value = await cli(["board", "settings", "set", "language", "klingon", "--json"], nowhere);
-  assert.equal(value.code, 2);
-  assert.match(value.error.error, /zh-Hans \(简体中文\)/);
+  const value = await cli(["board", "settings", "set", "volume", "", "--json"], nowhere);
+  assert.equal(value.code, 2, value.stderr);
+  // Any other key or value is the board's to answer (its keys, ranges and choices): it goes on to look for the device.
+  for (const args of [["set", "volum", "50"], ["set", "language", "klingon"], ["get", "haptics"]]) {
+    const r = await cli(["board", "settings", ...args, "--json"], nowhere);
+    assert.equal(r.error.code, "board_not_found", args.join(" "));
+  }
   const action = await cli(["board", "settings", "sett", "volume", "50", "--json"], nowhere);
   assert.equal(action.code, 2);
   assert.match(action.error.hint, /Did you mean board settings set\?/);

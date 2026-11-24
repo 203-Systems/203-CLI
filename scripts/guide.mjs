@@ -613,14 +613,16 @@ CoreMIDI through python3); Windows over its HID (node-hid, which comes with 203c
                                           (xtensa-esp32s3-elf-addr2line on PATH: ESP-IDF's export); --erase after
 {P} board files ls CardenzaSynth          the SD card: ls, get PATH [LOCAL], put LOCAL [PATH], rm, mkdir, mv FROM TO
                                           (paths from the card's root; a progress line on a terminal)
-{P} board settings                        the board's settings: volume, volume_limit, screen_brightness, key_brightness,
-                                          language, screenshot_upload (on: the device uploads its screenshots to its
-                                          account) (value, range or choices, default, stored); get KEY, set KEY VALUE
-                                          (the device keeps it in range and says so; language: en zh ja id vi), reset (all but
-                                          the language; asks, --yes from a program). The HAL's, the same in every firmware and
-                                          in HOME > Settings; the device writes a change to its flash a second after the last
-                                          one. Every firmware that starts USB answers them, also one built without the
-                                          development channel; a HAL from before 2026-11-23 does not (hal_too_old)
+{P} board settings                        the settings the board lists: volume, volume_limit, screen_brightness,
+                                          key_brightness, language, webusb_landing (first always never: browsers told
+                                          the community's page), webusb_seen, screenshot_upload (on: the device uploads
+                                          its screenshots to its account) (value, range or choices, default, stored);
+                                          get KEY, set KEY VALUE (any key the board lists, the value checked against its
+                                          range or choices; language: en zh ja id vi), reset (all but the language;
+                                          asks, --yes from a program). The HAL's, the same in every firmware and in
+                                          HOME > Settings; the device writes a change to its flash a second after the
+                                          last one. Every firmware that starts USB answers them, also one built without
+                                          the development channel; a HAL from before 2026-11-23 does not (hal_too_old)
 A test with screenshots: {P} flash --bin …, {P} log --until "ready" --seconds 30, then board press … and board screenshot --no-save.
 It reaches the firmware over its serial port (CardenzaHAL 2026-11-24 on, when it has one), else its MIDI or HID.
 Only the chip's own serial port there? board_no_usb: the firmware does not start CardenzaHAL's USB device: rebuild it with a

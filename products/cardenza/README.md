@@ -113,7 +113,7 @@ computer's side, signed out like `flash` and `log` (macOS, Linux and Windows):
 203cli board press down down ok        # keys as by a finger (cap names, up/down/left/right, fn+s, home)
 203cli board coredump --out crash.elf --elf build/<project>.elf  # the last crash, its backtrace decoded
 203cli board files ls Apps            # the SD card: ls, get, put, rm, mkdir, mv
-203cli board settings                  # the board's settings: volume and its limit, brightness, key lights, language
+203cli board settings                  # the board's settings: volume and its limit, brightness, key lights, language, browser notice …
 203cli board settings set volume 50    # one of them (get KEY, reset); the device writes it to its flash a second later
 ```
 

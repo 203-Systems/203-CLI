@@ -268,7 +268,8 @@ export function boardCliError(error, ctx, {need = "dev", product = "the device"}
       if (need === "settings") {
         if (reason === "unknown request") return settingsTooOld(product);
         if (reason === "unknown setting") {
-          const gone = FORMER_SETTINGS[formerSettingKey(ctx.args?.KEY)];
+          const typed = typedKey(ctx.args?.KEY);
+          const gone = FORMER_SETTINGS[typed] ?? FORMER_SETTINGS[SETTING_ALIASES[typed]];
           return new CliError("board_refused", `The firmware refused: ${reason}`, {exit: EXIT.refused, data: {reason},
             hint: `This firmware's CardenzaHAL does not have that setting${gone ? ` (${gone})` : ""}: 203cli board settings lists the ones it has`});
         }
@@ -978,30 +979,41 @@ export async function filesMv(ctx) {
 
 // ---------------------------------------------------------------------------------------------
 // settings: the board's settings (CardenzaHAL docs/SETTINGS.md): the volume and its limit, the screen's and the key lights'
-// brightness and the language. They are the HAL's, the same in every firmware on it and in its system
-// menu (HOME > Settings), kept in the board's flash. SETTINGS, SETTING_GET (the key), SETTING_SET (an i32, then the key) and
-// SETTINGS_RESET are answered by every firmware that starts USB on a HAL from 2026-11-23 on (protocol 3), also one built
-// without the development channel. The device keeps a value in its range and writes a change to its flash itself, a second
-// after the last one.
+// brightness, the language, the browser notice, screenshot uploads … They are the HAL's, the same in every firmware on it and
+// in its system menu (HOME > Settings), kept in the board's flash. SETTINGS, SETTING_GET (the key), SETTING_SET (an i32, then
+// the key) and SETTINGS_RESET are answered by every firmware that starts USB on a HAL from 2026-11-23 on (protocol 3), also one
+// built without the development channel. 203cli checks a value against the board's range or choices before it sends it; the
+// device keeps a value in its range all the same (clamped: the limit changed in between) and writes a change to its flash
+// itself, a second after the last one.
 
-/** The keys, in the device's order. */
-// screenshot_upload (CardenzaHAL 2026-11-24): whether a device bound to an account uploads its screenshots there (0 off, 1 on).
-export const SETTING_KEYS = Object.freeze(["volume", "volume_limit", "screen_brightness", "key_brightness", "language", "screenshot_upload"]);
-// Keys a HAL had and no longer has, taken (never shown) so a board on such a HAL still answers them, and why a current one
-// refuses them. mic_gain was a board setting for a few hours of 2026-11-23 (CardenzaHAL 8746b6f made the microphone's gain the
-// firmware's own). A board that still reports it shows it in `board settings` like any other, since that list is the device's.
+// The keys are the board's: SETTINGS lists every setting it has, in its order, with its range (min, max, unit) or its
+// choices (value and name), and get / set take any key in that list, checked against what the board says of it. Nothing
+// here is a list of the keys a board must have; what follows only helps people type and read them.
+
+// Keys a HAL had and no longer has, and why a current one does not list them. mic_gain was a board setting for a few hours of
+// 2026-11-23 (CardenzaHAL 8746b6f made the microphone's gain the firmware's own); a board that still reports it is answered
+// like any other key, since the list is the device's.
 const FORMER_SETTINGS = Object.freeze({mic_gain: "since 8746b6f, 2026-11-23, the microphone's gain is a firmware's own setting, not the board's"});
-const FORMER_SETTING_KEYS = Object.freeze(Object.keys(FORMER_SETTINGS));
-// Other words taken for keys (never shown): the flash's names and short ones.
+// Other words taken for a key the board has (never shown): the flash's names and short ones.
 const SETTING_ALIASES = Object.freeze({lang: "language", limit: "volume_limit", volume_max: "volume_limit", max_volume: "volume_limit",
   brightness: "screen_brightness", backlight: "screen_brightness", key_light: "key_brightness", key_lights: "key_brightness", mic: "mic_gain",
-  auto_upload: "screenshot_upload", screenshots_upload: "screenshot_upload", upload: "screenshot_upload"});
-// The unit a VALUE may carry (80%, +6dB: mic_gain, a former key).
-const SETTING_UNITS = Object.freeze({volume: "%", volume_limit: "%", screen_brightness: "%", mic_gain: "db"});
-const SETTING_EXAMPLES = Object.freeze({volume: "50", volume_limit: "80", screen_brightness: "60", key_brightness: "8", mic_gain: "-6", language: "zh", screenshot_upload: "off"});
-// A switch's words (screenshot_upload): on 1, off 0.
-const SWITCH_WORDS = Object.freeze({on: 1, off: 0, yes: 1, no: 0, true: 1, false: 0, "1": 1, "0": 0, "开": 1, "关": 0});
-const isSwitch = key => key === "screenshot_upload";
+  auto_upload: "screenshot_upload", screenshots_upload: "screenshot_upload", upload: "screenshot_upload", shot_upload: "screenshot_upload",
+  webusb: "webusb_landing", landing: "webusb_landing", usb_landing: "webusb_landing", browser_notice: "webusb_landing", notice: "webusb_landing",
+  seen: "webusb_seen", usb_seen: "webusb_seen"});
+// A unit a VALUE may carry besides the board's own (80% for the volumes, which the board gives no unit).
+const SETTING_UNITS = Object.freeze({volume: "%", volume_limit: "%"});
+// Names for the values of settings the board describes by a range alone (CardenzaHAL docs/SETTINGS.md), used only while every
+// named value is in the board's range. A board that gives choices of its own is read by those instead.
+const SETTING_NAMES = Object.freeze({
+  // Whether the USB device names the community's page to web browsers (the WebUSB landing page; the system menu's Browser notice).
+  webusb_landing: [{value: 0, name: "first", words: ["first-time", "first_time", "once", "default", "首次", "第一次"]},
+    {value: 1, name: "always", words: ["总是", "每次"]}, {value: 2, name: "never", words: ["从不", "不"]}],
+  // Whether the board has been seen by a 203 tool or the website (0: the first-time notice comes again).
+  webusb_seen: [{value: 0, name: "no", words: ["false", "off", "否"]}, {value: 1, name: "yes", words: ["true", "on", "是"]}],
+  screenshot_upload: [{value: 0, name: "off", words: ["no", "false", "关"]}, {value: 1, name: "on", words: ["yes", "true", "开"]}],
+});
+// Any other setting the board describes as 0-1 with no unit is a switch: these words.
+const SWITCH_NAMES = Object.freeze([{value: 0, name: "off", words: ["no", "false", "关"]}, {value: 1, name: "on", words: ["yes", "true", "开"]}]);
 /** The 203 Launcher's languages: its code, the tag the device names it by, its own name, and the words taken for it. */
 export const LANGUAGES = Object.freeze([
   {code: 0, tag: "en", name: "English", words: ["english", "en-us", "en-gb", "英文", "英语"]},
@@ -1010,75 +1022,119 @@ export const LANGUAGES = Object.freeze([
   {code: 4, tag: "id", name: "Bahasa Indonesia", words: ["in", "id-id", "indonesian", "bahasa", "bahasa indonesia", "印尼语"]},
   {code: 5, tag: "vi", name: "Tiếng Việt", words: ["vi-vn", "vietnamese", "tiếng việt", "tieng viet", "越南语"]},
 ]);
-const LANGUAGE_LIST = LANGUAGES.map(l => `${l.tag} (${l.name})`).join(", ");
 /** A language's own name from its tag (the device's choices name them by tag); an unknown tag as it is. */
 export const languageName = tag => LANGUAGES.find(l => l.tag.toLowerCase() === String(tag).toLowerCase())?.name ?? String(tag);
 
-/** The former key (FORMER_SETTINGS) that was typed, or null. */
-function formerSettingKey(text) {
-  const typed = String(text ?? "").trim().toLowerCase().replace(/-/g, "_");
-  const key = FORMER_SETTING_KEYS.includes(typed) ? typed : SETTING_ALIASES[typed];
-  return FORMER_SETTING_KEYS.includes(key) ? key : null;
-}
-
-/** A setting's key from what was typed (any case, - for _, a few other words), or a usage error that lists them. */
-export function settingKey(text, usage, {fix = null} = {}) {
-  const typed = String(text ?? "").trim().toLowerCase().replace(/-/g, "_");
-  const key = SETTING_KEYS.includes(typed) || FORMER_SETTING_KEYS.includes(typed) ? typed : SETTING_ALIASES[typed];
-  if (key) return key;
-  const guess = nearest(typed, SETTING_KEYS);
-  throw usage(`"${text}" is not one of the board's settings: ${SETTING_KEYS.join(", ")}`, {field: "KEY",
-    hint: `${guess ? `Did you mean ${guess}? ` : ""}The keys: volume (0-100), volume_limit (10-100), screen_brightness (10-100 %), key_brightness (0-15), language, screenshot_upload (on or off)`,
-    ...(guess && fix ? {next: [fix(guess)]} : {})});
+const typedKey = text => String(text ?? "").trim().toLowerCase().replace(/-/g, "_");
+/** KEY's shape, checked before any device is looked for: letters, digits and _ (any case, - for _). */
+export function settingKeyShape(text, usage) {
+  const typed = typedKey(text);
+  if (/^[a-z][a-z0-9_]{0,47}$/.test(typed)) return typed;
+  throw usage(`"${text}" cannot be a setting's key: a key is letters, digits and _ (e.g. volume, language, webusb_landing)`, {field: "KEY",
+    hint: "203cli board settings lists the board's keys"});
 }
 
 /**
- * VALUE for a key: a whole number (80, -6, +6; 80%, or 6dB for a former mic_gain, in the setting's unit); the language also by its tag or name (en, zh,
- * zh-Hans, ja, id, vi, English, 日本語 …), as the Launcher's code. A number out of range is the device's to clamp (it says so).
+ * The board's entry for what was typed: its own key, else a word taken for one of its keys (SETTING_ALIASES). A key the board
+ * does not list is a usage error that lists the board's keys (a guess in next), and says why for a former key.
  */
-export function settingValue(key, text, usage) {
+export function settingEntry(text, entries, usage, {fix = null} = {}) {
+  const list = Array.isArray(entries) ? entries : [];
+  const typed = typedKey(text);
+  const found = list.find(s => s.key === typed) ?? list.find(s => s.key === SETTING_ALIASES[typed]);
+  if (found) return found;
+  const keys = list.map(s => s.key);
+  const gone = FORMER_SETTINGS[typed] ?? FORMER_SETTINGS[SETTING_ALIASES[typed]];
+  const aliasGuess = SETTING_ALIASES[nearest(typed, Object.keys(SETTING_ALIASES))];
+  const guess = gone ? null : nearest(typed, keys) ?? (keys.includes(aliasGuess) ? aliasGuess : null);
+  throw usage(`"${text}" is not one of this board's settings: ${keys.join(", ") || "it lists none"}`, {field: "KEY", data: {keys},
+    hint: gone ? `This firmware's CardenzaHAL does not have it (${gone})` : `${guess ? `Did you mean ${guess}? ` : ""}203cli board settings lists them, with their ranges`,
+    ...(guess && fix ? {next: [fix(guess)]} : {})});
+}
+
+/** The names a setting's values go by: the board's choices, else the names of a setting the board describes by a range. */
+export function settingNames(entry) {
+  if (Array.isArray(entry?.choices)) return entry.choices.map(c => ({value: c.value, name: String(c.name), words: []}));
+  const inRange = names => names && names.every(n => Number.isFinite(entry.min) && Number.isFinite(entry.max) && n.value >= entry.min && n.value <= entry.max);
+  if (inRange(SETTING_NAMES[entry?.key])) return SETTING_NAMES[entry.key];
+  if (entry?.min === 0 && entry?.max === 1 && !entry.unit && !SETTING_NAMES[entry.key]) return SWITCH_NAMES;
+  return null;
+}
+
+const listOf = names => names.map(n => `${n.name} (${n.value})`).join(", ");
+/**
+ * VALUE for the board's entry, checked against what the board says of it: one of its choices (by name, by value, the language
+ * also by its own name or common tags: en, zh, 日本語 …), a named value (webusb_landing first / always / never, on / off for a
+ * switch, or its number), or a whole number in its range (80; 80% or 6dB in its unit). Anything else is a usage error that
+ * says what the board takes, with the nearest value in next when a number was out of range.
+ */
+export function settingValue(entry, text, usage, {fix = null} = {}) {
   const typed = String(text ?? "").trim();
-  if (isSwitch(key)) {
-    const value = SWITCH_WORDS[typed.toLowerCase()];
-    if (value !== undefined) return value;
-    throw usage(`${key} is on or off, not "${typed}"`, {field: "VALUE", hint: `e.g. 203cli board settings set ${key} off (on: the device uploads its screenshots to the account it is bound to)`});
-  }
-  if (key === "language") {
-    if (/^[+-]?\d{1,9}$/.test(typed)) return Number(typed);
+  const key = entry.key;
+  const names = settingNames(entry);
+  const choices = Array.isArray(entry.choices);
+  const number = /^[+-]?\d{1,10}$/.test(typed) ? Number(typed) : null;
+  if (names) {
     const word = typed.toLowerCase().replace(/_/g, "-");
-    const found = LANGUAGES.find(l => l.tag.toLowerCase() === word || l.words.includes(word));
-    if (found) return found.code;
-    throw usage(`"${typed}" is not a language of the board: ${LANGUAGE_LIST}`, {field: "VALUE",
-      hint: `Give its tag (en, zh, ja, id, vi), its name, or the Launcher's code (${LANGUAGES.map(l => `${l.code} ${l.tag}`).join(", ")}); e.g. 203cli board settings set language zh`});
+    let found = names.find(n => n.name.toLowerCase().replace(/_/g, "-") === word || (n.words ?? []).includes(word));
+    if (!found && choices && key === "language") {
+      const language = LANGUAGES.find(l => l.tag.toLowerCase() === word || l.words.includes(word) || l.name.toLowerCase() === word);
+      if (language) found = names.find(n => n.name.toLowerCase() === language.tag.toLowerCase());
+    }
+    if (!found && number !== null) found = names.find(n => n.value === number);
+    if (found) return found.value;
+    const whole = !choices && names.length === entry.max - entry.min + 1;   // every value in the range has a name
+    if (choices || whole || number === null) {
+      const shown = choices && key === "language" ? entry.choices.map(c => `${c.name} (${languageName(c.name)}, ${c.value})`).join(", ") : listOf(names);
+      throw usage(`${key} is one of ${shown}, not "${typed}"`, {field: "VALUE", data: {choices: names.map(n => ({value: n.value, name: n.name}))},
+        hint: `e.g. 203cli board settings set ${key} ${names[Math.min(1, names.length - 1)].name}${key === "language" ? " (a language also by its own name: English, 日本語 …)" : ""}`});
+    }
   }
   const m = /^([+-]?\d{1,10})\s*(%|db)?$/i.exec(typed);
   const n = m ? Number(m[1]) : NaN;
-  if (!m || (m[2] && m[2].toLowerCase() !== SETTING_UNITS[key]) || n < -0x80000000 || n > 0x7fffffff) {
-    throw usage(`${key} is a whole number, not "${typed}"`, {field: "VALUE",
-      hint: `e.g. 203cli board settings set ${key} ${SETTING_EXAMPLES[key]}; 203cli board settings get ${key} shows its range (the device keeps a value in it)`});
+  const unit = m?.[2]?.toLowerCase();
+  const units = [String(entry.unit ?? "").toLowerCase(), SETTING_UNITS[key]].filter(Boolean);
+  if (!m || (unit && !units.includes(unit))) {
+    throw usage(`${key} is a whole number${entry.unit ? ` (in ${entry.unit})` : ""}, not "${typed}"`, {field: "VALUE",
+      hint: `${key} on this board: ${settingRange(entry)}; e.g. 203cli board settings set ${key} ${exampleValue(entry)}`});
+  }
+  if (Number.isFinite(entry.min) && Number.isFinite(entry.max) && (n < entry.min || n > entry.max)) {
+    const near = Math.min(entry.max, Math.max(entry.min, n));
+    const limit = key === "volume" ? `; the most is volume_limit (${entry.max}): raise it first to go higher` : "";
+    throw usage(`${key} is ${settingRange(entry).replace(/ \(at most volume_limit\)$/, "")} on this board, not ${settingShown(entry, n)}`, {field: "VALUE",
+      data: {min: entry.min, max: entry.max, nearest: near}, hint: `The nearest it takes is ${settingShown(entry, near)}${limit}`, ...(fix ? {next: [fix(near)]} : {})});
   }
   return n;
 }
+/** A value to show in an example: a choice's or named value's name, else the middle of the range. */
+function exampleValue(entry) {
+  const names = settingNames(entry);
+  if (names?.length) return names[Math.min(1, names.length - 1)].name;
+  if (Number.isFinite(entry.min) && Number.isFinite(entry.max)) return String(Math.round((entry.min + entry.max) / 2));
+  return "1";
+}
 
 const signed = n => (n > 0 ? `+${n}` : String(n));
-/** A setting's value as people read it: 64, 80 %, +6 dB, 简体中文 (zh-Hans). */
+/** A setting's value as people read it: 64, 80 %, +6 dB, 简体中文 (zh-Hans), on, first. */
 export function settingShown(entry, value = entry.value) {
-  if (isSwitch(entry.key) && !Array.isArray(entry.choices) && (value === 0 || value === 1)) return value ? "on" : "off";
   if (Array.isArray(entry.choices)) {
     const choice = entry.choices.find(c => c.value === value);
     if (!choice) return String(value);
     const name = languageName(choice.name);
     return name === String(choice.name) ? name : `${name} (${choice.name})`;
   }
+  const named = settingNames(entry)?.find(n => n.value === value);
+  if (named) return named.name;
   const unit = entry.unit ?? "";
   if (!Number.isFinite(value)) return "?";
   if (/^db$/i.test(unit)) return `${signed(value)} ${unit}`;
   return unit ? `${value} ${unit}` : String(value);
 }
-/** Its range (the volume's top is the limit), or its choices' tags. */
+/** Its range (the volume's top is the limit), or its choices' or named values' names. */
 export function settingRange(entry) {
   if (Array.isArray(entry.choices)) return entry.choices.map(c => c.name).join(" ");
-  if (isSwitch(entry.key) && entry.min === 0 && entry.max === 1) return "off on";
+  const names = settingNames(entry);
+  if (names && names.length === entry.max - entry.min + 1) return names.map(n => n.name).join(" ");
   const unit = entry.unit ? ` ${entry.unit}` : "";
   const span = entry.min < 0 ? `${signed(entry.min)} to ${signed(entry.max)}${unit}` : `${entry.min}-${entry.max}${unit}`;
   return entry.key === "volume" ? `${span} (at most volume_limit)` : span;
@@ -1124,9 +1180,13 @@ export async function boardSettings(ctx) {
   }, {need: "settings"});
 }
 
+// get and set: KEY is one the board lists (SETTINGS first: any key it has, a future one too), VALUE what it says of that key.
 export async function boardSettingsGet(ctx) {
-  const key = settingKey(ctx.args.KEY, usageOf(ctx), {fix: guess => ctx.cmd?.({args: {KEY: guess}})});
+  const usage = usageOf(ctx);
+  settingKeyShape(ctx.args.KEY, usage);
   return session(ctx, async board => {
+    const all = await board.json(OP.SETTINGS);
+    const {key} = settingEntry(ctx.args.KEY, all.settings, usage, {fix: guess => ctx.cmd?.({args: {KEY: guess}})});
     const said = await board.json(OP.SETTING_GET, utf8(key));
     return {json: said, text: settingText(said)};
   }, {need: "settings"});
@@ -1134,10 +1194,13 @@ export async function boardSettingsGet(ctx) {
 
 export async function boardSettingsSet(ctx) {
   const usage = usageOf(ctx);
-  const key = settingKey(ctx.args.KEY, usage, {fix: guess => ctx.cmd?.({args: {KEY: guess}})});
-  const value = settingValue(key, ctx.args.VALUE, usage);
+  settingKeyShape(ctx.args.KEY, usage);
+  if (!String(ctx.args.VALUE ?? "").trim()) throw usage("VALUE is empty", {field: "VALUE", hint: "203cli board settings get KEY shows what it takes"});
   return session(ctx, async board => {
     const before = await board.json(OP.SETTINGS);
+    const entry0 = settingEntry(ctx.args.KEY, before.settings, usage, {fix: guess => ctx.cmd?.({args: {KEY: guess}})});
+    const key = entry0.key;
+    const value = settingValue(entry0, ctx.args.VALUE, usage, {fix: near => ctx.cmd?.({args: {KEY: key, VALUE: String(near)}})});
     const said = await board.json(OP.SETTING_SET, concat(i32(value), utf8(key)), {retries: 0});
     const changed = Array.isArray(said.changed) ? said.changed : [];
     // What else moved with it (lowering the limit lowers the volume): its new value, read again.
@@ -1151,9 +1214,9 @@ export async function boardSettingsSet(ctx) {
     const lines = [own ? `${changeText(entries, own)}.` : `${key} is ${settingShown(entry)} already: nothing changed.`];
     if (clamped) {
       if (Array.isArray(entry.choices)) {
-        // A code the board does not have changes nothing; one it reads as another (2, the Launcher's old Traditional Chinese) is that one.
-        lines.push(own ? `The device took the code ${said.asked} as ${settingShown(entry)}.`
-          : `The board has no language with the code ${said.asked} (it has ${entry.choices.map(c => `${c.value} ${c.name}`).join(", ")}): it kept ${settingShown(entry)}.`);
+        // Checked against the choices before it was sent; a board that answers otherwise all the same is said as it is.
+        lines.push(own ? `The device took ${said.asked} as ${settingShown(entry)}.`
+          : `The board kept ${settingShown(entry)} (it has ${entry.choices.map(c => `${c.value} ${c.name}`).join(", ")}).`);
       } else {
         const limit = key === "volume" ? ` (the most is volume_limit, ${entry.max})` : "";
         lines.push(`The device kept it in its range ${settingRange(entry).replace(/ \(at most volume_limit\)$/, "")}${limit}: asked ${settingShown(entry, said.asked)}, set ${settingShown(entry)}.`);

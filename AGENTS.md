@@ -1,5 +1,7 @@
 # 203-CLI: rules for changing it
 
+若本仓位于 203 工作区，先读取上级目录的 `../AGENTS.md`，再按本文件和仓内维护文档处理项目细节。
+
 This repository is public and is the one source of `203cli` and the 203-community Agent Skill. People install it from
 npm, the package `203cli` (`npm install -g 203cli`, then `203cli skill install`), published by `.github/workflows/release.yml`
 when a tag `vX.Y.Z` equal to `package.json`'s version is pushed (npm trusted publishing: no token; the files in
@@ -50,5 +52,8 @@ or config folder. Do not add one back.
 
 - `npm test` (Node 20 or later): the CLI against stand-in APIs and a demo Launcher on a pseudo-terminal (python3), the
   local checks, the documents, and a scan for secrets, private addresses and e-mail addresses.
-- The community runs 203cli against its whole API in its own tests when it pins a commit; a change that needs a new
+- For a documentation-only check, run `node --test tests/docs.test.mjs` from the repo root. For a command change,
+  trace the entry in `scripts/commands.mjs` through `main()` in `scripts/203cli.mjs` and the corresponding `OPS`
+  handler in `scripts/lib.mjs`. Check both help forms and the machine-readable result when the command has one.
+- The community runs 203cli against its whole API in its own tests when it pins a commit. A change that needs a new
   API goes in after the community has it.
